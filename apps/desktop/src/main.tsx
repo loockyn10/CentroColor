@@ -4,15 +4,27 @@ import { AppShell, navigation } from '@centrocolor/ui';
 import { HomePage, PlaceholderPage } from '@centrocolor/features';
 import { getStorageHealth } from '@centrocolor/application';
 import { SqliteStorageHealthAdapter } from './sqlite-adapter';
+import { bootstrapLocalIdentity } from './identity-adapter';
 import '@centrocolor/ui/styles.css';
 
 function App() {
   const [activeId, setActiveId] = useState('home');
   const [storageHealth, setStorageHealth] = useState('checking');
   useEffect(() => {
-    void getStorageHealth(new SqliteStorageHealthAdapter()).then(
-      setStorageHealth,
-    );
+    void (async () => {
+      const health = await getStorageHealth(new SqliteStorageHealthAdapter());
+      if (health === 'unavailable') {
+        setStorageHealth(health);
+        return;
+      }
+      try {
+        await bootstrapLocalIdentity();
+        setStorageHealth('ready');
+      } catch (error) {
+        console.error('Local identity unavailable', error);
+        setStorageHealth('unavailable');
+      }
+    })();
   }, []);
   const title =
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';

@@ -8,3 +8,11 @@ export async function getStorageHealth(
 ): Promise<'ready' | 'unavailable'> {
   return port.check();
 }
+
+export { resolveAppContext } from './identity';
+export type {
+  AppContext,
+  BusinessRepository,
+  BranchRepository,
+  DeviceRepository,
+} from './identity';

@@ -4,3 +4,6 @@ export function requireId(value: string): string {
   if (id.length === 0) throw new Error('An identifier is required');
   return id;
 }
+
+export { deviceTypes, parseDeviceType } from './identity';
+export type { Business, Branch, Device, DeviceType } from './identity';

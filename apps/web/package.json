@@ -10,8 +10,11 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@centrocolor/application": "workspace:*",
+    "@centrocolor/domain": "workspace:*",
     "@centrocolor/features": "workspace:*",
     "@centrocolor/ui": "workspace:*",
+    "@supabase/supabase-js": "^2.116.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

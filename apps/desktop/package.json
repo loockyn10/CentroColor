@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@centrocolor/application": "workspace:*",
+    "@centrocolor/domain": "workspace:*",
     "@centrocolor/features": "workspace:*",
     "@centrocolor/ui": "workspace:*",
     "@tauri-apps/api": "^2.0.0",
