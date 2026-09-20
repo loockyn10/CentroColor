@@ -50,6 +50,9 @@ importers:
       '@centrocolor/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@supabase/supabase-js':
+        specifier: ^2.116.0
+        version: 2.116.0
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.11.1
@@ -129,6 +132,9 @@ importers:
 
   packages/features:
     dependencies:
+      '@centrocolor/application':
+        specifier: workspace:*
+        version: link:../application
       '@centrocolor/ui':
         specifier: workspace:*
         version: link:../ui

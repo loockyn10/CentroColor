@@ -10,3 +10,5 @@ apps/desktop/src-tauri/gen/
 supabase/.temp/
 supabase/.branches/
 supabase/.profiles/
+.env.local
+.env.*.local

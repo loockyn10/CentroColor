@@ -16,3 +16,5 @@ export type {
   BranchRepository,
   DeviceRepository,
 } from './identity';
+export { resolveBusinessContext } from './auth';
+export type { AuthorizedIdentity, BusinessContext } from './auth';

@@ -1,4 +1,5 @@
 import { Card, PageHeader } from '@centrocolor/ui';
+import { useBusinessContext } from './auth';
 
 const cards = [
   'Turnos de hoy',
@@ -7,7 +8,8 @@ const cards = [
   'Ventas de hoy',
 ];
 
-export function HomePage() {
+export function HomePage({ onRevalidate }: { onRevalidate?: () => void }) {
+  const context = useBusinessContext();
   return (
     <>
       <PageHeader
@@ -15,6 +17,21 @@ export function HomePage() {
         title="Inicio"
         description="Un vistazo a la actividad del negocio."
       />
+      <p className="identity-summary">
+        {context.profile.displayName || 'Usuario'} · {context.businessName}
+        {context.branchName ? ` · ${context.branchName}` : ''}
+      </p>
+      {context.authorization === 'offline-authenticated' && (
+        <p className="offline-notice">
+          Modo offline · autorización local validada por última vez el{' '}
+          {new Date(context.lastCloudValidationAt).toLocaleString('es-AR')}.{' '}
+          {onRevalidate && (
+            <button type="button" onClick={onRevalidate}>
+              Revalidar acceso con Internet
+            </button>
+          )}
+        </p>
+      )}
       <div className="cards-grid">
         {cards.map((title) => (
           <Card key={title} className="metric-card">

@@ -45,14 +45,12 @@ function requireAuthorized(
 ): void {
   if (!error) return;
   if (error.code === '42501') {
-    throw new Error(
-      'El acceso a identidades Cloud requiere autenticación y políticas RLS futuras',
-    );
+    throw new Error('No tienes permiso para consultar este negocio');
   }
   throw new Error(`No se pudo consultar la identidad Cloud: ${error.message}`);
 }
 
-/** Read-only adapter until authentication and tenant-scoped RLS are implemented. */
+/** Read-only Cloud identity adapter; RLS scopes reads to active memberships. */
 export function createSupabaseIdentityRepositories(
   client: SupabaseClient = getSupabaseClient(),
 ): {

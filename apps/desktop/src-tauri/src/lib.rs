@@ -15,6 +15,12 @@ pub fn run() {
             sql: include_str!("../migrations/0002_identity.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 3,
+            description: "create_authorized_context",
+            sql: include_str!("../migrations/0003_authorized_context.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica e identidad estructural del sistema. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Las funciones operativas siguen pendientes.
+Fundación técnica, identidad y acceso del sistema. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Las funciones operativas siguen pendientes.
 
 ## Requisitos
 
@@ -22,6 +22,6 @@ pnpm format:check
 
 `pnpm build` compila los frontends Web y Desktop. `pnpm build:desktop` compila y empaqueta la aplicación nativa. La PWA se prueba instalable desde un servidor HTTPS o localhost con `pnpm --filter @centrocolor/web preview` luego de compilar.
 
-Para Web, copiar `apps/web/.env.example` a `apps/web/.env.local` y completar `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` del proyecto existente. La UI abre sin estas variables; en desarrollo muestra que falta configuración. No usar claves secretas ni `service_role` en el cliente.
+Para Web y Desktop, copiar el `.env.example` de cada app a `.env.local` y completar `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` del proyecto existente. Sin estas variables aparece el formulario de acceso con un aviso de configuración. No usar claves secretas ni `service_role` en el cliente.
 
 Las migraciones Cloud y el seed local están en `supabase/`. Consultar `supabase/README.md` para validar con Docker y vincular/aplicar al proyecto remoto sin guardar secretos. El seed no se envía al remoto con `db push` normal.

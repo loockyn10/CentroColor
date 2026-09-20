@@ -7,3 +7,5 @@ export function requireId(value: string): string {
 
 export { deviceTypes, parseDeviceType } from './identity';
 export type { Business, Branch, Device, DeviceType } from './identity';
+export { businessRoles, parseBusinessRole } from './auth';
+export type { BusinessRole, Profile, BusinessMembership } from './auth';

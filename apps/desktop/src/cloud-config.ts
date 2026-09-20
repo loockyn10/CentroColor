@@ -6,11 +6,8 @@ export function getSupabaseClient(): SupabaseClient {
   if (client) return client;
   const url = import.meta.env.VITE_SUPABASE_URL?.trim();
   const publishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
-  if (!url || !publishableKey) {
-    throw new Error(
-      'Faltan VITE_SUPABASE_URL y/o VITE_SUPABASE_PUBLISHABLE_KEY',
-    );
-  }
+  if (!url || !publishableKey)
+    throw new Error('Falta configurar Supabase en Desktop');
   const parsed = new URL(url);
   if (
     parsed.protocol !== 'https:' &&
@@ -19,11 +16,11 @@ export function getSupabaseClient(): SupabaseClient {
       ['localhost', '127.0.0.1'].includes(parsed.hostname)
     )
   ) {
-    throw new Error('VITE_SUPABASE_URL debe usar HTTPS, excepto localhost');
+    throw new Error('La URL de Supabase debe usar HTTPS');
   }
   client = createClient(url, publishableKey, {
     auth: {
-      persistSession: true,
+      persistSession: false,
       autoRefreshToken: true,
       detectSessionInUrl: false,
     },

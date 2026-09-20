@@ -31,11 +31,13 @@ export function AppShell({
   activeId,
   onNavigate,
   platform,
+  onLogout,
   children,
 }: PropsWithChildren<{
   activeId: string;
   onNavigate: (id: string) => void;
   platform: 'Desktop' | 'Web';
+  onLogout: () => void;
 }>) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -72,7 +74,12 @@ export function AppShell({
             </div>
           ))}
         </nav>
-        <div className="sidebar-footer">CentroColor · {platform}</div>
+        <div className="sidebar-footer">
+          <span>CentroColor · {platform}</span>
+          <button type="button" onClick={onLogout}>
+            Cerrar sesión
+          </button>
+        </div>
       </aside>
       {menuOpen && (
         <button
