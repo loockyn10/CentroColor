@@ -5,6 +5,7 @@ import { AppShell, navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
   BusinessContextProvider,
+  CustomersPage,
   HomePage,
   LoginPage,
   PlaceholderPage,
@@ -17,6 +18,9 @@ import {
   loadOfflineContext,
   saveAuthorizedContext,
 } from './local-auth-adapter';
+import { SQLiteCustomerRepository } from './sqlite-customer-repository';
+
+const customerRepository = new SQLiteCustomerRepository();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -155,6 +159,8 @@ function App() {
                 : undefined
             }
           />
+        ) : activeId === 'customers' ? (
+          <CustomersPage repository={customerRepository} storage="local" />
         ) : (
           <PlaceholderPage title={title} />
         )}

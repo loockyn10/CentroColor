@@ -5,6 +5,7 @@ import { AppShell, navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
   BusinessContextProvider,
+  CustomersPage,
   HomePage,
   LoginPage,
   PlaceholderPage,
@@ -13,8 +14,14 @@ import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
 import { loadCloudBusinessContext } from './cloud-auth-adapter';
 import { describeWebAuthError, type AuthStage } from './auth-errors';
+import { SupabaseCustomerRepository } from './supabase-customer-repository';
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
+
+function CustomerSection() {
+  const [repository] = useState(() => new SupabaseCustomerRepository());
+  return <CustomersPage repository={repository} storage="cloud" />;
+}
 
 function App() {
   const [activeId, setActiveId] = useState('home');
@@ -157,7 +164,13 @@ function App() {
         platform="Web"
         onLogout={() => void logout()}
       >
-        {activeId === 'home' ? <HomePage /> : <PlaceholderPage title={title} />}
+        {activeId === 'home' ? (
+          <HomePage />
+        ) : activeId === 'customers' ? (
+          <CustomerSection />
+        ) : (
+          <PlaceholderPage title={title} />
+        )}
       </AppShell>
     </BusinessContextProvider>
   );

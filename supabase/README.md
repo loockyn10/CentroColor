@@ -1,12 +1,12 @@
 # Supabase
 
-La CLI local se configura en `config.toml`. La primera migración crea Business, Branch y Device. `migrations/20260920000000_auth_memberships_rls.sql` agrega profiles, memberships y políticas RLS de lectura por negocio. `seed.sql` añade CentroColor y Sucursal principal solo en desarrollo y es idempotente. No contiene secretos ni IDs de proyecto remoto.
+La CLI local se configura en `config.toml`. La primera migración crea Business, Branch y Device. `migrations/20260920000000_auth_memberships_rls.sql` agrega profiles, memberships y políticas RLS de lectura por negocio. `migrations/20260921000000_customers.sql` agrega Clientes con políticas por membership activo. `seed.sql` añade CentroColor y Sucursal principal solo en desarrollo y es idempotente. No contiene secretos ni IDs de proyecto remoto.
 
 Con Docker activo, ejecutar desde la raíz `pnpm exec supabase start` y `pnpm exec supabase db reset` para recrear la base local de desarrollo y verificar migración + seed. `db reset` borra la base **local**; no usar `--linked` para esta validación.
 
 Para el proyecto remoto existente, iniciar sesión en la CLI si hace falta, ejecutar `pnpm exec supabase link --project-ref <ref-real>`, revisar `pnpm exec supabase db push --dry-run` y aplicar con `pnpm exec supabase db push`. No usar `--include-seed` en producción; para un remoto exclusivo de desarrollo puede añadirse explícitamente si se desea el seed. Si el proyecto remoto ya tiene cambios de esquema fuera del repositorio, inspeccionarlos y reconciliarlos antes de `db push`.
 
-Antes de validar localmente contra el remoto, comprobar que `db.major_version` en `config.toml` coincide con la versión PostgreSQL del proyecto existente; no se verificó esa versión desde esta sesión. El 20 de septiembre de 2026, `db push --dry-run` conectó al remoto y listó únicamente `20260920000000_auth_memberships_rls.sql` como pendiente. No ejecutó el SQL.
+Antes de validar localmente contra el remoto, comprobar que `db.major_version` en `config.toml` coincide con la versión PostgreSQL del proyecto existente. El bootstrap de producción de CentroColor, Sucursal principal y primer owner ya se realizó manualmente según el estado comunicado; no repetirlo sin comprobar registros actuales. Antes de aplicar Clientes, ejecutar `pnpm exec supabase db push --dry-run`, confirmar que solo figuren migraciones esperadas y luego `pnpm exec supabase db push` mediante el flujo administrativo del proyecto. No usar `--include-seed`.
 
 ## Primer owner de CentroColor
 

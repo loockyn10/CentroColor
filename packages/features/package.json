@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@centrocolor/application": "workspace:*",
+    "@centrocolor/domain": "workspace:*",
     "@centrocolor/ui": "workspace:*",
     "react": "^19.0.0"
   },

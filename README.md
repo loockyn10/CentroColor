@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad y acceso del sistema. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Las funciones operativas siguen pendientes.
+Fundación técnica, identidad, acceso y Clientes. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Clientes se guarda localmente en Desktop y en Cloud en Web; todavía no se sincroniza. Los demás módulos operativos siguen pendientes.
 
 ## Requisitos
 

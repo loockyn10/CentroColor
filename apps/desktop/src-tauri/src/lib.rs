@@ -21,6 +21,12 @@ pub fn run() {
             sql: include_str!("../migrations/0003_authorized_context.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "create_customers",
+            sql: include_str!("../migrations/0004_customers.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

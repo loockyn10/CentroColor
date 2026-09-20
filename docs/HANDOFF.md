@@ -2,20 +2,20 @@
 
 ## Punto de reanudación
 
-El Sprint 3 de autenticación está implementado en código. La CLI conectó al proyecto remoto y el dry run detectó solo `20260920000000_auth_memberships_rls.sql` pendiente. Aplicar y probar esa migración, crear el primer owner y probar Web/Desktop con una cuenta real. Seguir `supabase/README.md`. No iniciar Sprint 4 ni módulos operativos sin una solicitud nueva.
+Sprint 4 — Clientes está implementado en código para Web/Supabase y Desktop/SQLite con dominio, application y UI compartidos. Antes de usar Clientes en Web de producción, revisar el dry run, aplicar manualmente `20260921000000_customers.sql` mediante el flujo administrativo y probar con una cuenta real de membership activo. No aplicar el seed de desarrollo al remoto. La migración Desktop 0004 se registra en Tauri y se aplica incrementalmente al abrir una versión nueva.
 
-La Web desplegada en Vercel reportó un error genérico antes de generar una petición Auth. El flujo local con variables públicas válidas sí llegó al rechazo de credenciales ficticias. Se corrigió el manejo de errores y se añadió una validación de build que rechaza configuración ausente o inválida. Falta inspeccionar el bundle Vercel específico para identificar el valor o excepción que produjo el fallo allí; se solicitó su URL pública.
+Según el usuario, Sprint 3 ya está operativo en producción y CentroColor, Sucursal principal y al menos un owner fueron creados manualmente. Esta sesión no revalidó ese estado mediante credenciales reales.
+
+## Sincronización pendiente
+
+Clientes de Desktop quedan en SQLite y Clientes de Web en Supabase. No existen `sync_state` ni `sync_outbox`. Para sincronizar hará falta diseñar y probar una cola durable de cambios locales, autenticación de subida, descarga incremental, checkpoint, reintentos, idempotencia, identidad de dispositivo y reglas para ediciones concurrentes. No inferir sincronización de los UUID compartidos.
 
 ## Verificación
 
-El 20 de septiembre pasaron `pnpm typecheck`, `pnpm lint`, `pnpm test` (16 tests), `pnpm build`, `pnpm format:check` y `pnpm build:desktop` (ejecutable, MSI y NSIS). La migración SQLite 0003 se ejecutó sin error en una base en memoria. `pnpm exec supabase db push --dry-run` conectó al remoto y listó solo la nueva migración; no validó ejecutándola. Docker local no tiene daemon activo.
+El 20 de septiembre pasaron `pnpm typecheck` en seis paquetes, `pnpm lint`, `pnpm test` (24 tests), `pnpm build`, `pnpm format:check` y `pnpm build:desktop` (ejecutable, MSI y NSIS). La migración SQLite 0004 se ejecutó en memoria y se verificaron inserción, búsqueda acotada por negocio en los cuatro campos, orden por estado y actualización. El build nativo emitió un aviso del linker de Windows, sin fallar.
 
-Para la corrección Web pasaron nuevamente los cinco checks; Vitest llegó a 20 tests. El build Web de producción incorporó URL y clave pública locales (se verificó su presencia sin imprimir la clave) y no dejó referencias Vite sin resolver. Un build con URL intencionalmente inválida falló antes de generar artefactos, como se espera. No se probaron credenciales reales.
+`pnpm exec supabase db push --dry-run` conectó al remoto e informó **solo** `20260921000000_customers.sql` pendiente, sin seeds ni roles. No ejecutó la migración ni comprobó sus policies con usuarios reales. La instalación local de dependencias requirió acceso al cache y al registro por el control de paquetes de esta sesión; el lockfile conserva únicamente la nueva dependencia workspace de features. No se realizó prueba manual de UI en un dispositivo móvil ni de Web con usuario real.
 
-## Límites conocidos
+## Próximo sprint
 
-No se dispone aquí de URL/clave pública Supabase reales ni credenciales de usuario para las apps. La migración y las políticas RLS todavía no se aplicaron ni probaron en una instancia. Desktop guarda un contexto offline local en SQLite sin PIN; una revocación remota no llega al equipo desconectado. Revalidar requiere login online antes de futuras acciones Cloud. No existe Sync Engine. La PWA no se probó instalada manualmente.
-
-## Activación Cloud pendiente
-
-Revisar de nuevo `pnpm exec supabase db push --dry-run`, aplicar `pnpm exec supabase db push`, confirmar CentroColor y una sucursal activa, crear el usuario desde Supabase Auth y asignarle membership `owner` mediante el SQL documentado. Completar las variables públicas de ambas apps en sus `.env.local` ignorados por Git. No guardar secretos ni usar `service_role` en clientes.
+Recomendar sincronización de Clientes antes que Catálogo: Clientes ya es la primera entidad operativa con dos persistencias que divergen y sirve para validar una ruta de sincronización acotada antes de sumar nuevas entidades. La decisión corresponde al responsable del proyecto.

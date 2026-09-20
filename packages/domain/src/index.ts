@@ -9,3 +9,5 @@ export { deviceTypes, parseDeviceType } from './identity';
 export type { Business, Branch, Device, DeviceType } from './identity';
 export { businessRoles, parseBusinessRole } from './auth';
 export type { BusinessRole, Profile, BusinessMembership } from './auth';
+export { normalizeCustomerDetails } from './customer';
+export type { Customer, CustomerDetails } from './customer';

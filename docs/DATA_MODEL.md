@@ -10,7 +10,7 @@
 
 Cloud usa UUID nativos y `timestamptz`. SQLite usa UUID como texto e instantes UTC ISO 8601; las dos representaciones se traducen a los mismos tipos de dominio. Los IDs se generan sin conexión cuando procede. `created_at` y `updated_at` se fijan al insertar; los futuros adaptadores de escritura deben renovar `updated_at` al modificar. `last_seen_at` es opcional y no implica que exista seguimiento en tiempo real.
 
-La base Desktop mantiene también `app_meta` para `installation_id` y la selección provisional de Sprint 2. El seed Cloud es solo de desarrollo y crea CentroColor + Sucursal principal sin IDs fijos.
+La base Desktop mantiene también `app_meta` para `installation_id` y la selección provisional de Sprint 2. El seed Cloud es solo de desarrollo y crea CentroColor + Sucursal principal sin IDs fijos. En producción, el bootstrap inicial de Business, Branch y primer owner se realizó manualmente; no depende del seed.
 
 ## Autenticación y autorización
 
@@ -20,8 +20,14 @@ La base Desktop mantiene también `app_meta` para `installation_id` y la selecci
 | `business_memberships`      | `id`, `business_id`, `user_id`, `role`, `is_active`, `created_at`, `updated_at`                                                   | FK a Business y Auth; único `(business_id, user_id)`; rol limitado a `owner`, `admin`, `staff`.                              |
 | SQLite `authorized_context` | `slot`, `user_id`, `display_name`, `business_id`, `business_name`, `branch_id`, `branch_name`, `role`, `last_cloud_validation_at` | Una copia local de la última autorización Cloud validada. No guarda contraseña ni token.                                     |
 
-RLS permite `SELECT` de Business, Branch y Device solo con membership activo del negocio; Profile solo propio; Membership solo propio y activo. No hay escrituras cliente. La copia SQLite no está protegida por RLS y puede quedar obsoleta mientras está offline.
+RLS permite `SELECT` de Business, Branch y Device solo con membership activo del negocio; Profile solo propio; Membership solo propio y activo. No hay escrituras cliente en estas tablas de identidad. La copia SQLite no está protegida por RLS y puede quedar obsoleta mientras está offline.
+
+## Clientes — Sprint 4
+
+`customers` contiene `id` UUID, `business_id` UUID, `full_name` obligatorio, `phone`, `email`, `document_number` y `notes` opcionales, `is_active`, `created_at` y `updated_at`. Cloud usa UUID y `timestamptz`; Desktop usa UUID en texto y UTC ISO 8601. Los IDs se generan en application mediante `crypto.randomUUID()`, también offline. La desactivación usa `is_active = false`; no hay DELETE físico en el cliente.
+
+Cloud tiene FK a `businesses`, índices por negocio/estado/nombre y por campos de búsqueda, RLS SELECT/INSERT/UPDATE restringida a membership activo. Los permisos de UPDATE excluyen `id`, `business_id` y timestamps; un trigger actualiza `updated_at`. Desktop tiene migración incremental 0004, índices equivalentes y consultas siempre filtradas por `business_id`. No tiene FK local a `businesses`: el ID autorizado proviene de Cloud y las filas estructurales locales de Sprint 2 pueden ser provisionales con otros IDs.
 
 ## Futuro
 
-Entidades previstas, aún no modeladas: User, Customer, Product, Service, Resource, Booking, Event, Order, Sale, Payment, FrameMoulding y FrameQuote. Sus tablas se definirán incrementalmente. Considerarán `business_id`, `branch_id` y `device_id` donde corresponda, sin anticipar ahora su diseño.
+Entidades previstas, aún no modeladas: Product, Service, Resource, Booking, Event, Order, Sale, Payment, FrameMoulding y FrameQuote. Sus tablas se definirán incrementalmente. Considerarán `business_id`, `branch_id` y `device_id` donde corresponda, sin anticipar ahora su diseño.

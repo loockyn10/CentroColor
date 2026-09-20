@@ -135,6 +135,9 @@ importers:
       '@centrocolor/application':
         specifier: workspace:*
         version: link:../application
+      '@centrocolor/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@centrocolor/ui':
         specifier: workspace:*
         version: link:../ui

@@ -18,3 +18,14 @@ export type {
 } from './identity';
 export { resolveBusinessContext } from './auth';
 export type { AuthorizedIdentity, BusinessContext } from './auth';
+export {
+  customerListLimit,
+  listCustomers,
+  searchCustomers,
+  getCustomer,
+  createCustomer,
+  updateCustomer,
+  deactivateCustomer,
+  reactivateCustomer,
+} from './customer';
+export type { CustomerRepository } from './customer';
