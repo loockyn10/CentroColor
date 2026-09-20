@@ -15,7 +15,7 @@ import { getSupabaseClient } from './cloud-config';
 
 export async function loadCloudBusinessContext(
   userId: string,
-  options: { requireBranch?: boolean } = {},
+  options: { requireBranch?: boolean; preferredBusinessId?: string } = {},
   client: SupabaseClient = getSupabaseClient(),
 ): Promise<BusinessContext | null> {
   const profileResult = await client

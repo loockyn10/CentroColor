@@ -28,6 +28,19 @@ RLS permite `SELECT` de Business, Branch y Device solo con membership activo del
 
 Cloud tiene FK a `businesses`, índices por negocio/estado/nombre y por campos de búsqueda, RLS SELECT/INSERT/UPDATE restringida a membership activo. Los permisos de UPDATE excluyen `id`, `business_id` y timestamps; un trigger actualiza `updated_at`. Desktop tiene migración incremental 0004, índices equivalentes y consultas siempre filtradas por `business_id`. No tiene FK local a `businesses`: el ID autorizado proviene de Cloud y las filas estructurales locales de Sprint 2 pueden ser provisionales con otros IDs.
 
+## Sincronización de Customer — Sprint 5
+
+La migración Cloud `20260922000000_customer_sync_timestamps.sql` hace que PostgreSQL asigne `updated_at` en INSERT y UPDATE, rebasa timestamps previos que pudieron venir del cliente y agrega índice `(business_id, updated_at, id)`. La tabla privada `customer_sync_clock` guarda el último timestamp por negocio; un bloqueo de fila hasta commit permite asignar versiones monotónicas incluso con transacciones concurrentes o retroceso del reloj. `created_at` original se conserva al subir un Customer offline. La versión para comparación optimista es el `updated_at` Cloud exacto, no el reloj Desktop.
+
+La migración SQLite 0005 añade a `customers` solo metadata local: `sync_origin` (`local`/`remote`), `local_revision` y `cloud_updated_at`. El modelo de dominio no incorpora esos campos. Los triggers de cambios locales crean o compactan un outbox en la misma sentencia; el pull establece `sync_origin='remote'` para no crear nuevas operaciones.
+
+| Tabla local            | Campos principales                                                                                                                                                       | Función                                                                                                                        |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `sync_outbox`          | `id`, `business_id`, `entity_type`, `entity_id`, `operation`, `created_at`, `attempts`, `last_error`, `status`, `local_revision`, `remote_updated_at`, `remote_snapshot` | Una operación `upsert` por Customer y negocio; estado `pending` o `conflict`; error e instantánea para diagnóstico/resolución. |
+| `customer_sync_cursor` | `business_id`, `updated_at`, `customer_id`, `last_success_at`                                                                                                            | Última posición de pull confirmada para cada negocio.                                                                          |
+
+Las filas Customer locales anteriores a 0005 entran al outbox en la migración. No se borran clientes ni se regeneran IDs. La columna `local_revision` impide que el acuse de un push en curso elimine una edición local posterior.
+
 ## Futuro
 
 Entidades previstas, aún no modeladas: Product, Service, Resource, Booking, Event, Order, Sale, Payment, FrameMoulding y FrameQuote. Sus tablas se definirán incrementalmente. Considerarán `business_id`, `branch_id` y `device_id` donde corresponda, sin anticipar ahora su diseño.

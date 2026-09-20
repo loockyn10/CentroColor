@@ -74,8 +74,8 @@ export class SQLiteCustomerRepository implements CustomerRepository {
     const db = await database();
     await db.execute(
       `INSERT INTO customers
-       (id, business_id, full_name, phone, email, document_number, notes, is_active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, business_id, full_name, phone, email, document_number, notes, is_active, created_at, updated_at, sync_origin, local_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 1)`,
       [
         customer.id,
         customer.businessId,
@@ -100,7 +100,8 @@ export class SQLiteCustomerRepository implements CustomerRepository {
     const db = await database();
     const result = await db.execute(
       `UPDATE customers SET full_name = ?, phone = ?, email = ?, document_number = ?,
-       notes = ?, updated_at = ? WHERE business_id = ? AND id = ?`,
+       notes = ?, updated_at = ?, sync_origin = 'local',
+       local_revision = local_revision + 1 WHERE business_id = ? AND id = ?`,
       [
         details.fullName,
         details.phone,
@@ -123,7 +124,7 @@ export class SQLiteCustomerRepository implements CustomerRepository {
   ): Promise<Customer> {
     const db = await database();
     const result = await db.execute(
-      'UPDATE customers SET is_active = ?, updated_at = ? WHERE business_id = ? AND id = ?',
+      "UPDATE customers SET is_active = ?, updated_at = ?, sync_origin = 'local', local_revision = local_revision + 1 WHERE business_id = ? AND id = ?",
       [isActive ? 1 : 0, new Date().toISOString(), businessId, id],
     );
     if (!result.rowsAffected) throw new Error('No se encontró el cliente.');

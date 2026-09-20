@@ -482,6 +482,71 @@ button {
   color: #718077;
   font-size: 12px;
 }
+.sync-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 9px 38px;
+  border-bottom: 1px solid #e5e7e1;
+  background: #f9faf7;
+  color: #4b5d52;
+  font-size: 12px;
+}
+.sync-status-bar strong {
+  color: #315b50;
+}
+.sync-status-bar small {
+  color: #816443;
+}
+.sync-status-bar button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #315b50;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.sync-status-bar button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.sync-conflict-panel {
+  padding: 12px 38px;
+  border-bottom: 1px solid #e5e7e1;
+  background: #fff9ee;
+  color: #5c4b34;
+  font-size: 12px;
+}
+.sync-conflict-panel p {
+  margin: 6px 0 12px;
+}
+.sync-conflict-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid #e9dcc7;
+}
+.sync-conflict-row strong {
+  min-width: 180px;
+}
+.sync-conflict-row button {
+  border: 1px solid #bcaa90;
+  border-radius: 7px;
+  padding: 7px 10px;
+  background: #fff;
+  color: #4c3a27;
+  font: inherit;
+  cursor: pointer;
+}
+.sync-conflict-row button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 .menu-backdrop {
   display: none;
 }
@@ -515,6 +580,12 @@ button {
   }
   .main-content {
     padding: 29px 20px 50px;
+  }
+  .sync-status-bar {
+    padding: 9px 20px;
+  }
+  .sync-conflict-panel {
+    padding: 12px 20px;
   }
   .cards-grid {
     grid-template-columns: 1fr;

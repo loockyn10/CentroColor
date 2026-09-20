@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad, acceso y Clientes. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Clientes se guarda localmente en Desktop y en Cloud en Web; todavía no se sincroniza. Los demás módulos operativos siguen pendientes.
+Fundación técnica, identidad, acceso y Clientes. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda Clientes primero en SQLite y sincroniza eventualmente con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Solo Customer se sincroniza. Los demás módulos operativos siguen pendientes.
 
 ## Requisitos
 

@@ -1,4 +1,4 @@
-import { useState, type PropsWithChildren } from 'react';
+import { useState, type PropsWithChildren, type ReactNode } from 'react';
 import { Button } from './primitives';
 
 export interface NavigationItem {
@@ -32,12 +32,14 @@ export function AppShell({
   onNavigate,
   platform,
   onLogout,
+  statusArea,
   children,
 }: PropsWithChildren<{
   activeId: string;
   onNavigate: (id: string) => void;
   platform: 'Desktop' | 'Web';
   onLogout: () => void;
+  statusArea?: ReactNode;
 }>) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -100,6 +102,7 @@ export function AppShell({
           <span className="topbar-title">CentroColor</span>
           <span className="topbar-platform">{platform}</span>
         </div>
+        {statusArea}
         <main className="main-content">{children}</main>
       </div>
     </div>

@@ -27,6 +27,12 @@ pub fn run() {
             sql: include_str!("../migrations/0004_customers.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "create_customer_sync",
+            sql: include_str!("../migrations/0005_customer_sync.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

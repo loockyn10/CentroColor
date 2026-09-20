@@ -29,3 +29,12 @@ export {
   reactivateCustomer,
 } from './customer';
 export type { CustomerRepository } from './customer';
+export { syncCustomers } from './customer-sync';
+export type {
+  CustomerCursor,
+  PendingCustomerChange,
+  CustomerSyncLocalPort,
+  CustomerSyncCloudPort,
+  CustomerSyncResult,
+  CustomerPushResult,
+} from './customer-sync';

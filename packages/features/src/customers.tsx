@@ -29,9 +29,13 @@ function errorMessage(error: unknown): string {
 export function CustomersPage({
   repository,
   storage,
+  refreshToken,
+  onLocalMutation,
 }: {
   repository: CustomerRepository;
   storage: 'cloud' | 'local';
+  refreshToken?: number;
+  onLocalMutation?: () => void;
 }) {
   const { businessId } = useBusinessContext();
   const [query, setQuery] = useState('');
@@ -69,7 +73,7 @@ export function CustomersPage({
       live = false;
       clearTimeout(timer);
     };
-  }, [repository, businessId, query, refresh]);
+  }, [repository, businessId, query, refresh, refreshToken]);
 
   function openCustomer(customer: Customer) {
     setSelected(customer);
@@ -103,6 +107,7 @@ export function CustomersPage({
       });
       setMode('detail');
       setRefresh((value) => value + 1);
+      onLocalMutation?.();
     } catch (saveError) {
       setError(errorMessage(saveError));
     } finally {
@@ -121,6 +126,7 @@ export function CustomersPage({
       const fresh = await getCustomer(repository, businessId, updated.id);
       setSelected(fresh ?? updated);
       setRefresh((value) => value + 1);
+      onLocalMutation?.();
     } catch (toggleError) {
       setError(errorMessage(toggleError));
     } finally {
@@ -144,7 +150,7 @@ export function CustomersPage({
       <p className="customer-storage-note">
         {storage === 'cloud'
           ? 'Los clientes de Web se guardan en Supabase.'
-          : 'Los clientes de Desktop se guardan en este equipo. Todavía no se sincronizan con Web.'}
+          : 'Los clientes se guardan primero en este equipo. Se sincronizan con Web al validar el acceso Cloud.'}
       </p>
       {error && (
         <p className="customer-error" role="alert">
