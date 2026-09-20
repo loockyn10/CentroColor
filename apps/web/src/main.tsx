@@ -12,6 +12,7 @@ import {
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
 import { loadCloudBusinessContext } from './cloud-auth-adapter';
+import { describeWebAuthError, type AuthStage } from './auth-errors';
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -27,8 +28,8 @@ function App() {
     let client;
     try {
       client = getSupabaseClient();
-    } catch {
-      setError('Configurá la conexión de Supabase para iniciar sesión.');
+    } catch (initializationError) {
+      setError(describeWebAuthError(initializationError, 'configuration'));
       setGate('login');
       return;
     }
@@ -39,13 +40,24 @@ function App() {
       }
     });
     void (async () => {
+      let stage: AuthStage = 'authentication';
       try {
         const { data, error: authError } = await client.auth.getUser();
         if (!live) return;
-        if (authError || !data.user) {
+        if (
+          !data.user &&
+          (!authError || authError.name === 'AuthSessionMissingError')
+        ) {
           setGate('login');
           return;
         }
+        if (authError) {
+          setError(describeWebAuthError(authError, 'authentication'));
+          setGate('error');
+          return;
+        }
+        if (!data.user) return;
+        stage = 'membership';
         const resolved = await loadCloudBusinessContext(
           data.user.id,
           {},
@@ -54,11 +66,9 @@ function App() {
         if (!live) return;
         setContext(resolved);
         setGate(resolved ? 'ready' : 'no-access');
-      } catch {
+      } catch (restoreError) {
         if (live) {
-          setError(
-            'No se pudo validar el acceso. Revisá tu conexión e intentá de nuevo.',
-          );
+          setError(describeWebAuthError(restoreError, stage));
           setGate('error');
         }
       }
@@ -72,21 +82,30 @@ function App() {
   async function login(email: string, password: string) {
     setBusy(true);
     setError(null);
+    let stage: AuthStage = 'configuration';
     try {
       const client = getSupabaseClient();
+      stage = 'authentication';
       const { data, error: authError } = await client.auth.signInWithPassword({
         email,
         password,
       });
-      if (authError || !data.user) {
-        setError('Correo o contraseña incorrectos.');
+      if (authError) {
+        setError(describeWebAuthError(authError, stage));
         return;
       }
+      if (!data.user) {
+        setError('No se recibió un usuario autenticado. Intentá de nuevo.');
+        return;
+      }
+      stage = 'membership';
       const resolved = await loadCloudBusinessContext(data.user.id, {}, client);
       setContext(resolved);
       setGate(resolved ? 'ready' : 'no-access');
-    } catch {
-      setError('No se pudo conectar. Revisá tu conexión e intentá de nuevo.');
+    } catch (loginError) {
+      if (import.meta.env.DEV)
+        console.error('Web login failed at', stage, loginError);
+      setError(describeWebAuthError(loginError, stage));
     } finally {
       setBusy(false);
     }
