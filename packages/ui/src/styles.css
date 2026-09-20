@@ -1,0 +1,283 @@
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: #242828;
+  background: #f7f7f4;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button {
+  font: inherit;
+}
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+}
+.sidebar {
+  width: 250px;
+  flex: none;
+  background: #22332f;
+  color: #e8efe9;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 27px 22px 24px;
+  border-bottom: 1px solid #ffffff16;
+}
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: #d8ac75;
+  color: #22332f;
+  font-weight: 800;
+  font-size: 22px;
+}
+.brand strong {
+  display: block;
+  font-size: 17px;
+  letter-spacing: -0.025em;
+}
+.brand small {
+  display: block;
+  color: #b7c9bd;
+  font-size: 11px;
+  margin-top: 2px;
+}
+.sidebar nav {
+  padding: 15px 12px;
+  flex: 1;
+}
+.nav-section {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #a6b9ac;
+  margin: 22px 10px 8px;
+}
+.nav-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: #e4ebe5;
+  border-radius: 9px;
+  padding: 9px 12px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.nav-item:hover,
+.nav-item:focus-visible {
+  background: #ffffff15;
+}
+.nav-item.active {
+  background: #d8ac75;
+  color: #22332f;
+  font-weight: 700;
+}
+.sidebar-footer {
+  font-size: 11px;
+  color: #b7c9bd;
+  padding: 15px 22px 21px;
+  border-top: 1px solid #ffffff16;
+}
+.main-column {
+  min-width: 0;
+  flex: 1;
+}
+.topbar {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 0 38px;
+  border-bottom: 1px solid #e5e7e1;
+  background: #fff;
+}
+.topbar .button {
+  display: none;
+}
+.topbar-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #67746c;
+}
+.topbar-platform {
+  margin-left: auto;
+  font-size: 11px;
+  color: #8c968e;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  font-weight: 700;
+}
+.main-content {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 44px 38px 70px;
+}
+.page-header {
+  margin-bottom: 29px;
+}
+.eyebrow {
+  font-size: 11px;
+  color: #9b6c3d;
+  letter-spacing: 0.13em;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin: 0 0 10px;
+}
+.page-header h1 {
+  font-size: clamp(28px, 3vw, 36px);
+  line-height: 1.15;
+  letter-spacing: -0.045em;
+  margin: 0;
+  color: #23342f;
+}
+.page-description {
+  font-size: 14px;
+  color: #758078;
+  margin: 11px 0 0;
+  line-height: 1.6;
+}
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 17px;
+}
+.card {
+  background: #fff;
+  border: 1px solid #e7e9e3;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px #1e352708;
+  padding: 23px;
+}
+.metric-card {
+  min-height: 157px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.metric-card h2 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 0;
+  color: #36443c;
+}
+.metric-placeholder {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: #bbc7bc;
+  letter-spacing: -0.05em;
+}
+.metric-card p {
+  font-size: 12px;
+  color: #8b968d;
+  margin: 0;
+}
+.placeholder-card {
+  max-width: 620px;
+}
+.placeholder-card h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+  color: #2a3b32;
+}
+.placeholder-card p {
+  margin: 0;
+  color: #718077;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.dev-status {
+  margin-top: 27px;
+  font-size: 11px;
+  color: #78847c;
+}
+.button {
+  background: #fff;
+  border: 1px solid #dce1d9;
+  border-radius: 8px;
+  color: #33443a;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.button:hover {
+  background: #f4f6f1;
+}
+.menu-backdrop {
+  display: none;
+}
+@media (max-width: 760px) {
+  .sidebar {
+    position: fixed;
+    z-index: 30;
+    left: 0;
+    top: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+    box-shadow: 8px 0 30px #172f2922;
+  }
+  .sidebar-open {
+    transform: translateX(0);
+  }
+  .menu-backdrop {
+    display: block;
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    background: #15282070;
+    border: 0;
+  }
+  .topbar {
+    height: 58px;
+    padding: 0 20px;
+  }
+  .topbar .button {
+    display: block;
+  }
+  .main-content {
+    padding: 29px 20px 50px;
+  }
+  .cards-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .metric-card {
+    min-height: 136px;
+  }
+  .card {
+    padding: 20px;
+  }
+}
+@media (min-width: 761px) and (max-width: 1000px) {
+  .sidebar {
+    width: 220px;
+  }
+  .main-content {
+    padding: 34px 26px;
+  }
+}
