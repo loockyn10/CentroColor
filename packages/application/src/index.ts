@@ -38,3 +38,14 @@ export type {
   CustomerSyncResult,
   CustomerPushResult,
 } from './customer-sync';
+export {
+  createProduct,
+  updateProduct,
+  createCategory,
+  addToCart,
+  setCartQuantity,
+  removeFromCart,
+  scanBarcode,
+  completeSale,
+} from './pos';
+export type { ProductRepository, SaleRepository, ScanResult } from './pos';

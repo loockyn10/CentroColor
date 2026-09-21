@@ -41,6 +41,14 @@ La migración SQLite 0005 añade a `customers` solo metadata local: `sync_origin
 
 Las filas Customer locales anteriores a 0005 entran al outbox en la migración. No se borran clientes ni se regeneran IDs. La columna `local_revision` impide que el acuse de un push en curso elimine una edición local posterior.
 
+## POS MVP — Sprint 5
+
+`product_categories`: UUID `id`, `business_id`, nombre obligatorio, `is_active`, timestamps; nombre único por negocio. No hay jerarquía. `products`: UUID `id`, `business_id`, nombre obligatorio, `barcode` nullable, `sale_price_cents` entero no negativo, `cost_price_cents` nullable entero no negativo, `category_id` nullable, `is_active`, timestamps. Índice único parcial `(business_id, barcode)` solo para códigos presentes; se permiten múltiples productos sin código. La FK compuesta `(business_id, category_id)` impide vincular categorías de otro negocio. La búsqueda exacta de scanner usa ese índice.
+
+`sales`: UUID `id`, `business_id`, `branch_id`, `device_id` nullable, `created_by`, estado limitado a `completed`, `subtotal_cents`, `total_cents`, `payment_method` (`cash`, `debit`, `credit`, `transfer`, `other`) y timestamps. En este sprint total = subtotal. `sale_items`: UUID `id`, `business_id`, `sale_id`, `product_id` nullable, `product_name`, `barcode` nullable, `unit_price_cents`, `quantity` positiva y `total_cents`. Nombre, barcode y precio son snapshots: modificar Product no cambia la venta histórica. Las FK compuestas aíslan sale/product por negocio. El UUID es identidad; la UI solo muestra ocho caracteres como referencia visual sin valor fiscal.
+
+SQLite usa UUID e instantes UTC como texto e importes `INTEGER`; Cloud usa UUID, `timestamptz` y `bigint`. Los importes se limitan al rango entero seguro de JavaScript. No hay campo global `stock` en Product. Desktop guarda ventas con un comando transaccional; el esquema Cloud queda listo para una futura operación transaccional equivalente, todavía no implementada. Ninguna de estas tablas participa en Customer Sync.
+
 ## Futuro
 
-Entidades previstas, aún no modeladas: Product, Service, Resource, Booking, Event, Order, Sale, Payment, FrameMoulding y FrameQuote. Sus tablas se definirán incrementalmente. Considerarán `business_id`, `branch_id` y `device_id` donde corresponda, sin anticipar ahora su diseño.
+Entidades previstas, aún no modeladas: Service, Resource, Booking, Event, Order, Payment, Inventory, StockMovement, FrameMoulding y FrameQuote. Stock será por Branch, no un atributo global de Product.

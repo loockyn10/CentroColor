@@ -11,3 +11,17 @@ export { businessRoles, parseBusinessRole } from './auth';
 export type { BusinessRole, Profile, BusinessMembership } from './auth';
 export { normalizeCustomerDetails } from './customer';
 export type { Customer, CustomerDetails } from './customer';
+export {
+  normalizeBarcode,
+  normalizeProductDetails,
+  normalizeCategoryName,
+  requireCents,
+} from './product';
+export type { Product, ProductCategory, ProductDetails } from './product';
+export {
+  paymentMethods,
+  parsePaymentMethod,
+  lineTotal,
+  cartTotal,
+} from './sale';
+export type { CartLine, Sale, SaleItem, PaymentMethod } from './sale';

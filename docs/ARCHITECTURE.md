@@ -4,10 +4,10 @@
 
 - `apps/desktop`: React/Vite dentro de Tauri 2. SQLite local permite iniciar con un contexto autorizado previamente; Supabase valida el primer acceso.
 - `apps/web`: React/Vite configurada como PWA. Tiene cliente y repositorios Supabase aislados en su propia capa de infraestructura. Supabase/PostgreSQL es la fuente primaria de identidad Web y sus consultas están protegidas por RLS.
-- `packages/domain`: TypeScript puro para Business, Branch, Device, Profile, BusinessMembership y Customer; no depende de infraestructura ni UI.
+- `packages/domain`: TypeScript puro para Business, Branch, Device, Profile, BusinessMembership, Customer, Product, ProductCategory, CartLine, Sale y SaleItem; no depende de infraestructura ni UI.
 - `packages/application`: contratos de repositorios y resolución del contexto actual. Los adaptadores de cada cliente implementan sus puertos; la UI compartida no consulta SQLite ni Supabase.
 - `packages/ui`: AppShell, navegación, componentes básicos y CSS responsive compartidos.
-- `packages/features`: Login, estados de acceso, Inicio, Clientes y una pantalla placeholder compartidos.
+- `packages/features`: Login, estados de acceso, Inicio, Clientes, POS Desktop y una pantalla placeholder compartidos.
 
 Los adaptadores SQLite y Supabase residen en cada app. Clientes es la primera persistencia de operación: Web escribe en Supabase y Desktop en SQLite. Sprint 5 agrega sincronización eventual solo de Customer desde Desktop; Web mantiene su acceso directo a Supabase. La migración Cloud de Sprint 4 ya fue aplicada según el usuario; la nueva migración de timestamps de Sprint 5 requiere revisión y aplicación manual.
 
@@ -34,3 +34,11 @@ El pull consulta páginas ordenadas por `(updated_at, id)` desde el cursor persi
 El ciclo se ejecuta tras login online, cuando hay sesión válida al iniciar, mediante `Sincronizar ahora`, al volver la conectividad y cada dos minutos mientras Desktop está abierto y autenticado. Solo hay un ciclo activo a la vez; los errores no bloquean la UI. `packages/application` define el orquestador y sus puertos; los adaptadores concretos viven en Desktop. Web no usa este ciclo. El shell Web PWA precachea la interfaz, pero Web requiere conexión para operar Clientes.
 
 No hay sincronización genérica, Realtime ni cambios a otras entidades. La revocación remota no llega a Desktop desconectado y el login debe revalidarse para volver a sincronizar. El reloj por negocio serializa escrituras Customer Cloud; si el volumen crece mucho, habrá que medir esa contención antes de ampliar el mecanismo.
+
+## POS MVP Desktop — Sprint 5
+
+Desktop usa `SQLiteProductRepository` para productos/categorías y lookup exacto por barcode. `SQLiteSaleRepository` consulta historial y llama a `complete_local_sale`, comando Rust de Tauri que inserta Sale y SaleItems en una transacción SQLx SQLite. El comando abre el mismo archivo en `app_config_dir` que `tauri-plugin-sql`, activa foreign keys y valida importes/totales antes de escribir. La UI no accede a SQLite directamente: recibe los puertos de application.
+
+La pantalla Nueva venta usa el input principal para scanner HID Keyboard terminado en Enter. El Enter sin selección consulta exactamente `(business_id, barcode)` local; la búsqueda por nombre se carga con retraso breve en una lista aparte y requiere selección. Alta rápida, carrito, checkout e historial usan únicamente SQLite y continúan disponibles con el contexto `offline-authenticated`. El carrito se conserva en `sessionStorage` de la ventana mientras se navega. Las ventas completadas no tienen operación de edición. `device_id` es nullable porque el contexto autorizado actual no vincula todavía un registro Device Cloud al equipo; branch y usuario son obligatorios.
+
+La migración Cloud crea tablas equivalentes con FK compuestas, RLS y permisos de cliente limitados, pero no hay adaptadores Product/Sale Web ni sincronización Desktop↔Cloud. El indicador de sync y `sync_outbox` continúan siendo exclusivos de Customer. Una futura sincronización de Sales deberá garantizar el orden y la atomicidad entre Sale y SaleItems; no se asumió que el outbox de Customer sirva sin cambios.

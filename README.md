@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad, acceso y Clientes. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda Clientes primero en SQLite y sincroniza eventualmente con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Solo Customer se sincroniza. Los demás módulos operativos siguen pendientes.
+Fundación técnica, identidad, acceso, Clientes y POS MVP Desktop. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda Clientes primero en SQLite y sincroniza eventualmente con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. **Solo Customer se sincroniza.** Productos, carrito, cobro e historial de ventas operan localmente en Desktop, incluso sin Internet, y todavía no aparecen en Web.
 
 ## Requisitos
 
@@ -18,6 +18,8 @@ pnpm test
 pnpm build
 pnpm build:desktop
 pnpm format:check
+python tests/pos_sqlite.py
+pnpm exec supabase db push --dry-run
 ```
 
 `pnpm build` compila los frontends Web y Desktop. `pnpm build:desktop` compila y empaqueta la aplicación nativa. La PWA se prueba instalable desde un servidor HTTPS o localhost con `pnpm --filter @centrocolor/web preview` luego de compilar.

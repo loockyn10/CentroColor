@@ -9,6 +9,9 @@ import {
   HomePage,
   LoginPage,
   PlaceholderPage,
+  ProductsPage,
+  NewSalePage,
+  SalesPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -29,9 +32,15 @@ import {
   validateCloudBusinessContext,
 } from './customer-sync-session';
 import { CloudCustomerSyncAdapter } from './cloud-customer-sync-adapter';
+import {
+  SQLiteProductRepository,
+  SQLiteSaleRepository,
+} from './sqlite-pos-repositories';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
+const productRepository = new SQLiteProductRepository();
+const saleRepository = new SQLiteSaleRepository();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -316,7 +325,8 @@ function App() {
         statusArea={
           <div>
             <div className="sync-status-bar" role="status">
-              <strong>{syncLabel}</strong>
+              <strong>Clientes: {syncLabel}</strong>
+              <small>Productos y ventas solo en este equipo.</small>
               {syncSummary && syncSummary.pending > 0 && (
                 <span>{syncSummary.pending} pendiente(s)</span>
               )}
@@ -417,6 +427,15 @@ function App() {
               if (cloudSessionReady) void runSync(context);
             }}
           />
+        ) : activeId === 'products' ? (
+          <ProductsPage repository={productRepository} />
+        ) : activeId === 'new-sale' ? (
+          <NewSalePage
+            productRepository={productRepository}
+            saleRepository={saleRepository}
+          />
+        ) : activeId === 'sales' ? (
+          <SalesPage repository={saleRepository} />
         ) : (
           <PlaceholderPage title={title} />
         )}

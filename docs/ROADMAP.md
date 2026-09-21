@@ -1,10 +1,12 @@
-# Roadmap inicial
+# Roadmap
 
 1. Sprint 1 — Fundación técnica. Completado.
-2. Sprint 2 — Identidad, negocio, sucursal y dispositivos. Implementado en repositorio; el dry run remoto de Sprint 3 no la listó como pendiente.
-3. Sprint 3 — Autenticación y autorización: Supabase Auth, profiles, memberships, RLS y acceso offline Desktop. Implementado y, según el estado de producción comunicado, activado con CentroColor, sucursal y al menos un owner. Esta sesión no revalidó credenciales reales.
-4. Sprint 4 — Clientes. Implementado; la migración Cloud de Customers fue aplicada según el estado comunicado por el usuario.
-5. Sprint 5 — Sincronización eventual de Customer entre Desktop SQLite y Supabase. Implementado en código; migración Cloud de timestamps y pruebas con cuentas reales pendientes.
-6. Sprint 6 — A definir. No iniciado.
+2. Sprint 2 — Identidad, negocio, sucursal y dispositivos. Completado.
+3. Sprint 3 — Supabase Auth, profiles, memberships, RLS y acceso offline Desktop. Completado.
+4. Sprint 4 — Customers en Web/Supabase y Desktop/SQLite. Completado.
+5. Customer Sync — Sincronización bidireccional Desktop↔Cloud de Customer. Implementada y, según el usuario, probada manualmente en ambos sentidos.
+6. Sprint 5 — POS MVP Desktop: Products, ProductCategories, carrito, Sales y SaleItems locales; esquema Cloud preparado. Implementado en código; migración Cloud y prueba operativa manual pendientes.
+7. Sprint 6 — Stock e inventario por sucursal, StockMovements, impacto de ventas y ajustes/entradas. **No iniciado**.
+8. Sprint 7 — Extensión de la infraestructura de sincronización existente hacia Products, Sales e Inventory prioritarios. **No iniciado**.
 
-El detalle posterior será definido por el arquitecto del proyecto.
+Customer Sync ✅ existente y probado. Product Sync ❌ todavía no. Sales Sync ❌ todavía no. Inventory ❌ todavía no implementado.
