@@ -24,6 +24,7 @@ type ProductRow = {
   cost_price_cents: number | null;
   category_id: string | null;
   is_active: number;
+  tracks_inventory: number;
   created_at: string;
   updated_at: string;
 };
@@ -57,6 +58,7 @@ type ItemRow = {
   unit_price_cents: number;
   quantity: number;
   total_cents: number;
+  tracks_inventory: number;
 };
 
 function productFromRow(row: ProductRow): Product {
@@ -69,6 +71,7 @@ function productFromRow(row: ProductRow): Product {
     costPriceCents: row.cost_price_cents,
     categoryId: row.category_id,
     isActive: row.is_active === 1,
+    tracksInventory: row.tracks_inventory === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -109,6 +112,7 @@ function itemFromRow(row: ItemRow): SaleItem {
     quantity: row.quantity,
     lineTotalCents: row.total_cents,
     totalCents: row.total_cents,
+    tracksInventory: row.tracks_inventory === 1,
   };
 }
 
@@ -179,8 +183,8 @@ export class SQLiteProductRepository implements ProductRepository {
     try {
       await db.execute(
         `INSERT INTO products (id, business_id, name, barcode, sale_price_cents,
-         cost_price_cents, category_id, is_active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         cost_price_cents, category_id, is_active, tracks_inventory, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           product.id,
           product.businessId,
@@ -190,6 +194,7 @@ export class SQLiteProductRepository implements ProductRepository {
           product.costPriceCents,
           product.categoryId,
           product.isActive ? 1 : 0,
+          product.tracksInventory ? 1 : 0,
           product.createdAt,
           product.updatedAt,
         ],
@@ -210,7 +215,7 @@ export class SQLiteProductRepository implements ProductRepository {
     try {
       const result = await db.execute(
         `UPDATE products SET name = ?, barcode = ?, sale_price_cents = ?,
-         cost_price_cents = ?, category_id = ?, updated_at = ?,
+         cost_price_cents = ?, category_id = ?, tracks_inventory = ?, updated_at = ?,
          sync_origin = 'local', local_revision = local_revision + 1
          WHERE business_id = ? AND id = ?`,
         [
@@ -219,6 +224,7 @@ export class SQLiteProductRepository implements ProductRepository {
           details.salePriceCents,
           details.costPriceCents,
           details.categoryId,
+          details.tracksInventory ? 1 : 0,
           new Date().toISOString(),
           businessId,
           id,

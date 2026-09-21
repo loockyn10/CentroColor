@@ -10,6 +10,8 @@ import {
   updateProduct,
   type ProductRepository,
   type SaleRepository,
+  type InventoryRepository,
+  stockWarnings,
 } from '@centrocolor/application';
 import {
   cartTotal,
@@ -31,6 +33,7 @@ const emptyDetails: ProductDetails = {
   salePriceCents: 0,
   costPriceCents: null,
   categoryId: null,
+  tracksInventory: false,
 };
 const payments = [
   ['cash', 'Efectivo'],
@@ -66,7 +69,15 @@ function priceInput(cents: number | null): string {
 }
 
 function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) return error.message;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  )
+    return error.message;
+  return 'No se pudo completar la operación.';
 }
 
 function ProductForm({
@@ -78,6 +89,7 @@ function ProductForm({
   onCancel,
   autofocus,
   lockedBarcode,
+  canManageStock = false,
 }: {
   initial: ProductDetails;
   categories: ProductCategory[];
@@ -87,6 +99,7 @@ function ProductForm({
   onCancel: () => void;
   autofocus?: boolean;
   lockedBarcode?: boolean;
+  canManageStock?: boolean;
 }) {
   const [name, setName] = useState(initial.name);
   const [barcode, setBarcode] = useState(initial.barcode ?? '');
@@ -97,6 +110,9 @@ function ProductForm({
     priceInput(initial.costPriceCents),
   );
   const [categoryId, setCategoryId] = useState(initial.categoryId ?? '');
+  const [tracksInventory, setTracksInventory] = useState(
+    initial.tracksInventory,
+  );
   const [error, setError] = useState<string | null>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -109,6 +125,7 @@ function ProductForm({
         salePriceCents: parsePrice(salePrice),
         costPriceCents: costPrice.trim() ? parsePrice(costPrice) : null,
         categoryId: categoryId || null,
+        tracksInventory,
       });
     } catch (failure) {
       setError(message(failure));
@@ -176,6 +193,15 @@ function ProductForm({
             ))}
         </select>
       </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={tracksInventory}
+          disabled={!canManageStock}
+          onChange={(event) => setTracksInventory(event.target.checked)}
+        />{' '}
+        Controlar stock
+      </label>
       <div className="pos-actions pos-wide">
         <button
           className="customer-secondary"
@@ -204,7 +230,7 @@ export function ProductsPage({
   onMutation?: () => void;
   refreshToken?: number;
 }) {
-  const { businessId } = useBusinessContext();
+  const { businessId, role } = useBusinessContext();
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -481,6 +507,7 @@ export function ProductsPage({
             onSubmit={save}
             onCancel={() => setMode('list')}
             autofocus
+            canManageStock={role === 'owner' || role === 'admin'}
           />
         </Card>
       )}
@@ -491,11 +518,13 @@ export function ProductsPage({
 export function NewSalePage({
   productRepository,
   saleRepository,
+  inventoryRepository,
   onMutation,
   refreshToken,
 }: {
   productRepository: ProductRepository;
   saleRepository: SaleRepository;
+  inventoryRepository: InventoryRepository;
   onMutation?: () => void;
   refreshToken?: number;
 }) {
@@ -517,6 +546,7 @@ export function NewSalePage({
           throw new Error('Carrito local inválido.');
         return {
           ...line,
+          tracksInventory: line.tracksInventory === true,
           lineTotalCents: lineTotal(line.unitPriceCents, line.quantity),
         };
       });
@@ -526,6 +556,7 @@ export function NewSalePage({
   });
   const [entry, setEntry] = useState('');
   const [results, setResults] = useState<Product[]>([]);
+  const [stock, setStock] = useState<Record<string, number>>({});
   const [highlight, setHighlight] = useState(-1);
   const [unknown, setUnknown] = useState<string | null>(null);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -546,6 +577,39 @@ export function NewSalePage({
   useEffect(() => {
     focusScanner();
   }, []);
+  useEffect(() => {
+    if (!context.branchId) return;
+    const ids = [
+      ...new Set([
+        ...lines.map((line) => line.productId),
+        ...results.map((product) => product.id),
+      ]),
+    ];
+    let live = true;
+    void inventoryRepository
+      .balances(context.businessId, context.branchId, ids)
+      .then((rows) => {
+        if (live)
+          setStock(
+            Object.fromEntries(
+              rows.map((row) => [row.productId, row.quantity]),
+            ),
+          );
+      })
+      .catch((failure: unknown) => {
+        if (live) setError(message(failure));
+      });
+    return () => {
+      live = false;
+    };
+  }, [
+    inventoryRepository,
+    context.businessId,
+    context.branchId,
+    lines,
+    results,
+    refreshToken,
+  ]);
   useEffect(() => {
     if (!entry.trim() || unknown !== null || checkout) {
       setResults([]);
@@ -642,7 +706,25 @@ export function NewSalePage({
     setBusy(true);
     setError(null);
     try {
-      const sale = await completeSale(saleRepository, context, lines, payment);
+      const freshLines = await Promise.all(
+        lines.map(async (line) => {
+          const product = await productRepository.get(
+            context.businessId,
+            line.productId,
+          );
+          if (!product)
+            throw new Error(
+              `El producto ${line.productName} ya no está disponible.`,
+            );
+          return { ...line, tracksInventory: product.tracksInventory };
+        }),
+      );
+      const sale = await completeSale(
+        saleRepository,
+        context,
+        freshLines,
+        payment,
+      );
       setLines([]);
       setCheckout(false);
       setPayment('cash');
@@ -743,6 +825,9 @@ export function NewSalePage({
                   <span>
                     {product.barcode ?? 'Sin código'} ·{' '}
                     {formatCents(product.salePriceCents)}
+                    {product.tracksInventory
+                      ? ` · Stock: ${stock[product.id] ?? 0}`
+                      : ''}
                   </span>
                 </button>
               ))}
@@ -764,6 +849,9 @@ export function NewSalePage({
                   <div>
                     <strong>{line.productName}</strong>
                     <small>{formatCents(line.unitPriceCents)} c/u</small>
+                    {line.tracksInventory && (
+                      <small>Stock: {stock[line.productId] ?? 0}</small>
+                    )}
                   </div>
                   <div className="pos-quantity">
                     <button
@@ -886,6 +974,9 @@ export function NewSalePage({
               }}
               lockedBarcode
               autofocus
+              canManageStock={
+                context.role === 'owner' || context.role === 'admin'
+              }
             />
           </div>
         </div>
@@ -909,6 +1000,17 @@ export function NewSalePage({
             <p className="pos-checkout-total">
               {formatCents(cartTotal(lines))}
             </p>
+            {stockWarnings(lines, stock).map((warning) => (
+              <p
+                className="stock-warning"
+                role="status"
+                key={warning.productId}
+              >
+                {warning.productName}: stock disponible {warning.available};
+                cantidad solicitada {warning.requested}. La venta puede dejar
+                stock negativo.
+              </p>
+            ))}
             <label>
               Forma de pago
               <select

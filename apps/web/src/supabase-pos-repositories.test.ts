@@ -15,6 +15,7 @@ const product: Product = {
   costPriceCents: 800,
   categoryId: null,
   isActive: true,
+  tracksInventory: false,
   createdAt: '2026-09-20T10:00:00Z',
   updatedAt: '2026-09-20T10:00:00Z',
 };
@@ -27,6 +28,7 @@ const productRow = {
   cost_price_cents: 800,
   category_id: null,
   is_active: true,
+  tracks_inventory: false,
   created_at: product.createdAt,
   updated_at: product.updatedAt,
 };
@@ -53,6 +55,7 @@ const item: SaleItem = {
   quantity: 1,
   totalCents: 1250,
   lineTotalCents: 1250,
+  tracksInventory: false,
 };
 const saleRow = {
   id: 's',
@@ -77,6 +80,7 @@ const itemRow = {
   unit_price_cents: 1250,
   quantity: 1,
   total_cents: 1250,
+  tracks_inventory: false,
 };
 
 function query(data: unknown) {

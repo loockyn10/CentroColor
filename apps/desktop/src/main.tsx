@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import {
   syncPosMutable,
   syncPosSales,
+  syncStockMovements,
   type BusinessContext,
 } from '@centrocolor/application';
 import { AppShell, navigation } from '@centrocolor/ui';
@@ -16,6 +17,7 @@ import {
   ProductsPage,
   NewSalePage,
   SalesPage,
+  StockPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -46,12 +48,17 @@ import {
   type PosSyncSummary,
 } from './sqlite-pos-sync-adapter';
 import { CloudPosSyncAdapter } from './cloud-pos-sync-adapter';
+import { SQLiteInventoryRepository } from './sqlite-inventory-repository';
+import { SQLiteStockSyncAdapter } from './sqlite-stock-sync-adapter';
+import { CloudStockSyncAdapter } from './cloud-stock-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
 const productRepository = new SQLiteProductRepository();
 const saleRepository = new SQLiteSaleRepository();
 const posSyncLocal = new SQLitePosSyncAdapter();
+const inventoryRepository = new SQLiteInventoryRepository();
+const stockSyncLocal = new SQLiteStockSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -72,6 +79,10 @@ function App() {
   const [posSyncSummary, setPosSyncSummary] = useState<PosSyncSummary | null>(
     null,
   );
+  const [stockSyncSummary, setStockSyncSummary] = useState<{
+    pending: number;
+    lastError: string | null;
+  } | null>(null);
   const [posConflicts, setPosConflicts] = useState<PosConflict[]>([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
@@ -83,16 +94,23 @@ function App() {
 
   async function refreshSyncSummary(businessId: string) {
     try {
-      const [summary, currentConflicts, posSummary, currentPosConflicts] =
-        await Promise.all([
-          customerSyncLocal.summary(businessId),
-          customerSyncLocal.conflicts(businessId),
-          posSyncLocal.summary(businessId),
-          posSyncLocal.conflicts(businessId),
-        ]);
+      const [
+        summary,
+        currentConflicts,
+        posSummary,
+        currentPosConflicts,
+        stockSummary,
+      ] = await Promise.all([
+        customerSyncLocal.summary(businessId),
+        customerSyncLocal.conflicts(businessId),
+        posSyncLocal.summary(businessId),
+        posSyncLocal.conflicts(businessId),
+        stockSyncLocal.summary(businessId),
+      ]);
       setSyncSummary(summary);
       setConflicts(currentConflicts);
       setPosSyncSummary(posSummary);
+      setStockSyncSummary(stockSummary);
       setPosConflicts(currentPosConflicts);
     } catch {
       setSyncPhase('error');
@@ -123,6 +141,11 @@ function App() {
         cloudPos,
       );
       await syncPosSales(target.businessId, posSyncLocal, cloudPos);
+      await syncStockMovements(
+        target.businessId,
+        stockSyncLocal,
+        new CloudStockSyncAdapter(getSupabaseClient()),
+      );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
     } catch (syncError) {
@@ -348,6 +371,7 @@ function App() {
     setSyncSummary(null);
     setConflicts([]);
     setPosSyncSummary(null);
+    setStockSyncSummary(null);
     setPosConflicts([]);
     setError(null);
     setGate('login');
@@ -397,7 +421,10 @@ function App() {
           ? 'Error de sincronización'
           : !cloudSessionReady || !online
             ? 'Sin conexión'
-            : (syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0) > 0
+            : (syncSummary?.pending ?? 0) +
+                  (posSyncSummary?.pending ?? 0) +
+                  (stockSyncSummary?.pending ?? 0) >
+                0
               ? 'Cambios pendientes'
               : 'Sincronizado';
   return (
@@ -411,10 +438,14 @@ function App() {
           <div>
             <div className="sync-status-bar" role="status">
               <strong>Sincronización: {syncLabel}</strong>
-              {(syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0) >
+              {(syncSummary?.pending ?? 0) +
+                (posSyncSummary?.pending ?? 0) +
+                (stockSyncSummary?.pending ?? 0) >
                 0 && (
                 <span>
-                  {(syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0)}{' '}
+                  {(syncSummary?.pending ?? 0) +
+                    (posSyncSummary?.pending ?? 0) +
+                    (stockSyncSummary?.pending ?? 0)}{' '}
                   pendiente(s)
                 </span>
               )}
@@ -460,7 +491,8 @@ function App() {
                 <small>Revalidá el acceso para sincronizar.</small>
               ) : syncPhase === 'error' ? (
                 <small>
-                  {posSyncSummary?.lastError ??
+                  {stockSyncSummary?.lastError ??
+                    posSyncSummary?.lastError ??
                     syncSummary?.lastError ??
                     'Reintentá cuando vuelva la conexión.'}
                 </small>
@@ -577,6 +609,7 @@ function App() {
           <NewSalePage
             productRepository={productRepository}
             saleRepository={saleRepository}
+            inventoryRepository={inventoryRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
               void refreshSyncSummary(context.businessId);
@@ -585,6 +618,16 @@ function App() {
           />
         ) : activeId === 'sales' ? (
           <SalesPage repository={saleRepository} refreshToken={dataRefresh} />
+        ) : activeId === 'stock' ? (
+          <StockPage
+            productRepository={productRepository}
+            inventoryRepository={inventoryRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
         ) : (
           <PlaceholderPage title={title} />
         )}

@@ -23,6 +23,7 @@ type Row = {
   cost_price_cents?: number | null;
   category_id?: string | null;
   is_active: number;
+  tracks_inventory?: number;
   created_at: string;
   updated_at: string;
   cloud_updated_at: string | null;
@@ -56,6 +57,7 @@ function decode(type: PosMutableType, row: Row): PosMutable {
     salePriceCents: row.sale_price_cents!,
     costPriceCents: row.cost_price_cents ?? null,
     categoryId: row.category_id ?? null,
+    tracksInventory: row.tracks_inventory === 1,
   };
 }
 function pending(type: PosMutableType, row: Row): PendingPosChange {
@@ -88,7 +90,7 @@ function describe(type: PosMutableType, entity: PosMutable): string {
   const product = entity as Product;
   const money = (value: number) =>
     (value / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 });
-  return `${product.name} · ${product.barcode ?? 'sin código'} · $${money(product.salePriceCents)} · ${product.costPriceCents === null ? 'sin costo' : `costo $${money(product.costPriceCents)}`} · categoría ${product.categoryId ?? 'ninguna'} · ${status}`;
+  return `${product.name} · ${product.barcode ?? 'sin código'} · $${money(product.salePriceCents)} · ${product.costPriceCents === null ? 'sin costo' : `costo $${money(product.costPriceCents)}`} · categoría ${product.categoryId ?? 'ninguna'} · ${product.tracksInventory ? 'controla stock' : 'sin stock'} · ${status}`;
 }
 
 export class SQLitePosSyncAdapter implements PosSyncLocalPort {
@@ -214,11 +216,11 @@ export class SQLitePosSyncAdapter implements PosSyncLocalPort {
     const result = await db.execute(
       `INSERT INTO products
       (id,business_id,name,barcode,sale_price_cents,cost_price_cents,category_id,is_active,
-       created_at,updated_at,sync_origin,cloud_updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET
+       tracks_inventory,created_at,updated_at,sync_origin,cloud_updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET
       name=excluded.name,barcode=excluded.barcode,sale_price_cents=excluded.sale_price_cents,
       cost_price_cents=excluded.cost_price_cents,category_id=excluded.category_id,
-      is_active=excluded.is_active,created_at=excluded.created_at,updated_at=excluded.updated_at,
+      is_active=excluded.is_active,tracks_inventory=excluded.tracks_inventory,created_at=excluded.created_at,updated_at=excluded.updated_at,
       sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at
       WHERE products.business_id=excluded.business_id${guard}`,
       [
@@ -230,6 +232,7 @@ export class SQLitePosSyncAdapter implements PosSyncLocalPort {
         product.costPriceCents,
         product.categoryId,
         product.isActive ? 1 : 0,
+        product.tracksInventory ? 1 : 0,
         product.createdAt,
         product.updatedAt,
         product.updatedAt,
@@ -423,7 +426,7 @@ export class SQLitePosSyncAdapter implements PosSyncLocalPort {
       const product = cloud as Product;
       result = await db.execute(
         `UPDATE products SET name=?,barcode=?,sale_price_cents=?,
-        cost_price_cents=?,category_id=?,is_active=?,updated_at=?,cloud_updated_at=?,
+        cost_price_cents=?,category_id=?,is_active=?,tracks_inventory=?,updated_at=?,cloud_updated_at=?,
         sync_origin='remote' ${guard}`,
         [
           product.name,
@@ -432,6 +435,7 @@ export class SQLitePosSyncAdapter implements PosSyncLocalPort {
           product.costPriceCents,
           product.categoryId,
           product.isActive ? 1 : 0,
+          product.tracksInventory ? 1 : 0,
           ...common,
         ],
       );

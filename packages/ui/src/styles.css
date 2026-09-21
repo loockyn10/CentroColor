@@ -962,3 +962,48 @@ button {
     min-height: 2.75rem;
   }
 }
+
+.stock-head,
+.stock-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1fr 0.8fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+.stock-row small {
+  display: block;
+  font-weight: 400;
+}
+.stock-negative {
+  color: #bd302c;
+}
+.stock-warning {
+  background: #fff0ca;
+  color: #6b3900;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+}
+.stock-movement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border, #ddd);
+}
+.stock-movement small {
+  width: 100%;
+}
+@media (max-width: 700px) {
+  .stock-head {
+    display: none;
+  }
+  .stock-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .stock-row > :first-child {
+    grid-column: 1/-1;
+  }
+}

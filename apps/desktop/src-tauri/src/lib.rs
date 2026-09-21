@@ -30,6 +30,8 @@ struct SaleItemInput {
     unit_price_cents: i64,
     quantity: i64,
     total_cents: i64,
+    #[serde(default)]
+    tracks_inventory: bool,
 }
 
 #[tauri::command]
@@ -48,6 +50,95 @@ async fn apply_remote_sale(
     items: Vec<SaleItemInput>,
 ) -> Result<(), String> {
     persist_sale(app, sale, items, true).await
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StockChangeInput {
+    id: String,
+    business_id: String,
+    branch_id: String,
+    product_id: String,
+    movement_type: String,
+    value: i64,
+    note: Option<String>,
+    occurred_at: String,
+}
+
+#[tauri::command]
+async fn record_local_stock(app: tauri::AppHandle, change: StockChangeInput) -> Result<(), String> {
+    if !["initial", "entry", "adjustment"].contains(&change.movement_type.as_str())
+        || change.value < 0
+        || change.value > i32::MAX as i64
+        || (change.movement_type == "entry" && change.value == 0)
+    {
+        return Err("Cantidad o tipo de movimiento inválido.".into());
+    }
+    let path = app
+        .path()
+        .app_config_dir()
+        .map_err(|e| e.to_string())?
+        .join("centrocolor.db");
+    let options = SqliteConnectOptions::from_str(&format!("sqlite:{}", path.display()))
+        .map_err(|e| e.to_string())?
+        .create_if_missing(false)
+        .foreign_keys(true)
+        .busy_timeout(Duration::from_secs(5));
+    let mut connection = SqliteConnection::connect_with(&options)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut tx = connection.begin().await.map_err(|e| e.to_string())?;
+    let user: Option<String> = sqlx::query_scalar(
+        "SELECT user_id FROM authorized_context WHERE slot=1 AND business_id=? AND branch_id=? AND role IN ('owner','admin')")
+        .bind(&change.business_id).bind(&change.branch_id)
+        .fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?;
+    let user = user.ok_or("Solo owner/admin puede modificar stock en esta sucursal.")?;
+    let tracked: Option<i64> =
+        sqlx::query_scalar("SELECT tracks_inventory FROM products WHERE business_id=? AND id=?")
+            .bind(&change.business_id)
+            .bind(&change.product_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+    let tracked = tracked.ok_or("Producto ajeno al negocio o inexistente.")?;
+    let current: i64 = sqlx::query_scalar(
+        "SELECT quantity FROM inventory_balances WHERE business_id=? AND branch_id=? AND product_id=?")
+        .bind(&change.business_id).bind(&change.branch_id).bind(&change.product_id)
+        .fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?.unwrap_or(0);
+    if change.movement_type == "initial" {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM stock_movements WHERE business_id=? AND branch_id=? AND product_id=?")
+            .bind(&change.business_id).bind(&change.branch_id).bind(&change.product_id)
+            .fetch_one(&mut *tx).await.map_err(|e| e.to_string())?;
+        if count != 0 {
+            return Err("El producto ya tiene movimientos en esta sucursal.".into());
+        }
+        sqlx::query("UPDATE products SET tracks_inventory=1,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=? AND tracks_inventory=0")
+            .bind(&change.occurred_at).bind(&change.business_id).bind(&change.product_id)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    } else if tracked == 0 {
+        return Err("Activá el control de stock primero.".into());
+    }
+    let delta = if change.movement_type == "adjustment" {
+        change
+            .value
+            .checked_sub(current)
+            .ok_or("Cantidad fuera de rango.")?
+    } else {
+        change.value
+    };
+    if delta < i32::MIN as i64 || delta > i32::MAX as i64 {
+        return Err("El ajuste supera el rango permitido.".into());
+    }
+    if delta != 0 {
+        sqlx::query("INSERT INTO stock_movements(id,business_id,branch_id,product_id,movement_type,quantity_delta,note,created_by,occurred_at,sync_origin) VALUES(?,?,?,?,?,?,?,?,?,'local')")
+            .bind(&change.id).bind(&change.business_id).bind(&change.branch_id)
+            .bind(&change.product_id).bind(&change.movement_type).bind(delta)
+            .bind(&change.note).bind(&user).bind(&change.occurred_at)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+    }
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 async fn persist_sale(
@@ -99,52 +190,112 @@ async fn persist_sale(
         .begin()
         .await
         .map_err(|error| error.to_string())?;
+    if !remote {
+        let allowed: i64 = sqlx::query_scalar("SELECT count(*) FROM authorized_context WHERE slot=1 AND business_id=? AND branch_id=? AND user_id=?")
+            .bind(&sale.business_id).bind(&sale.branch_id).bind(&sale.created_by)
+            .fetch_one(&mut *tx).await.map_err(|error| error.to_string())?;
+        if allowed != 1 {
+            return Err("La venta no corresponde al contexto autorizado.".into());
+        }
+    }
     let insert = if remote {
         "INSERT OR IGNORE INTO sales (id, business_id, branch_id, device_id, created_by, status, subtotal_cents, total_cents, payment_method, created_at, updated_at, sync_origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'remote')"
     } else {
         "INSERT INTO sales (id, business_id, branch_id, device_id, created_by, status, subtotal_cents, total_cents, payment_method, created_at, updated_at, sync_origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local')"
     };
     sqlx::query(insert)
-        .bind(&sale.id).bind(&sale.business_id).bind(&sale.branch_id).bind(&sale.device_id)
-        .bind(&sale.created_by).bind(&sale.status).bind(sale.subtotal_cents).bind(sale.total_cents)
-        .bind(&sale.payment_method).bind(&sale.created_at).bind(&sale.updated_at)
-        .execute(&mut *tx).await.map_err(|error| error.to_string())?;
+        .bind(&sale.id)
+        .bind(&sale.business_id)
+        .bind(&sale.branch_id)
+        .bind(&sale.device_id)
+        .bind(&sale.created_by)
+        .bind(&sale.status)
+        .bind(sale.subtotal_cents)
+        .bind(sale.total_cents)
+        .bind(&sale.payment_method)
+        .bind(&sale.created_at)
+        .bind(&sale.updated_at)
+        .execute(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
     if remote {
         let matches: i64 = sqlx::query_scalar("SELECT count(*) FROM sales WHERE id = ? AND business_id = ? AND branch_id = ? AND device_id IS ? AND created_by = ? AND status = ? AND subtotal_cents = ? AND total_cents = ? AND payment_method = ?")
             .bind(&sale.id).bind(&sale.business_id).bind(&sale.branch_id).bind(&sale.device_id)
             .bind(&sale.created_by).bind(&sale.status).bind(sale.subtotal_cents).bind(sale.total_cents)
             .bind(&sale.payment_method).fetch_one(&mut *tx).await.map_err(|error| error.to_string())?;
-        if matches != 1 { return Err("El UUID de venta local ya tiene otros datos.".into()); }
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM sale_items WHERE business_id = ? AND sale_id = ?")
-            .bind(&sale.business_id).bind(&sale.id).fetch_one(&mut *tx).await.map_err(|error| error.to_string())?;
+        if matches != 1 {
+            return Err("El UUID de venta local ya tiene otros datos.".into());
+        }
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sale_items WHERE business_id = ? AND sale_id = ?",
+        )
+        .bind(&sale.business_id)
+        .bind(&sale.id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
         if count != 0 && count != items.len() as i64 {
             return Err("La venta local tiene líneas incompletas o diferentes.".into());
         }
     }
     for item in &items {
-        let statement = if remote {
-            "INSERT OR IGNORE INTO sale_items (id, business_id, sale_id, product_id, product_name, barcode, unit_price_cents, quantity, total_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        let tracks_inventory = if remote {
+            item.tracks_inventory
+        } else if let Some(product_id) = &item.product_id {
+            let tracked: Option<i64> = sqlx::query_scalar(
+                "SELECT tracks_inventory FROM products WHERE business_id=? AND id=?",
+            )
+            .bind(&sale.business_id)
+            .bind(product_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
+            tracked.ok_or("Producto ajeno al negocio o inexistente.")? == 1
         } else {
-            "INSERT INTO sale_items (id, business_id, sale_id, product_id, product_name, barcode, unit_price_cents, quantity, total_cents) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            false
+        };
+        let statement = if remote {
+            "INSERT OR IGNORE INTO sale_items (id, business_id, sale_id, product_id, product_name, barcode, unit_price_cents, quantity, total_cents, tracks_inventory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        } else {
+            "INSERT INTO sale_items (id, business_id, sale_id, product_id, product_name, barcode, unit_price_cents, quantity, total_cents, tracks_inventory) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         };
         sqlx::query(statement)
-            .bind(&item.id).bind(&sale.business_id).bind(&item.sale_id).bind(&item.product_id)
-            .bind(&item.product_name).bind(&item.barcode).bind(item.unit_price_cents)
-            .bind(item.quantity).bind(item.total_cents)
-            .execute(&mut *tx).await.map_err(|error| error.to_string())?;
+            .bind(&item.id)
+            .bind(&sale.business_id)
+            .bind(&item.sale_id)
+            .bind(&item.product_id)
+            .bind(&item.product_name)
+            .bind(&item.barcode)
+            .bind(item.unit_price_cents)
+            .bind(item.quantity)
+            .bind(item.total_cents)
+            .bind(tracks_inventory)
+            .execute(&mut *tx)
+            .await
+            .map_err(|error| error.to_string())?;
         if remote {
-            let matches: i64 = sqlx::query_scalar("SELECT count(*) FROM sale_items WHERE id = ? AND business_id = ? AND sale_id = ? AND product_id IS ? AND product_name = ? AND barcode IS ? AND unit_price_cents = ? AND quantity = ? AND total_cents = ?")
+            let matches: i64 = sqlx::query_scalar("SELECT count(*) FROM sale_items WHERE id = ? AND business_id = ? AND sale_id = ? AND product_id IS ? AND product_name = ? AND barcode IS ? AND unit_price_cents = ? AND quantity = ? AND total_cents = ? AND tracks_inventory = ?")
                 .bind(&item.id).bind(&sale.business_id).bind(&item.sale_id).bind(&item.product_id)
                 .bind(&item.product_name).bind(&item.barcode).bind(item.unit_price_cents)
-                .bind(item.quantity).bind(item.total_cents)
+                .bind(item.quantity).bind(item.total_cents).bind(item.tracks_inventory)
                 .fetch_one(&mut *tx).await.map_err(|error| error.to_string())?;
-            if matches != 1 { return Err("El UUID de línea local ya tiene otros datos.".into()); }
+            if matches != 1 {
+                return Err("El UUID de línea local ya tiene otros datos.".into());
+            }
         }
     }
     if remote {
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM sale_items WHERE business_id = ? AND sale_id = ?")
-            .bind(&sale.business_id).bind(&sale.id).fetch_one(&mut *tx).await.map_err(|error| error.to_string())?;
-        if count != items.len() as i64 { return Err("La venta local tiene líneas diferentes.".into()); }
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM sale_items WHERE business_id = ? AND sale_id = ?",
+        )
+        .bind(&sale.business_id)
+        .bind(&sale.id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|error| error.to_string())?;
+        if count != items.len() as i64 {
+            return Err("La venta local tiene líneas diferentes.".into());
+        }
     }
     tx.commit().await.map_err(|error| error.to_string())?;
     Ok(())
@@ -195,10 +346,20 @@ pub fn run() {
             sql: include_str!("../migrations/0007_pos_sync.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "create_inventory",
+            sql: include_str!("../migrations/0008_inventory.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![complete_local_sale, apply_remote_sale])
+        .invoke_handler(tauri::generate_handler![
+            complete_local_sale,
+            apply_remote_sale,
+            record_local_stock
+        ])
         .plugin(
             tauri_plugin_sql::Builder::default()
                 .add_migrations("sqlite:centrocolor.db", migrations)

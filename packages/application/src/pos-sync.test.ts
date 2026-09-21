@@ -30,6 +30,7 @@ const product = (id: string, time = t1): Product => ({
   salePriceCents: 1000,
   costPriceCents: null,
   categoryId: null,
+  tracksInventory: false,
 });
 const sale = (id: string, time = t1): Sale => ({
   id,
@@ -57,6 +58,7 @@ const bundle = (id: string, time = t1): SaleBundle => ({
       quantity: 1,
       totalCents: 1000,
       lineTotalCents: 1000,
+      tracksInventory: false,
     },
   ],
 });

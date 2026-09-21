@@ -21,6 +21,12 @@ import {
 class MemoryProducts implements ProductRepository {
   rows: Product[] = [];
   lookups: string[] = [];
+  async get(businessId: string, id: string) {
+    return (
+      this.rows.find((row) => row.businessId === businessId && row.id === id) ??
+      null
+    );
+  }
   async list(businessId: string, query: string, limit: number) {
     return this.rows
       .filter(
@@ -85,6 +91,7 @@ const details = (barcode: string | null): ProductDetails => ({
   salePriceCents: 1299,
   costPriceCents: null,
   categoryId: null,
+  tracksInventory: false,
 });
 const context = {
   businessId: 'business-a',

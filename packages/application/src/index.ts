@@ -49,6 +49,14 @@ export {
   completeSale,
 } from './pos';
 export type { ProductRepository, SaleRepository, ScanResult } from './pos';
+export { recordStockChange, stockWarnings } from './inventory';
+export type { InventoryRepository } from './inventory';
+export { syncStockMovements } from './stock-sync';
+export type {
+  StockCursor,
+  StockSyncLocalPort,
+  StockSyncCloudPort,
+} from './stock-sync';
 export { syncPosMutable, syncPosSales } from './pos-sync';
 export type {
   PosMutableType,

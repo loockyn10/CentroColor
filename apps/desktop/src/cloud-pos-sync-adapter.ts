@@ -23,6 +23,7 @@ type CategoryRow = {
   updated_at: string;
 };
 type ProductRow = CategoryRow & {
+  tracks_inventory: boolean;
   barcode: string | null;
   sale_price_cents: number;
   cost_price_cents: number | null;
@@ -51,6 +52,7 @@ type ItemRow = {
   unit_price_cents: number;
   quantity: number;
   total_cents: number;
+  tracks_inventory: boolean;
 };
 
 export const categoryFromCloud = (row: CategoryRow): ProductCategory => ({
@@ -67,6 +69,7 @@ export const productFromCloud = (row: ProductRow): Product => ({
   salePriceCents: row.sale_price_cents,
   costPriceCents: row.cost_price_cents,
   categoryId: row.category_id,
+  tracksInventory: row.tracks_inventory,
 });
 export const saleFromCloud = (row: SaleRow): Sale => ({
   id: row.id,
@@ -91,6 +94,7 @@ export const itemFromCloud = (row: ItemRow): SaleItem => ({
   quantity: row.quantity,
   totalCents: row.total_cents,
   lineTotalCents: row.total_cents,
+  tracksInventory: row.tracks_inventory,
 });
 
 function details(type: PosMutableType, entity: PosMutable) {
@@ -104,6 +108,7 @@ function details(type: PosMutableType, entity: PosMutable) {
     cost_price_cents: product.costPriceCents,
     category_id: product.categoryId,
     is_active: product.isActive,
+    tracks_inventory: product.tracksInventory,
   };
 }
 function same(type: PosMutableType, a: PosMutable, b: PosMutable) {
@@ -226,6 +231,7 @@ export class CloudPosSyncAdapter implements PosSyncCloudPort {
         unit_price_cents: item.unitPriceCents,
         quantity: item.quantity,
         total_cents: item.totalCents,
+        tracks_inventory: item.tracksInventory,
       })),
     });
     if (error) throw error;

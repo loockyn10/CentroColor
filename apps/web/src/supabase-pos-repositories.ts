@@ -22,6 +22,7 @@ type CategoryRow = {
   updated_at: string;
 };
 type ProductRow = CategoryRow & {
+  tracks_inventory: boolean;
   barcode: string | null;
   sale_price_cents: number;
   cost_price_cents: number | null;
@@ -50,6 +51,7 @@ type ItemRow = {
   unit_price_cents: number;
   quantity: number;
   total_cents: number;
+  tracks_inventory: boolean;
 };
 const categoryFromRow = (row: CategoryRow): ProductCategory => ({
   id: row.id,
@@ -65,6 +67,7 @@ const productFromRow = (row: ProductRow): Product => ({
   salePriceCents: row.sale_price_cents,
   costPriceCents: row.cost_price_cents,
   categoryId: row.category_id,
+  tracksInventory: row.tracks_inventory,
 });
 const saleFromRow = (row: SaleRow): Sale => ({
   id: row.id,
@@ -89,6 +92,7 @@ const itemFromRow = (row: ItemRow): SaleItem => ({
   quantity: row.quantity,
   totalCents: row.total_cents,
   lineTotalCents: row.total_cents,
+  tracksInventory: row.tracks_inventory,
 });
 const fields = (details: ProductDetails) => ({
   name: details.name,
@@ -96,12 +100,23 @@ const fields = (details: ProductDetails) => ({
   sale_price_cents: details.salePriceCents,
   cost_price_cents: details.costPriceCents,
   category_id: details.categoryId,
+  tracks_inventory: details.tracksInventory,
 });
 const conflictMessage =
   'El registro cambió en Cloud. Recargá el catálogo antes de editarlo.';
 
 export class SupabaseProductRepository implements ProductRepository {
   constructor(private readonly client: SupabaseClient = getSupabaseClient()) {}
+  async get(businessId: string, id: string): Promise<Product | null> {
+    const { data, error } = await this.client
+      .from('products')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? productFromRow(data as ProductRow) : null;
+  }
   async list(
     businessId: string,
     query: string,
@@ -273,6 +288,7 @@ export class SupabaseSaleRepository implements SaleRepository {
         unit_price_cents: item.unitPriceCents,
         quantity: item.quantity,
         total_cents: item.totalCents,
+        tracks_inventory: item.tracksInventory,
       })),
     });
     if (error) throw error;

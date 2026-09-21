@@ -22,6 +22,7 @@ export interface CartLine {
   unitPriceCents: number;
   quantity: number;
   lineTotalCents: number;
+  tracksInventory: boolean;
 }
 
 export interface SaleItem extends Omit<CartLine, 'productId'> {

@@ -25,3 +25,9 @@ export {
   cartTotal,
 } from './sale';
 export type { CartLine, Sale, SaleItem, PaymentMethod } from './sale';
+export { requireStockQuantity } from './inventory';
+export type {
+  InventoryBalance,
+  StockMovement,
+  StockMovementType,
+} from './inventory';

@@ -93,6 +93,18 @@ function assertBusiness(businessId: string, actual: string) {
     throw new Error('Sync devolvió datos de otro negocio.');
 }
 
+function syncErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (
+    error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+  )
+    return error.message;
+  return 'No se pudo sincronizar el POS.';
+}
+
 export async function syncPosMutable(
   type: PosMutableType,
   businessId: string,
@@ -121,10 +133,7 @@ export async function syncPosMutable(
           result.pushed++;
         }
       } catch (error) {
-        await local.fail(
-          change,
-          error instanceof Error ? error.message : String(error),
-        );
+        await local.fail(change, syncErrorMessage(error));
         throw error;
       }
       processed++;
@@ -192,10 +201,7 @@ export async function syncPosSales(
         await local.acknowledgeSale(change);
         result.pushed++;
       } catch (error) {
-        await local.fail(
-          change,
-          error instanceof Error ? error.message : String(error),
-        );
+        await local.fail(change, syncErrorMessage(error));
         throw error;
       }
       processed++;

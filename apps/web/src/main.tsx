@@ -12,6 +12,7 @@ import {
   ProductsPage,
   NewSalePage,
   SalesPage,
+  StockPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -22,14 +23,18 @@ import {
   SupabaseProductRepository,
   SupabaseSaleRepository,
 } from './supabase-pos-repositories';
+import { SupabaseInventoryRepository } from './supabase-inventory-repository';
 
 function PosSection({
   section,
 }: {
-  section: 'products' | 'new-sale' | 'sales';
+  section: 'products' | 'new-sale' | 'sales' | 'stock';
 }) {
   const [productRepository] = useState(() => new SupabaseProductRepository());
   const [saleRepository] = useState(() => new SupabaseSaleRepository());
+  const [inventoryRepository] = useState(
+    () => new SupabaseInventoryRepository(),
+  );
   if (section === 'products')
     return <ProductsPage repository={productRepository} storage="cloud" />;
   if (section === 'new-sale')
@@ -37,6 +42,14 @@ function PosSection({
       <NewSalePage
         productRepository={productRepository}
         saleRepository={saleRepository}
+        inventoryRepository={inventoryRepository}
+      />
+    );
+  if (section === 'stock')
+    return (
+      <StockPage
+        productRepository={productRepository}
+        inventoryRepository={inventoryRepository}
       />
     );
   return <SalesPage repository={saleRepository} storage="cloud" />;
@@ -200,6 +213,8 @@ function App() {
           <PosSection section="new-sale" />
         ) : activeId === 'sales' ? (
           <PosSection section="sales" />
+        ) : activeId === 'stock' ? (
+          <PosSection section="stock" />
         ) : (
           <PlaceholderPage title={title} />
         )}

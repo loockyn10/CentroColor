@@ -16,6 +16,7 @@ import {
 
 export interface ProductRepository {
   list(businessId: string, query: string, limit: number): Promise<Product[]>;
+  get(businessId: string, id: string): Promise<Product | null>;
   findByBarcode(businessId: string, barcode: string): Promise<Product | null>;
   create(product: Product): Promise<Product>;
   update(
@@ -66,6 +67,7 @@ export function createProduct(
     businessId,
     ...normalizeProductDetails(details),
     isActive: true,
+    tracksInventory: details.tracksInventory,
     createdAt: now,
     updatedAt: now,
   });
@@ -116,6 +118,7 @@ export function addToCart(lines: CartLine[], product: Product): CartLine[] {
       unitPriceCents: product.salePriceCents,
       quantity: 1,
       lineTotalCents: lineTotal(product.salePriceCents, 1),
+      tracksInventory: product.tracksInventory,
     },
   ];
 }

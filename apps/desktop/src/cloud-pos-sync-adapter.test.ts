@@ -16,6 +16,7 @@ const product: Product = {
   costPriceCents: null,
   categoryId: null,
   isActive: true,
+  tracksInventory: false,
   createdAt: t1,
   updatedAt: t1,
 };
@@ -28,6 +29,7 @@ const row = (name: string) => ({
   cost_price_cents: null,
   category_id: null,
   is_active: true,
+  tracks_inventory: false,
   created_at: t1,
   updated_at: t2,
 });
@@ -35,30 +37,37 @@ const row = (name: string) => ({
 describe('Cloud Product sync adapter', () => {
   it('uses the known version and business for optimistic Product edits', async () => {
     let request: URL | undefined;
+    let body: Record<string, unknown> | undefined;
     const client = createClient('http://localhost:54321', 'public-test-key', {
       auth: { persistSession: false, autoRefreshToken: false },
       global: {
-        fetch: async (input) => {
+        fetch: async (input, init) => {
           request = new URL(
             input instanceof Request ? input.url : String(input),
           );
-          return new Response(JSON.stringify([row('Álbum')]), {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' },
-          });
+          body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          return new Response(
+            JSON.stringify([{ ...row('Álbum'), tracks_inventory: true }]),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         },
       },
     });
     const result = await new CloudPosSyncAdapter(client).push('product', {
       outboxId: 'o',
       entityType: 'product',
-      entity: product,
+      entity: { ...product, tracksInventory: true },
       localRevision: 1,
       cloudUpdatedAt: t1,
     });
     expect(result.kind).toBe('pushed');
     expect(request?.searchParams.get('business_id')).toBe(`eq.${businessId}`);
     expect(request?.searchParams.get('updated_at')).toBe(`eq.${t1}`);
+    expect(body?.tracks_inventory).toBe(true);
+    expect((result.entity as Product).tracksInventory).toBe(true);
   });
 
   it('retains a divergent Cloud Product as an explicit conflict', async () => {

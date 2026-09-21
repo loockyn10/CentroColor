@@ -16,13 +16,19 @@ export interface Product {
   costPriceCents: number | null;
   categoryId: string | null;
   isActive: boolean;
+  tracksInventory: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 export type ProductDetails = Pick<
   Product,
-  'name' | 'barcode' | 'salePriceCents' | 'costPriceCents' | 'categoryId'
+  | 'name'
+  | 'barcode'
+  | 'salePriceCents'
+  | 'costPriceCents'
+  | 'categoryId'
+  | 'tracksInventory'
 >;
 
 export function requireCents(value: number): number {
@@ -53,6 +59,7 @@ export function normalizeProductDetails(
         ? null
         : requireCents(details.costPriceCents),
     categoryId: details.categoryId || null,
+    tracksInventory: details.tracksInventory === true,
   };
 }
 
