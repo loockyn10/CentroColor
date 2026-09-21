@@ -2,7 +2,7 @@
 
 ## Punto de reanudación
 
-Revisar y aplicar manualmente la migración Cloud `20260923000000_pos_mvp.sql` mediante el flujo administrativo. El dry-run remoto del 20/9/2026 mostró **solo** ese archivo pendiente, sin seeds ni roles. No se ejecutó `db push` real. Después, probar manualmente Desktop en el local: scanner HID con Enter, alta rápida, producto sin código, cantidades, cobro, historial y operación sin Internet. No afirmar que esa prueba operativa ya ocurrió.
+Revisar y aplicar manualmente la migración Cloud `20260923000000_pos_mvp.sql` mediante el flujo administrativo. Un intento remoto previo falló con PostgreSQL `42830`: `sales` referenciaba `devices(business_id, id)` sin una UNIQUE explícita sobre ese par. La migración pendiente ahora agrega `devices_business_id_id_unique` antes de crear `sales`; no se modificaron migraciones ya aplicadas ni se ejecutó un nuevo push remoto en esta sesión. Después, probar manualmente Desktop en el local: scanner HID con Enter, alta rápida, producto sin código, cantidades, cobro, historial y operación sin Internet. No afirmar que esa prueba operativa ya ocurrió.
 
 ## Implementación
 
@@ -19,5 +19,7 @@ Customer Sync sigue funcional y, según el usuario, fue probada en ambos sentido
 ## Verificación y límites
 
 Pasaron typecheck, lint, 40 pruebas Vitest, build Web/Desktop, format:check, build nativo con MSI y NSIS y test SQLite del esquema POS. El test SQLite cubre barcode único por negocio, productos sin barcode, separación de negocio, rollback y snapshots. El dry-run Cloud solo verifica el plan de migraciones; **no valida la ejecución SQL ni aplicó la migración**. No hubo prueba visual/interactiva de scanner real, sesión offline en un equipo del local ni cuenta Cloud para el nuevo esquema.
+
+La validación dirigida `tests/pos_cloud_fk.py` comprueba que las cinco FK compuestas nuevas tienen una clave UNIQUE correspondiente, incluida `devices(business_id, id)`. `supabase db lint --local` no pudo conectarse porque no hay PostgreSQL local activo en `127.0.0.1:54322`; por lo tanto, la migración corregida aún no se ejecutó contra PostgreSQL en esta sesión.
 
 El POS Desktop opera en SQLite aunque Supabase no esté disponible, sujeto a la autorización offline ya existente. Product, Sale e inventario no se sincronizan; Web no ve esos datos Desktop. No hay stock, devoluciones, promociones, impresión, pagos divididos ni identificación fiscal.

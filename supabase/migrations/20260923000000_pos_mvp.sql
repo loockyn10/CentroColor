@@ -1,4 +1,9 @@
 -- POS schema only. Desktop Product/Sale synchronization is a later sprint.
+-- A sale's optional device must belong to its business. The original devices
+-- table has id as PK, but PostgreSQL requires an explicit key for this pair.
+alter table public.devices
+  add constraint devices_business_id_id_unique unique (business_id, id);
+
 create table public.product_categories (
   id uuid primary key,
   business_id uuid not null references public.businesses(id) on delete restrict,
