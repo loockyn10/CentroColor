@@ -71,6 +71,12 @@ class MemoryProducts implements ProductRepository {
   async createCategory(category: ProductCategory) {
     return category;
   }
+  async updateCategory(): Promise<ProductCategory> {
+    throw new Error('No se usa en esta prueba.');
+  }
+  async setCategoryActive(): Promise<ProductCategory> {
+    throw new Error('No se usa en esta prueba.');
+  }
 }
 
 const details = (barcode: string | null): ProductDetails => ({

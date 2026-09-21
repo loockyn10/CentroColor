@@ -7,9 +7,9 @@
 - `packages/domain`: TypeScript puro para Business, Branch, Device, Profile, BusinessMembership, Customer, Product, ProductCategory, CartLine, Sale y SaleItem; no depende de infraestructura ni UI.
 - `packages/application`: contratos de repositorios y resolución del contexto actual. Los adaptadores de cada cliente implementan sus puertos; la UI compartida no consulta SQLite ni Supabase.
 - `packages/ui`: AppShell, navegación, componentes básicos y CSS responsive compartidos.
-- `packages/features`: Login, estados de acceso, Inicio, Clientes, POS Desktop y una pantalla placeholder compartidos.
+- `packages/features`: Login, estados de acceso, Inicio, Clientes y POS compartido; Desktop y Web reciben repositorios distintos.
 
-Los adaptadores SQLite y Supabase residen en cada app. Clientes es la primera persistencia de operación: Web escribe en Supabase y Desktop en SQLite. Sprint 5 agrega sincronización eventual solo de Customer desde Desktop; Web mantiene su acceso directo a Supabase. La migración Cloud de Sprint 4 ya fue aplicada según el usuario; la nueva migración de timestamps de Sprint 5 requiere revisión y aplicación manual.
+Los adaptadores SQLite y Supabase residen en cada app. Web escribe en Supabase y Desktop en SQLite. Ambos clientes representan el mismo sistema y deben mantener paridad funcional razonable; la UX puede adaptarse a cada pantalla. Customer Sync y POS Sync sincronizan Desktop cuando existe sesión Cloud válida; Web usa Cloud directamente. Las migraciones Cloud del POS y su sync siguen pendientes de aplicación remota.
 
 ## Identidad estructural
 
@@ -33,7 +33,7 @@ El pull consulta páginas ordenadas por `(updated_at, id)` desde el cursor persi
 
 El ciclo se ejecuta tras login online, cuando hay sesión válida al iniciar, mediante `Sincronizar ahora`, al volver la conectividad y cada dos minutos mientras Desktop está abierto y autenticado. Solo hay un ciclo activo a la vez; los errores no bloquean la UI. `packages/application` define el orquestador y sus puertos; los adaptadores concretos viven en Desktop. Web no usa este ciclo. El shell Web PWA precachea la interfaz, pero Web requiere conexión para operar Clientes.
 
-No hay sincronización genérica, Realtime ni cambios a otras entidades. La revocación remota no llega a Desktop desconectado y el login debe revalidarse para volver a sincronizar. El reloj por negocio serializa escrituras Customer Cloud; si el volumen crece mucho, habrá que medir esa contención antes de ampliar el mecanismo.
+Customer Sync conserva sus tablas, triggers y orquestador propios. No se reescribió ni se mezcló su outbox con POS. La revocación remota no llega a Desktop desconectado y el login debe revalidarse para volver a sincronizar.
 
 ## POS MVP Desktop — Sprint 5
 
@@ -41,4 +41,12 @@ Desktop usa `SQLiteProductRepository` para productos/categorías y lookup exacto
 
 La pantalla Nueva venta usa el input principal para scanner HID Keyboard terminado en Enter. El Enter sin selección consulta exactamente `(business_id, barcode)` local; la búsqueda por nombre se carga con retraso breve en una lista aparte y requiere selección. Alta rápida, carrito, checkout e historial usan únicamente SQLite y continúan disponibles con el contexto `offline-authenticated`. El carrito se conserva en `sessionStorage` de la ventana mientras se navega. Las ventas completadas no tienen operación de edición. `device_id` es nullable porque el contexto autorizado actual no vincula todavía un registro Device Cloud al equipo; branch y usuario son obligatorios.
 
-La migración Cloud crea tablas equivalentes con FK compuestas, RLS y permisos de cliente limitados, pero no hay adaptadores Product/Sale Web ni sincronización Desktop↔Cloud. El indicador de sync y `sync_outbox` continúan siendo exclusivos de Customer. Una futura sincronización de Sales deberá garantizar el orden y la atomicidad entre Sale y SaleItems; no se asumió que el outbox de Customer sirva sin cambios.
+## POS compartido y sincronización — Sprint 6
+
+Web usa `SupabaseProductRepository` y `SupabaseSaleRepository` con la misma feature de Productos, Nueva venta e Historial que Desktop. La UI recibe `ProductRepository` y `SaleRepository`; el negocio procede de `BusinessContext`. Web requiere conexión y sesión autenticada. Desktop continúa operando en SQLite sin conexión.
+
+Desktop agrega `pos_sync_outbox` independiente para `category`, `product` y `sale`, con triggers locales y backfill. `pos_sync_cursor` guarda un cursor `(updated_at, id)` por negocio y tipo. El ciclo se ejecuta después de validar la sesión/membership, en orden Customer → ProductCategory → Product → Sale. ProductCategory y Product son mutables: Cloud fija versiones monotónicas por negocio mediante `private.pos_sync_clock`, y el push actualiza solo si coincide la última versión Cloud conocida. Una divergencia conserva el cambio local y registra el snapshot remoto; el usuario puede conservar Desktop o Web. Los pulls escriben con `sync_origin='remote'` y no generan outbox.
+
+Sale completada es inmutable. El push invoca `complete_pos_sale` con Sale y todas las SaleItems en una transacción PostgreSQL; el mismo UUID y contenido es idempotente. Los INSERT directos de Sale y SaleItem se revocan a `authenticated`. El pull pagina Sales por su `updated_at` y recupera todas las SaleItems antes de aplicar el bundle con `apply_remote_sale`, transacción SQLite que valida totales e ítems. SaleItem no tiene cursor propio porque nunca se sincroniza separada de Sale. Su snapshot histórico no consulta el Product actual. La RLS por membership y las FK compuestas impiden asociar una línea a una venta o producto de otro negocio.
+
+La migración Cloud del POS base (`20260923000000_pos_mvp.sql`) y la nueva (`20260924000000_pos_sync.sql`) deben aplicarse en ese orden antes de usar POS Web o Sync. El dry-run enumera ambas, pero no verifica ejecución SQL. No se ha probado todavía una sesión Cloud real de POS ni el scanner físico. Stock sigue fuera de alcance.

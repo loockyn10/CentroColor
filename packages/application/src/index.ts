@@ -49,3 +49,16 @@ export {
   completeSale,
 } from './pos';
 export type { ProductRepository, SaleRepository, ScanResult } from './pos';
+export { syncPosMutable, syncPosSales } from './pos-sync';
+export type {
+  PosMutableType,
+  PosEntityType,
+  PosMutable,
+  PosCursor,
+  PendingPosChange,
+  SaleBundle,
+  PendingSale,
+  PosSyncLocalPort,
+  PosSyncCloudPort,
+  PosSyncResult,
+} from './pos-sync';

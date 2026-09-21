@@ -22,10 +22,28 @@ export interface ProductRepository {
     businessId: string,
     id: string,
     details: ProductDetails,
+    expectedUpdatedAt?: string,
   ): Promise<Product>;
-  setActive(businessId: string, id: string, active: boolean): Promise<Product>;
+  setActive(
+    businessId: string,
+    id: string,
+    active: boolean,
+    expectedUpdatedAt?: string,
+  ): Promise<Product>;
   listCategories(businessId: string): Promise<ProductCategory[]>;
   createCategory(category: ProductCategory): Promise<ProductCategory>;
+  updateCategory(
+    businessId: string,
+    id: string,
+    name: string,
+    expectedUpdatedAt?: string,
+  ): Promise<ProductCategory>;
+  setCategoryActive(
+    businessId: string,
+    id: string,
+    active: boolean,
+    expectedUpdatedAt?: string,
+  ): Promise<ProductCategory>;
 }
 
 export interface SaleRepository {
@@ -58,8 +76,14 @@ export function updateProduct(
   businessId: string,
   id: string,
   details: ProductDetails,
+  expectedUpdatedAt?: string,
 ) {
-  return repository.update(businessId, id, normalizeProductDetails(details));
+  return repository.update(
+    businessId,
+    id,
+    normalizeProductDetails(details),
+    expectedUpdatedAt,
+  );
 }
 
 export function createCategory(

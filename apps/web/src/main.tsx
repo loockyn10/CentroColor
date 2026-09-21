@@ -9,12 +9,38 @@ import {
   HomePage,
   LoginPage,
   PlaceholderPage,
+  ProductsPage,
+  NewSalePage,
+  SalesPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
 import { loadCloudBusinessContext } from './cloud-auth-adapter';
 import { describeWebAuthError, type AuthStage } from './auth-errors';
 import { SupabaseCustomerRepository } from './supabase-customer-repository';
+import {
+  SupabaseProductRepository,
+  SupabaseSaleRepository,
+} from './supabase-pos-repositories';
+
+function PosSection({
+  section,
+}: {
+  section: 'products' | 'new-sale' | 'sales';
+}) {
+  const [productRepository] = useState(() => new SupabaseProductRepository());
+  const [saleRepository] = useState(() => new SupabaseSaleRepository());
+  if (section === 'products')
+    return <ProductsPage repository={productRepository} storage="cloud" />;
+  if (section === 'new-sale')
+    return (
+      <NewSalePage
+        productRepository={productRepository}
+        saleRepository={saleRepository}
+      />
+    );
+  return <SalesPage repository={saleRepository} storage="cloud" />;
+}
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -168,6 +194,12 @@ function App() {
           <HomePage />
         ) : activeId === 'customers' ? (
           <CustomerSection />
+        ) : activeId === 'products' ? (
+          <PosSection section="products" />
+        ) : activeId === 'new-sale' ? (
+          <PosSection section="new-sale" />
+        ) : activeId === 'sales' ? (
+          <PosSection section="sales" />
         ) : (
           <PlaceholderPage title={title} />
         )}

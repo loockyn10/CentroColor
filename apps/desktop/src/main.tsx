@@ -1,6 +1,10 @@
 import { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { BusinessContext } from '@centrocolor/application';
+import {
+  syncPosMutable,
+  syncPosSales,
+  type BusinessContext,
+} from '@centrocolor/application';
 import { AppShell, navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
@@ -36,11 +40,18 @@ import {
   SQLiteProductRepository,
   SQLiteSaleRepository,
 } from './sqlite-pos-repositories';
+import {
+  SQLitePosSyncAdapter,
+  type PosConflict,
+  type PosSyncSummary,
+} from './sqlite-pos-sync-adapter';
+import { CloudPosSyncAdapter } from './cloud-pos-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
 const productRepository = new SQLiteProductRepository();
 const saleRepository = new SQLiteSaleRepository();
+const posSyncLocal = new SQLitePosSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -58,22 +69,31 @@ function App() {
     null,
   );
   const [conflicts, setConflicts] = useState<CustomerConflict[]>([]);
+  const [posSyncSummary, setPosSyncSummary] = useState<PosSyncSummary | null>(
+    null,
+  );
+  const [posConflicts, setPosConflicts] = useState<PosConflict[]>([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const [resolutionBusy, setResolutionBusy] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
-  const [customerRefresh, setCustomerRefresh] = useState(0);
+  const [dataRefresh, setDataRefresh] = useState(0);
   const syncing = useRef(false);
   const resolving = useRef(false);
 
   async function refreshSyncSummary(businessId: string) {
     try {
-      const [summary, currentConflicts] = await Promise.all([
-        customerSyncLocal.summary(businessId),
-        customerSyncLocal.conflicts(businessId),
-      ]);
+      const [summary, currentConflicts, posSummary, currentPosConflicts] =
+        await Promise.all([
+          customerSyncLocal.summary(businessId),
+          customerSyncLocal.conflicts(businessId),
+          posSyncLocal.summary(businessId),
+          posSyncLocal.conflicts(businessId),
+        ]);
       setSyncSummary(summary);
       setConflicts(currentConflicts);
+      setPosSyncSummary(posSummary);
+      setPosConflicts(currentPosConflicts);
     } catch {
       setSyncPhase('error');
     }
@@ -89,8 +109,22 @@ function App() {
         getSupabaseClient(),
         customerSyncLocal,
       );
+      const cloudPos = new CloudPosSyncAdapter(getSupabaseClient());
+      await syncPosMutable(
+        'category',
+        target.businessId,
+        posSyncLocal,
+        cloudPos,
+      );
+      await syncPosMutable(
+        'product',
+        target.businessId,
+        posSyncLocal,
+        cloudPos,
+      );
+      await syncPosSales(target.businessId, posSyncLocal, cloudPos);
       setSyncPhase('idle');
-      setCustomerRefresh((value) => value + 1);
+      setDataRefresh((value) => value + 1);
     } catch (syncError) {
       if (
         syncError instanceof Error &&
@@ -109,6 +143,55 @@ function App() {
       syncing.current = false;
       await refreshSyncSummary(target.businessId);
     }
+  }
+
+  async function resolvePosConflict(
+    item: PosConflict,
+    choice: 'local' | 'cloud',
+  ) {
+    if (!context || !cloudSessionReady || syncing.current || resolving.current)
+      return;
+    resolving.current = true;
+    setResolutionBusy(true);
+    setResolutionError(null);
+    let resolved = false;
+    try {
+      const client = getSupabaseClient();
+      await validateCloudBusinessContext(context, client);
+      const remote = await new CloudPosSyncAdapter(client).get(
+        item.type,
+        context.businessId,
+        item.id,
+      );
+      if (!remote) throw new Error('El registro Cloud ya no está disponible.');
+      if (item.cloudUpdatedAt !== remote.updatedAt) {
+        const change = await posSyncLocal.pendingFor(
+          item.type,
+          context.businessId,
+          item.id,
+        );
+        if (change) await posSyncLocal.conflict(change, remote);
+        await refreshSyncSummary(context.businessId);
+        throw new Error(
+          'Web volvió a cambiar este registro. Revisá ambas versiones actualizadas.',
+        );
+      }
+      if (choice === 'cloud')
+        await posSyncLocal.keepCloud(item.type, remote, item.localRevision);
+      else await posSyncLocal.keepLocal(item.type, remote, item.localRevision);
+      await refreshSyncSummary(context.businessId);
+      resolved = true;
+    } catch (failure) {
+      setResolutionError(
+        failure instanceof Error
+          ? failure.message
+          : 'No se pudo resolver el conflicto.',
+      );
+    } finally {
+      resolving.current = false;
+      setResolutionBusy(false);
+    }
+    if (resolved) void runSync(context);
   }
 
   async function resolveConflict(
@@ -131,7 +214,7 @@ function App() {
       if (!remote) throw new Error('El cliente Cloud ya no está disponible.');
       if (choice === 'cloud') {
         await customerSyncLocal.keepCloud(remote, item.localRevision);
-        setCustomerRefresh((value) => value + 1);
+        setDataRefresh((value) => value + 1);
       } else {
         await customerSyncLocal.keepLocal(remote, item.localRevision);
       }
@@ -264,6 +347,8 @@ function App() {
     setContext(null);
     setSyncSummary(null);
     setConflicts([]);
+    setPosSyncSummary(null);
+    setPosConflicts([]);
     setError(null);
     setGate('login');
   }
@@ -304,7 +389,7 @@ function App() {
   const title =
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';
   const syncLabel =
-    syncSummary && syncSummary.conflicts > 0
+    (syncSummary?.conflicts ?? 0) + (posSyncSummary?.conflicts ?? 0) > 0
       ? 'Conflicto'
       : syncPhase === 'syncing'
         ? 'Sincronizando'
@@ -312,7 +397,7 @@ function App() {
           ? 'Error de sincronización'
           : !cloudSessionReady || !online
             ? 'Sin conexión'
-            : syncSummary && syncSummary.pending > 0
+            : (syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0) > 0
               ? 'Cambios pendientes'
               : 'Sincronizado';
   return (
@@ -325,13 +410,22 @@ function App() {
         statusArea={
           <div>
             <div className="sync-status-bar" role="status">
-              <strong>Clientes: {syncLabel}</strong>
-              <small>Productos y ventas solo en este equipo.</small>
-              {syncSummary && syncSummary.pending > 0 && (
-                <span>{syncSummary.pending} pendiente(s)</span>
+              <strong>Sincronización: {syncLabel}</strong>
+              {(syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0) >
+                0 && (
+                <span>
+                  {(syncSummary?.pending ?? 0) + (posSyncSummary?.pending ?? 0)}{' '}
+                  pendiente(s)
+                </span>
               )}
-              {syncSummary && syncSummary.conflicts > 0 && (
-                <span>{syncSummary.conflicts} conflicto(s)</span>
+              {(syncSummary?.conflicts ?? 0) +
+                (posSyncSummary?.conflicts ?? 0) >
+                0 && (
+                <span>
+                  {(syncSummary?.conflicts ?? 0) +
+                    (posSyncSummary?.conflicts ?? 0)}{' '}
+                  conflicto(s)
+                </span>
               )}
               <button
                 type="button"
@@ -350,7 +444,7 @@ function App() {
               >
                 Sincronizar ahora
               </button>
-              {conflicts.length > 0 && (
+              {conflicts.length + posConflicts.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setShowConflicts((value) => !value)}
@@ -358,18 +452,24 @@ function App() {
                   {showConflicts ? 'Ocultar conflictos' : 'Revisar conflictos'}
                 </button>
               )}
-              {syncSummary && syncSummary.conflicts > 0 ? (
+              {(syncSummary?.conflicts ?? 0) +
+                (posSyncSummary?.conflicts ?? 0) >
+              0 ? (
                 <small>Los cambios locales siguen guardados.</small>
               ) : !cloudSessionReady ? (
                 <small>Revalidá el acceso para sincronizar.</small>
               ) : syncPhase === 'error' ? (
-                <small>Reintentá cuando vuelva la conexión.</small>
+                <small>
+                  {posSyncSummary?.lastError ??
+                    syncSummary?.lastError ??
+                    'Reintentá cuando vuelva la conexión.'}
+                </small>
               ) : null}
             </div>
-            {showConflicts && conflicts.length > 0 && (
+            {showConflicts && conflicts.length + posConflicts.length > 0 && (
               <div className="sync-conflict-panel">
                 <p>
-                  Cada cliente cambió en este equipo y en Web. Elegí cuál
+                  Estos registros cambiaron en este equipo y en Web. Elegí cuál
                   versión conservar. La versión descartada no se recuperará
                   desde esta pantalla.
                 </p>
@@ -401,7 +501,44 @@ function App() {
                     </button>
                   </div>
                 ))}
-                {syncSummary && syncSummary.conflicts > conflicts.length && (
+                {posConflicts.map((item) => (
+                  <div
+                    className="sync-conflict-row"
+                    key={`${item.type}-${item.id}`}
+                  >
+                    <strong>
+                      {item.type === 'category' ? 'Categoría' : 'Producto'}:{' '}
+                      {item.name}
+                    </strong>
+                    <small>Este equipo: {item.localSummary}</small>
+                    <small>Web: {item.cloudSummary}</small>
+                    <button
+                      type="button"
+                      disabled={
+                        !cloudSessionReady ||
+                        resolutionBusy ||
+                        syncPhase === 'syncing'
+                      }
+                      onClick={() => void resolvePosConflict(item, 'local')}
+                    >
+                      Conservar este equipo
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        !cloudSessionReady ||
+                        resolutionBusy ||
+                        syncPhase === 'syncing'
+                      }
+                      onClick={() => void resolvePosConflict(item, 'cloud')}
+                    >
+                      Conservar Web
+                    </button>
+                  </div>
+                ))}
+                {(syncSummary?.conflicts ?? 0) +
+                  (posSyncSummary?.conflicts ?? 0) >
+                  conflicts.length + posConflicts.length && (
                   <p>Se muestran los primeros 20 conflictos.</p>
                 )}
               </div>
@@ -421,21 +558,33 @@ function App() {
           <CustomersPage
             repository={customerRepository}
             storage="local"
-            refreshToken={customerRefresh}
+            refreshToken={dataRefresh}
             onLocalMutation={() => {
               void refreshSyncSummary(context.businessId);
               if (cloudSessionReady) void runSync(context);
             }}
           />
         ) : activeId === 'products' ? (
-          <ProductsPage repository={productRepository} />
+          <ProductsPage
+            repository={productRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
         ) : activeId === 'new-sale' ? (
           <NewSalePage
             productRepository={productRepository}
             saleRepository={saleRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
           />
         ) : activeId === 'sales' ? (
-          <SalesPage repository={saleRepository} />
+          <SalesPage repository={saleRepository} refreshToken={dataRefresh} />
         ) : (
           <PlaceholderPage title={title} />
         )}

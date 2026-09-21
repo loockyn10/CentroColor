@@ -166,7 +166,9 @@ function ProductForm({
         >
           <option value="">Sin categoría</option>
           {categories
-            .filter((category) => category.isActive)
+            .filter(
+              (category) => category.isActive || category.id === categoryId,
+            )
             .map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -193,8 +195,14 @@ function ProductForm({
 
 export function ProductsPage({
   repository,
+  storage = 'local',
+  onMutation,
+  refreshToken,
 }: {
   repository: ProductRepository;
+  storage?: 'local' | 'cloud';
+  onMutation?: () => void;
+  refreshToken?: number;
 }) {
   const { businessId } = useBusinessContext();
   const [query, setQuery] = useState('');
@@ -230,7 +238,7 @@ export function ProductsPage({
       live = false;
       clearTimeout(timer);
     };
-  }, [repository, businessId, query, refresh]);
+  }, [repository, businessId, query, refresh, refreshToken]);
 
   async function save(details: ProductDetails) {
     setBusy(true);
@@ -238,10 +246,17 @@ export function ProductsPage({
       const saved =
         mode === 'new'
           ? await createProduct(repository, businessId, details)
-          : await updateProduct(repository, businessId, selected!.id, details);
+          : await updateProduct(
+              repository,
+              businessId,
+              selected!.id,
+              details,
+              selected!.updatedAt,
+            );
       setSelected(saved);
       setMode('list');
       setRefresh((value) => value + 1);
+      onMutation?.();
       setError(null);
     } finally {
       setBusy(false);
@@ -251,8 +266,14 @@ export function ProductsPage({
   async function toggle(product: Product) {
     setBusy(true);
     try {
-      await repository.setActive(businessId, product.id, !product.isActive);
+      await repository.setActive(
+        businessId,
+        product.id,
+        !product.isActive,
+        product.updatedAt,
+      );
       setRefresh((value) => value + 1);
+      onMutation?.();
       setError(null);
     } catch (failure) {
       setError(message(failure));
@@ -268,6 +289,47 @@ export function ProductsPage({
     try {
       await createCategory(repository, businessId, name);
       setRefresh((value) => value + 1);
+      onMutation?.();
+      setError(null);
+    } catch (failure) {
+      setError(message(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function editCategory(category: ProductCategory) {
+    const name = window.prompt('Nombre de la categoría', category.name);
+    if (name === null) return;
+    setBusy(true);
+    try {
+      await repository.updateCategory(
+        businessId,
+        category.id,
+        name,
+        category.updatedAt,
+      );
+      setRefresh((value) => value + 1);
+      onMutation?.();
+      setError(null);
+    } catch (failure) {
+      setError(message(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCategory(category: ProductCategory) {
+    setBusy(true);
+    try {
+      await repository.setCategoryActive(
+        businessId,
+        category.id,
+        !category.isActive,
+        category.updatedAt,
+      );
+      setRefresh((value) => value + 1);
+      onMutation?.();
       setError(null);
     } catch (failure) {
       setError(message(failure));
@@ -281,7 +343,11 @@ export function ProductsPage({
       <PageHeader
         eyebrow="CATÁLOGO"
         title="Productos"
-        description="Catálogo local de este negocio. Los cambios aún no se sincronizan con Web."
+        description={
+          storage === 'local'
+            ? 'Catálogo local de este negocio. Se sincroniza al validar la sesión Cloud.'
+            : 'Catálogo de este negocio en Cloud. Requiere conexión.'
+        }
       />
       {error && (
         <p className="customer-error" role="alert">
@@ -372,6 +438,32 @@ export function ProductsPage({
               </p>
             )}
           </Card>
+          <Card className="pos-list-card">
+            <h2>Categorías</h2>
+            {categories.length === 0 && (
+              <p className="pos-empty">Todavía no hay categorías.</p>
+            )}
+            {categories.map((category) => (
+              <div className="pos-category-row" key={category.id}>
+                <strong>{category.name}</strong>
+                <span>{category.isActive ? 'Activa' : 'Inactiva'}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void editCategory(category)}
+                >
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void toggleCategory(category)}
+                >
+                  {category.isActive ? 'Desactivar' : 'Reactivar'}
+                </button>
+              </div>
+            ))}
+          </Card>
         </>
       ) : (
         <Card className="pos-form-card">
@@ -399,9 +491,13 @@ export function ProductsPage({
 export function NewSalePage({
   productRepository,
   saleRepository,
+  onMutation,
+  refreshToken,
 }: {
   productRepository: ProductRepository;
   saleRepository: SaleRepository;
+  onMutation?: () => void;
+  refreshToken?: number;
 }) {
   const context = useBusinessContext();
   const cartKey = `centrocolor-cart-${context.businessId}`;
@@ -470,7 +566,14 @@ export function NewSalePage({
       live = false;
       clearTimeout(timer);
     };
-  }, [productRepository, context.businessId, entry, unknown, checkout]);
+  }, [
+    productRepository,
+    context.businessId,
+    entry,
+    unknown,
+    checkout,
+    refreshToken,
+  ]);
 
   function add(product: Product) {
     setLines((current) => addToCart(current, product));
@@ -529,6 +632,7 @@ export function NewSalePage({
       );
       setUnknown(null);
       add(product);
+      onMutation?.();
     } finally {
       setBusy(false);
     }
@@ -545,6 +649,7 @@ export function NewSalePage({
       setNotice(
         `Venta ${sale.id.slice(0, 8).toUpperCase()} registrada por ${formatCents(sale.totalCents)}.`,
       );
+      onMutation?.();
       focusScanner();
     } catch (failure) {
       setError(message(failure));
@@ -852,7 +957,15 @@ export function NewSalePage({
   );
 }
 
-export function SalesPage({ repository }: { repository: SaleRepository }) {
+export function SalesPage({
+  repository,
+  storage = 'local',
+  refreshToken,
+}: {
+  repository: SaleRepository;
+  storage?: 'local' | 'cloud';
+  refreshToken?: number;
+}) {
   const context = useBusinessContext();
   const [sales, setSales] = useState<Sale[]>([]);
   const [detail, setDetail] = useState<{
@@ -873,7 +986,7 @@ export function SalesPage({ repository }: { repository: SaleRepository }) {
     return () => {
       live = false;
     };
-  }, [repository, context.businessId]);
+  }, [repository, context.businessId, refreshToken]);
   async function open(id: string) {
     try {
       setDetail(await repository.get(context.businessId, id));
@@ -891,7 +1004,11 @@ export function SalesPage({ repository }: { repository: SaleRepository }) {
             ? `Venta ${detail.sale.id.slice(0, 8).toUpperCase()}`
             : 'Ventas'
         }
-        description="Historial local de ventas completadas. No se sincroniza todavía con Web."
+        description={
+          storage === 'local'
+            ? 'Historial local de ventas completadas. Se sincroniza con Cloud.'
+            : 'Historial de ventas completadas en Cloud.'
+        }
       />
       {error && (
         <p className="customer-error" role="alert">

@@ -534,6 +534,9 @@ button {
 .sync-conflict-row strong {
   min-width: 180px;
 }
+.sync-conflict-row small {
+  flex-basis: 100%;
+}
 .sync-conflict-row button {
   border: 1px solid #bcaa90;
   border-radius: 7px;
@@ -941,5 +944,21 @@ button {
   }
   .main-content {
     padding: 34px 26px;
+  }
+}
+.pos-category-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border, #ddd);
+}
+@media (max-width: 640px) {
+  .pos-category-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pos-category-row button {
+    min-height: 2.75rem;
   }
 }

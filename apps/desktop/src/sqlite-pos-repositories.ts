@@ -11,6 +11,7 @@ import type {
   Sale,
   SaleItem,
 } from '@centrocolor/domain';
+import { normalizeCategoryName } from '@centrocolor/domain';
 
 const database = () => Database.load('sqlite:centrocolor.db');
 
@@ -115,11 +116,10 @@ async function requireCategory(businessId: string, categoryId: string | null) {
   if (!categoryId) return;
   const db = await database();
   const rows = await db.select<{ id: string }[]>(
-    'SELECT id FROM product_categories WHERE business_id = ? AND id = ? AND is_active = 1',
+    'SELECT id FROM product_categories WHERE business_id = ? AND id = ?',
     [businessId, categoryId],
   );
-  if (!rows.length)
-    throw new Error('La categoría no pertenece al negocio o está inactiva.');
+  if (!rows.length) throw new Error('La categoría no pertenece al negocio.');
 }
 
 function productError(error: unknown): never {
@@ -210,7 +210,8 @@ export class SQLiteProductRepository implements ProductRepository {
     try {
       const result = await db.execute(
         `UPDATE products SET name = ?, barcode = ?, sale_price_cents = ?,
-         cost_price_cents = ?, category_id = ?, updated_at = ?
+         cost_price_cents = ?, category_id = ?, updated_at = ?,
+         sync_origin = 'local', local_revision = local_revision + 1
          WHERE business_id = ? AND id = ?`,
         [
           details.name,
@@ -237,7 +238,7 @@ export class SQLiteProductRepository implements ProductRepository {
   ): Promise<Product> {
     const db = await database();
     const result = await db.execute(
-      'UPDATE products SET is_active = ?, updated_at = ? WHERE business_id = ? AND id = ?',
+      "UPDATE products SET is_active = ?, updated_at = ?, sync_origin = 'local', local_revision = local_revision + 1 WHERE business_id = ? AND id = ?",
       [active ? 1 : 0, new Date().toISOString(), businessId, id],
     );
     if (!result.rowsAffected) throw new Error('No se encontró el producto.');
@@ -267,6 +268,46 @@ export class SQLiteProductRepository implements ProductRepository {
       ],
     );
     return category;
+  }
+
+  async updateCategory(
+    businessId: string,
+    id: string,
+    name: string,
+  ): Promise<ProductCategory> {
+    const db = await database();
+    const result = await db.execute(
+      "UPDATE product_categories SET name = ?, updated_at = ?, sync_origin = 'local', local_revision = local_revision + 1 WHERE business_id = ? AND id = ?",
+      [normalizeCategoryName(name), new Date().toISOString(), businessId, id],
+    );
+    if (!result.rowsAffected) throw new Error('No se encontró la categoría.');
+    return (await this.getCategory(businessId, id))!;
+  }
+
+  async setCategoryActive(
+    businessId: string,
+    id: string,
+    active: boolean,
+  ): Promise<ProductCategory> {
+    const db = await database();
+    const result = await db.execute(
+      "UPDATE product_categories SET is_active = ?, updated_at = ?, sync_origin = 'local', local_revision = local_revision + 1 WHERE business_id = ? AND id = ?",
+      [active ? 1 : 0, new Date().toISOString(), businessId, id],
+    );
+    if (!result.rowsAffected) throw new Error('No se encontró la categoría.');
+    return (await this.getCategory(businessId, id))!;
+  }
+
+  private async getCategory(
+    businessId: string,
+    id: string,
+  ): Promise<ProductCategory | null> {
+    const db = await database();
+    const rows = await db.select<CategoryRow[]>(
+      'SELECT * FROM product_categories WHERE business_id = ? AND id = ?',
+      [businessId, id],
+    );
+    return rows[0] ? categoryFromRow(rows[0]) : null;
   }
 }
 

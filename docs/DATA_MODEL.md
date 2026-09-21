@@ -47,7 +47,15 @@ Las filas Customer locales anteriores a 0005 entran al outbox en la migración. 
 
 `sales`: UUID `id`, `business_id`, `branch_id`, `device_id` nullable, `created_by`, estado limitado a `completed`, `subtotal_cents`, `total_cents`, `payment_method` (`cash`, `debit`, `credit`, `transfer`, `other`) y timestamps. En este sprint total = subtotal. `sale_items`: UUID `id`, `business_id`, `sale_id`, `product_id` nullable, `product_name`, `barcode` nullable, `unit_price_cents`, `quantity` positiva y `total_cents`. Nombre, barcode y precio son snapshots: modificar Product no cambia la venta histórica. Las FK compuestas aíslan sale/product por negocio. El UUID es identidad; la UI solo muestra ocho caracteres como referencia visual sin valor fiscal.
 
-SQLite usa UUID e instantes UTC como texto e importes `INTEGER`; Cloud usa UUID, `timestamptz` y `bigint`. Los importes se limitan al rango entero seguro de JavaScript. No hay campo global `stock` en Product. Desktop guarda ventas con un comando transaccional; el esquema Cloud queda listo para una futura operación transaccional equivalente, todavía no implementada. Ninguna de estas tablas participa en Customer Sync.
+SQLite usa UUID e instantes UTC como texto e importes `INTEGER`; Cloud usa UUID, `timestamptz` y `bigint`. Los importes se limitan al rango entero seguro de JavaScript. No hay campo global `stock` en Product. Desktop y Cloud guardan Sale + SaleItems en transacciones. Ninguna de estas tablas participa en Customer Sync.
+
+## Sincronización POS — Sprint 6
+
+La migración SQLite 0007 agrega `sync_origin`, `local_revision` y `cloud_updated_at` a ProductCategory y Product; Sale recibe `sync_origin`. `pos_sync_outbox` guarda una operación por `(business_id, entity_type, entity_id)` para categoría/producto y una por venta; `status` es `pending` o `conflict`. Los triggers crean la operación en la misma sentencia de cada cambio local. El backfill registra los datos POS anteriores. `pos_sync_cursor` guarda `(updated_at, entity_id)` por negocio y tipo `category`, `product`, `sale`. SaleItem no lleva cursor separado: su unidad de pull y push es la venta completa.
+
+La migración Cloud `20260924000000_pos_sync.sql` agrega un reloj monotónico privado por negocio que gobierna `updated_at` de ProductCategory/Product en INSERT/UPDATE y Sale en INSERT. Los índices `(business_id, updated_at, id)` soportan pulls incrementales. `complete_pos_sale(jsonb,jsonb)` valida membership, usuario, totales y líneas, inserta Sale + SaleItems de forma atómica y verifica contenido en reintentos con el mismo UUID. Los clientes autenticados conservan SELECT bajo RLS pero no INSERT directo en Sales/SaleItems ni UPDATE de ventas completadas. FK compuestas de la migración POS base mantienen `business_id` coherente entre Sale, SaleItem, Product y Branch.
+
+ProductCategory y Product usan comparación optimista con `cloud_updated_at`. El dato local y el snapshot Cloud se conservan al detectar un conflicto; la resolución explícita elige uno y vuelve a consultar Cloud. La unicidad de barcode por negocio sigue en SQLite y Cloud. Sale y SaleItems son históricamente inmutables y preservan UUID y snapshots de nombre, barcode, precio y cantidad.
 
 ## Futuro
 
