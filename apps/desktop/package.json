@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
+    "dev": "vite --host 127.0.0.1 --configLoader runner",
     "tauri": "tauri",
     "typecheck": "tsc -p tsconfig.json",
-    "build": "vite build"
+    "build": "vite build --configLoader runner"
   },
   "dependencies": {
     "@centrocolor/application": "workspace:*",

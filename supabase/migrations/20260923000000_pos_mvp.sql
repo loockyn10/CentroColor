@@ -1,8 +1,32 @@
 -- POS schema only. Desktop Product/Sale synchronization is a later sprint.
--- A sale's optional device must belong to its business. The original devices
--- table has id as PK, but PostgreSQL requires an explicit key for this pair.
-alter table public.devices
-  add constraint devices_business_id_id_unique unique (business_id, id);
+-- A sale's optional device must belong to its business. The identity migration
+-- has only devices(id) as PK; an earlier manual remote correction may already
+-- have supplied a UNIQUE constraint or standalone index on (business_id, id).
+-- PostgreSQL accepts either as the referenced key. Inspect the actual columns
+-- and index properties instead of relying on an object name that may be taken.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_catalog.pg_index i
+    join pg_catalog.pg_attribute business_column
+      on business_column.attrelid = i.indrelid and business_column.attname = 'business_id'
+    join pg_catalog.pg_attribute id_column
+      on id_column.attrelid = i.indrelid and id_column.attname = 'id'
+    where i.indrelid = 'public.devices'::pg_catalog.regclass
+      and i.indisunique and i.indisvalid and i.indimmediate
+      and i.indpred is null and i.indexprs is null
+      and i.indnkeyatts = 2
+      and (
+        (i.indkey[0] = business_column.attnum and i.indkey[1] = id_column.attnum)
+        or (i.indkey[0] = id_column.attnum and i.indkey[1] = business_column.attnum)
+      )
+  ) then
+    alter table public.devices
+      add constraint devices_business_id_id_pos_unique unique (business_id, id);
+  end if;
+end;
+$$;
 
 create table public.product_categories (
   id uuid primary key,
@@ -14,8 +38,6 @@ create table public.product_categories (
   unique (business_id, id),
   unique (business_id, name)
 );
-create index product_categories_business_name_idx on public.product_categories(business_id, name);
-
 create table public.products (
   id uuid primary key,
   business_id uuid not null references public.businesses(id) on delete restrict,

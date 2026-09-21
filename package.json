@@ -4,7 +4,7 @@
   "packageManager": "pnpm@9.6.0",
   "scripts": {
     "dev:web": "pnpm --filter @centrocolor/web dev",
-    "dev:desktop": "pnpm --filter @centrocolor/desktop tauri dev",
+    "dev:desktop": "pnpm --filter @centrocolor/desktop tauri dev --config src-tauri/tauri.dev.conf.json",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "test": "vitest run",

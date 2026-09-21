@@ -4,8 +4,6 @@
   "version": "0.1.0",
   "identifier": "com.centrocolor.desktop",
   "build": {
-    "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://127.0.0.1:5174",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
@@ -24,5 +22,9 @@
     }
   },
   "plugins": { "sql": { "preload": ["sqlite:centrocolor.db"] } },
-  "bundle": { "active": true, "icon": ["icons/icon.png", "icons/icon.ico"] }
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.png", "icons/icon.ico"]
+  }
 }

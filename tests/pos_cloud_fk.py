@@ -45,5 +45,12 @@ for source, target, referenced in references:
         f'FK ({source}) references {target}({referenced}) without a matching unique key'
     )
 
-assert pos.index('add constraint devices_business_id_id_unique') < pos.index('create table public.sales')
+guard = pos[:pos.index('create table public.product_categories')]
+assert 'if not exists' in guard and 'pg_catalog.pg_index' in guard
+for required in ('i.indisunique', 'i.indisvalid', 'i.indimmediate',
+                 'i.indpred is null', 'i.indexprs is null', 'i.indnkeyatts = 2',
+                 'i.indkey[0]', 'i.indkey[1]'):
+    assert required in guard, f'device key guard omits {required}'
+assert pos.index('add constraint devices_business_id_id_pos_unique') < pos.index('create table public.sales')
+assert 'product_categories_business_name_idx' not in pos, 'category UNIQUE already supplies this index'
 print(f'POS Cloud FK keys: {len(references)} composite references have matching unique keys')
