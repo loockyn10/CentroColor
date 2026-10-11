@@ -57,7 +57,7 @@ La migración Cloud `20260924000000_pos_sync.sql` agrega un reloj monotónico pr
 
 ProductCategory y Product usan comparación optimista con `cloud_updated_at`. El dato local y el snapshot Cloud se conservan al detectar un conflicto; la resolución explícita elige uno y vuelve a consultar Cloud. La unicidad de barcode por negocio sigue en SQLite y Cloud. Sale y SaleItems son históricamente inmutables y preservan UUID y snapshots de nombre, barcode, precio y cantidad.
 
-## Futuro
+## Inventario — Sprint 7
 
 `products.tracks_inventory` boolean/SQLite INTEGER se añade con default falso. `sale_items.tracks_inventory` captura si la línea nueva descuenta stock; las líneas existentes quedan en falso. No hay `products.stock`.
 
@@ -65,4 +65,14 @@ ProductCategory y Product usan comparación optimista con `cloud_updated_at`. El
 
 `stock_movements`: UUID `id`, Business, Branch, Product, `movement_type` (`initial`, `entry`, `adjustment`, `sale`), `quantity_delta` entero no cero, `sale_id`/`sale_item_id` opcionales solo para `sale`, nota, usuario, dispositivo opcional, `occurred_at`; Cloud asigna `received_at` y `created_at`. `sale_item_id` es único; en movimientos de venta el propio `id` coincide con SaleItem.id. Índice parcial limita un inicial por Product/Branch. El trigger de INSERT aplica el delta al balance atómicamente. No se permite editar ni eliminar un movimiento desde el cliente. Desktop tiene `stock_sync_outbox` y `stock_sync_cursor` separados.
 
-Entidades previstas, aún no modeladas: Service, Resource, Booking, Event, Order, Payment, Supplier, Purchase, FrameMoulding y FrameQuote.
+## Agenda y Turnos — Sprint 8
+
+`appointment_types`: UUID `id`, `business_id`, `name`, `default_duration_minutes` positivo hasta 1440, `is_active`, `created_at`, `updated_at`. No contiene precios ni servicios. No hay DELETE físico. Cloud y SQLite indexan por negocio/estado/nombre.
+
+`appointments`: UUID `id`, `business_id`, `branch_id`, `customer_id`, `appointment_type_id` nullable, `title`, `starts_at`, `ends_at`, `status`, `notes`, `created_by`, `created_at`, `updated_at`. `ends_at` debe ser posterior a `starts_at`; `status` admite `scheduled`, `completed`, `cancelled` y `no_show`. El título es obligatorio e independiente de la plantilla. Reprogramar modifica los instantes y conserva el UUID. Cancelar cambia estado y mantiene historial.
+
+Cloud usa FK compuestas `(business_id,branch_id)`, `(business_id,customer_id)` y `(business_id,appointment_type_id)` para aislamiento multiempresa, además de índices por Business/Branch/start, estado y Customer. SQLite verifica Customer y AppointmentType del mismo negocio mediante triggers porque las entidades estructurales locales históricas pueden ser provisionales. La consulta de UI siempre incluye Branch actual. Ambos motores guardan instantes absolutos; la UI presenta horario local.
+
+SQLite agrega `sync_origin`, `local_revision` y `cloud_updated_at` solo como metadata local. `appointment_sync_outbox` compacta una operación mutable por negocio/tipo/UUID y conserva estado `pending` o `conflict`, error, versión y snapshot remoto. `appointment_sync_cursor` mantiene `(updated_at,entity_id)` por `appointment_type` y `appointment`. Cloud usa un reloj monotónico privado por negocio para que el pull incremental no omita commits concurrentes.
+
+Entidades previstas, aún no modeladas: Service, Resource, Event, EventService, ResourceReservation, Order, Payment, Supplier, Purchase, FrameMoulding y FrameQuote.

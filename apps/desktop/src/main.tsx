@@ -3,13 +3,17 @@ import { createRoot } from 'react-dom/client';
 import {
   syncPosMutable,
   syncPosSales,
+  syncAppointments,
   syncStockMovements,
   type BusinessContext,
 } from '@centrocolor/application';
 import { AppShell, navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
+  AppointmentTypesPage,
+  AppointmentsPage,
   BusinessContextProvider,
+  CalendarPage,
   CustomersPage,
   HomePage,
   LoginPage,
@@ -51,6 +55,13 @@ import { CloudPosSyncAdapter } from './cloud-pos-sync-adapter';
 import { SQLiteInventoryRepository } from './sqlite-inventory-repository';
 import { SQLiteStockSyncAdapter } from './sqlite-stock-sync-adapter';
 import { CloudStockSyncAdapter } from './cloud-stock-sync-adapter';
+import { SQLiteAppointmentRepository } from './sqlite-appointment-repository';
+import {
+  SQLiteAppointmentSyncAdapter,
+  type AppointmentConflict,
+  type AppointmentSyncSummary,
+} from './sqlite-appointment-sync-adapter';
+import { CloudAppointmentSyncAdapter } from './cloud-appointment-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
@@ -59,6 +70,8 @@ const saleRepository = new SQLiteSaleRepository();
 const posSyncLocal = new SQLitePosSyncAdapter();
 const inventoryRepository = new SQLiteInventoryRepository();
 const stockSyncLocal = new SQLiteStockSyncAdapter();
+const appointmentRepository = new SQLiteAppointmentRepository();
+const appointmentSyncLocal = new SQLiteAppointmentSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -84,6 +97,11 @@ function App() {
     lastError: string | null;
   } | null>(null);
   const [posConflicts, setPosConflicts] = useState<PosConflict[]>([]);
+  const [appointmentSyncSummary, setAppointmentSyncSummary] =
+    useState<AppointmentSyncSummary | null>(null);
+  const [appointmentConflicts, setAppointmentConflicts] = useState<
+    AppointmentConflict[]
+  >([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const [resolutionBusy, setResolutionBusy] = useState(false);
@@ -100,18 +118,24 @@ function App() {
         posSummary,
         currentPosConflicts,
         stockSummary,
+        agendaSummary,
+        agendaConflicts,
       ] = await Promise.all([
         customerSyncLocal.summary(businessId),
         customerSyncLocal.conflicts(businessId),
         posSyncLocal.summary(businessId),
         posSyncLocal.conflicts(businessId),
         stockSyncLocal.summary(businessId),
+        appointmentSyncLocal.summary(businessId),
+        appointmentSyncLocal.conflicts(businessId),
       ]);
       setSyncSummary(summary);
       setConflicts(currentConflicts);
       setPosSyncSummary(posSummary);
       setStockSyncSummary(stockSummary);
       setPosConflicts(currentPosConflicts);
+      setAppointmentSyncSummary(agendaSummary);
+      setAppointmentConflicts(agendaConflicts);
     } catch {
       setSyncPhase('error');
     }
@@ -145,6 +169,21 @@ function App() {
         target.businessId,
         stockSyncLocal,
         new CloudStockSyncAdapter(getSupabaseClient()),
+      );
+      const cloudAppointments = new CloudAppointmentSyncAdapter(
+        getSupabaseClient(),
+      );
+      await syncAppointments(
+        'appointment_type',
+        target.businessId,
+        appointmentSyncLocal,
+        cloudAppointments,
+      );
+      await syncAppointments(
+        'appointment',
+        target.businessId,
+        appointmentSyncLocal,
+        cloudAppointments,
       );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
@@ -202,6 +241,61 @@ function App() {
       if (choice === 'cloud')
         await posSyncLocal.keepCloud(item.type, remote, item.localRevision);
       else await posSyncLocal.keepLocal(item.type, remote, item.localRevision);
+      await refreshSyncSummary(context.businessId);
+      resolved = true;
+    } catch (failure) {
+      setResolutionError(
+        failure instanceof Error
+          ? failure.message
+          : 'No se pudo resolver el conflicto.',
+      );
+    } finally {
+      resolving.current = false;
+      setResolutionBusy(false);
+    }
+    if (resolved) void runSync(context);
+  }
+
+  async function resolveAppointmentConflict(
+    item: AppointmentConflict,
+    choice: 'local' | 'cloud',
+  ) {
+    if (!context || !cloudSessionReady || syncing.current || resolving.current)
+      return;
+    resolving.current = true;
+    setResolutionBusy(true);
+    setResolutionError(null);
+    let resolved = false;
+    try {
+      const client = getSupabaseClient();
+      await validateCloudBusinessContext(context, client);
+      const adapter = new CloudAppointmentSyncAdapter(client);
+      const remote = await adapter.get(item.type, context.businessId, item.id);
+      if (!remote) throw new Error('El registro Cloud ya no está disponible.');
+      if (item.cloudUpdatedAt !== remote.updatedAt) {
+        const change = await appointmentSyncLocal.pendingFor(
+          item.type,
+          context.businessId,
+          item.id,
+        );
+        if (change) await appointmentSyncLocal.conflict(change, remote);
+        await refreshSyncSummary(context.businessId);
+        throw new Error(
+          'Web volvió a cambiar este turno. Revisá las versiones.',
+        );
+      }
+      if (choice === 'cloud')
+        await appointmentSyncLocal.keepCloud(
+          item.type,
+          remote,
+          item.localRevision,
+        );
+      else
+        await appointmentSyncLocal.keepLocal(
+          item.type,
+          remote,
+          item.localRevision,
+        );
       await refreshSyncSummary(context.businessId);
       resolved = true;
     } catch (failure) {
@@ -373,6 +467,8 @@ function App() {
     setPosSyncSummary(null);
     setStockSyncSummary(null);
     setPosConflicts([]);
+    setAppointmentSyncSummary(null);
+    setAppointmentConflicts([]);
     setError(null);
     setGate('login');
   }
@@ -413,7 +509,10 @@ function App() {
   const title =
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';
   const syncLabel =
-    (syncSummary?.conflicts ?? 0) + (posSyncSummary?.conflicts ?? 0) > 0
+    (syncSummary?.conflicts ?? 0) +
+      (posSyncSummary?.conflicts ?? 0) +
+      (appointmentSyncSummary?.conflicts ?? 0) >
+    0
       ? 'Conflicto'
       : syncPhase === 'syncing'
         ? 'Sincronizando'
@@ -423,7 +522,8 @@ function App() {
             ? 'Sin conexión'
             : (syncSummary?.pending ?? 0) +
                   (posSyncSummary?.pending ?? 0) +
-                  (stockSyncSummary?.pending ?? 0) >
+                  (stockSyncSummary?.pending ?? 0) +
+                  (appointmentSyncSummary?.pending ?? 0) >
                 0
               ? 'Cambios pendientes'
               : 'Sincronizado';
@@ -440,21 +540,25 @@ function App() {
               <strong>Sincronización: {syncLabel}</strong>
               {(syncSummary?.pending ?? 0) +
                 (posSyncSummary?.pending ?? 0) +
-                (stockSyncSummary?.pending ?? 0) >
+                (stockSyncSummary?.pending ?? 0) +
+                (appointmentSyncSummary?.pending ?? 0) >
                 0 && (
                 <span>
                   {(syncSummary?.pending ?? 0) +
                     (posSyncSummary?.pending ?? 0) +
-                    (stockSyncSummary?.pending ?? 0)}{' '}
+                    (stockSyncSummary?.pending ?? 0) +
+                    (appointmentSyncSummary?.pending ?? 0)}{' '}
                   pendiente(s)
                 </span>
               )}
               {(syncSummary?.conflicts ?? 0) +
-                (posSyncSummary?.conflicts ?? 0) >
+                (posSyncSummary?.conflicts ?? 0) +
+                (appointmentSyncSummary?.conflicts ?? 0) >
                 0 && (
                 <span>
                   {(syncSummary?.conflicts ?? 0) +
-                    (posSyncSummary?.conflicts ?? 0)}{' '}
+                    (posSyncSummary?.conflicts ?? 0) +
+                    (appointmentSyncSummary?.conflicts ?? 0)}{' '}
                   conflicto(s)
                 </span>
               )}
@@ -475,7 +579,10 @@ function App() {
               >
                 Sincronizar ahora
               </button>
-              {conflicts.length + posConflicts.length > 0 && (
+              {conflicts.length +
+                posConflicts.length +
+                appointmentConflicts.length >
+                0 && (
                 <button
                   type="button"
                   onClick={() => setShowConflicts((value) => !value)}
@@ -484,7 +591,8 @@ function App() {
                 </button>
               )}
               {(syncSummary?.conflicts ?? 0) +
-                (posSyncSummary?.conflicts ?? 0) >
+                (posSyncSummary?.conflicts ?? 0) +
+                (appointmentSyncSummary?.conflicts ?? 0) >
               0 ? (
                 <small>Los cambios locales siguen guardados.</small>
               ) : !cloudSessionReady ? (
@@ -492,99 +600,176 @@ function App() {
               ) : syncPhase === 'error' ? (
                 <small>
                   {stockSyncSummary?.lastError ??
+                    appointmentSyncSummary?.lastError ??
                     posSyncSummary?.lastError ??
                     syncSummary?.lastError ??
                     'Reintentá cuando vuelva la conexión.'}
                 </small>
               ) : null}
             </div>
-            {showConflicts && conflicts.length + posConflicts.length > 0 && (
-              <div className="sync-conflict-panel">
-                <p>
-                  Estos registros cambiaron en este equipo y en Web. Elegí cuál
-                  versión conservar. La versión descartada no se recuperará
-                  desde esta pantalla.
-                </p>
-                {resolutionError && <p role="alert">{resolutionError}</p>}
-                {conflicts.map((item) => (
-                  <div className="sync-conflict-row" key={item.id}>
-                    <strong>{item.fullName}</strong>
-                    <button
-                      type="button"
-                      disabled={
-                        !cloudSessionReady ||
-                        resolutionBusy ||
-                        syncPhase === 'syncing'
-                      }
-                      onClick={() => void resolveConflict(item, 'local')}
+            {showConflicts &&
+              conflicts.length +
+                posConflicts.length +
+                appointmentConflicts.length >
+                0 && (
+                <div className="sync-conflict-panel">
+                  <p>
+                    Estos registros cambiaron en este equipo y en Web. Elegí
+                    cuál versión conservar. La versión descartada no se
+                    recuperará desde esta pantalla.
+                  </p>
+                  {resolutionError && <p role="alert">{resolutionError}</p>}
+                  {conflicts.map((item) => (
+                    <div className="sync-conflict-row" key={item.id}>
+                      <strong>{item.fullName}</strong>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() => void resolveConflict(item, 'local')}
+                      >
+                        Conservar este equipo
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() => void resolveConflict(item, 'cloud')}
+                      >
+                        Conservar Web
+                      </button>
+                    </div>
+                  ))}
+                  {posConflicts.map((item) => (
+                    <div
+                      className="sync-conflict-row"
+                      key={`${item.type}-${item.id}`}
                     >
-                      Conservar este equipo
-                    </button>
-                    <button
-                      type="button"
-                      disabled={
-                        !cloudSessionReady ||
-                        resolutionBusy ||
-                        syncPhase === 'syncing'
-                      }
-                      onClick={() => void resolveConflict(item, 'cloud')}
+                      <strong>
+                        {item.type === 'category' ? 'Categoría' : 'Producto'}:{' '}
+                        {item.name}
+                      </strong>
+                      <small>Este equipo: {item.localSummary}</small>
+                      <small>Web: {item.cloudSummary}</small>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() => void resolvePosConflict(item, 'local')}
+                      >
+                        Conservar este equipo
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() => void resolvePosConflict(item, 'cloud')}
+                      >
+                        Conservar Web
+                      </button>
+                    </div>
+                  ))}
+                  {appointmentConflicts.map((item) => (
+                    <div
+                      className="sync-conflict-row"
+                      key={`${item.type}-${item.id}`}
                     >
-                      Conservar Web
-                    </button>
-                  </div>
-                ))}
-                {posConflicts.map((item) => (
-                  <div
-                    className="sync-conflict-row"
-                    key={`${item.type}-${item.id}`}
-                  >
-                    <strong>
-                      {item.type === 'category' ? 'Categoría' : 'Producto'}:{' '}
-                      {item.name}
-                    </strong>
-                    <small>Este equipo: {item.localSummary}</small>
-                    <small>Web: {item.cloudSummary}</small>
-                    <button
-                      type="button"
-                      disabled={
-                        !cloudSessionReady ||
-                        resolutionBusy ||
-                        syncPhase === 'syncing'
-                      }
-                      onClick={() => void resolvePosConflict(item, 'local')}
-                    >
-                      Conservar este equipo
-                    </button>
-                    <button
-                      type="button"
-                      disabled={
-                        !cloudSessionReady ||
-                        resolutionBusy ||
-                        syncPhase === 'syncing'
-                      }
-                      onClick={() => void resolvePosConflict(item, 'cloud')}
-                    >
-                      Conservar Web
-                    </button>
-                  </div>
-                ))}
-                {(syncSummary?.conflicts ?? 0) +
-                  (posSyncSummary?.conflicts ?? 0) >
-                  conflicts.length + posConflicts.length && (
-                  <p>Se muestran los primeros 20 conflictos.</p>
-                )}
-              </div>
-            )}
+                      <strong>
+                        {item.type === 'appointment_type' ? 'Tipo' : 'Turno'}:{' '}
+                        {item.label}
+                      </strong>
+                      <small>Este equipo: {item.localSummary}</small>
+                      <small>Web: {item.cloudSummary}</small>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() =>
+                          void resolveAppointmentConflict(item, 'local')
+                        }
+                      >
+                        Conservar este equipo
+                      </button>
+                      <button
+                        type="button"
+                        disabled={
+                          !cloudSessionReady ||
+                          resolutionBusy ||
+                          syncPhase === 'syncing'
+                        }
+                        onClick={() =>
+                          void resolveAppointmentConflict(item, 'cloud')
+                        }
+                      >
+                        Conservar Web
+                      </button>
+                    </div>
+                  ))}
+                  {(syncSummary?.conflicts ?? 0) +
+                    (posSyncSummary?.conflicts ?? 0) +
+                    (appointmentSyncSummary?.conflicts ?? 0) >
+                    conflicts.length +
+                      posConflicts.length +
+                      appointmentConflicts.length && (
+                    <p>Se muestran los primeros 20 conflictos.</p>
+                  )}
+                </div>
+              )}
           </div>
         }
       >
         {activeId === 'home' ? (
           <HomePage
+            appointmentRepository={appointmentRepository}
             onRevalidate={
               context.authorization === 'offline-authenticated'
                 ? () => setGate('login')
                 : undefined
             }
+          />
+        ) : activeId === 'calendar' ? (
+          <CalendarPage
+            repository={appointmentRepository}
+            customerRepository={customerRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'appointments' ? (
+          <AppointmentsPage
+            repository={appointmentRepository}
+            customerRepository={customerRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'appointment-types' ? (
+          <AppointmentTypesPage
+            repository={appointmentRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
           />
         ) : activeId === 'customers' ? (
           <CustomersPage

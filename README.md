@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad, acceso, Clientes, POS e inventario Desktop/Web. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda Clientes, POS y stock en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud POS figuran aplicadas en el historial remoto consultado el 21/9/2026; falta validación operativa real. La migración Cloud de inventario sigue pendiente.
+Fundación técnica, identidad, acceso, Clientes, POS, inventario y Agenda/Turnos Desktop/Web. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda Clientes, POS, stock y turnos en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud POS figuran aplicadas en el historial remoto consultado el 21/9/2026; falta validación operativa real. Las migraciones Cloud de inventario y agenda siguen pendientes.
 
 ## Requisitos
 
@@ -21,6 +21,8 @@ pnpm format:check
 python tests/pos_sqlite.py
 python tests/pos_sync_sqlite.py
 python tests/inventory_sqlite.py
+python tests/appointments_sqlite.py
+python tests/appointments_cloud_sql.py
 pnpm exec supabase db push --dry-run
 ```
 

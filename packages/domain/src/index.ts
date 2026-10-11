@@ -31,3 +31,18 @@ export type {
   StockMovement,
   StockMovementType,
 } from './inventory';
+export {
+  appointmentStatuses,
+  normalizeAppointmentDetails,
+  normalizeAppointmentTypeDetails,
+  overlapsAppointment,
+  parseAppointmentStatus,
+  withAppointmentDuration,
+} from './appointment';
+export type {
+  Appointment,
+  AppointmentDetails,
+  AppointmentStatus,
+  AppointmentType,
+  AppointmentTypeDetails,
+} from './appointment';

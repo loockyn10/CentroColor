@@ -352,6 +352,12 @@ pub fn run() {
             sql: include_str!("../migrations/0008_inventory.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "create_appointments",
+            sql: include_str!("../migrations/0009_appointments.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

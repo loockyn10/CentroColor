@@ -1,27 +1,36 @@
 # Estado actual
 
-Sprint 7 implementado en código el 21 de septiembre de 2026. Desktop y Web/PWA comparten pantalla Stock, control de inventario en Product, stock en POS, aviso por insuficiencia y descuento por venta. Desktop escribe SQLite offline; Web usa Supabase online. **La migración Cloud de inventario `20260925000000_inventory.sql` está pendiente de aplicar**; la funcionalidad Web y el sync de stock no están operativos en el remoto hasta entonces. No se hizo push real.
+Sprint 8 Agenda + Turnos implementado en código el 11 de octubre de 2026. Desktop y Web/PWA comparten Calendario Día/Semana, Turnos, Tipos de turno, formulario, alta rápida de Customer, estados, superposiciones y tarjeta real de Inicio. Desktop persiste y opera offline en SQLite; Web usa Supabase. **Las migraciones Cloud `20260925000000_inventory.sql` y `20261011000000_appointments.sql` están pendientes de aplicar**; no se hizo push real. Agenda Web y el sync de turnos no estarán operativos en el remoto hasta aplicar la migración nueva.
 
 ## Hechos verificados
 
-- La CLI `supabase migration list` del proyecto vinculado muestra `20260919000000` a `20260924000000` tanto en local como remoto. Esto corrige la documentación previa que decía que POS aún no estaba aplicado. No explica por sí solo el origen de la relación remota `devices_business_id_id_unique` detectada antes ni prueba un flujo POS real.
-- `supabase db push --dry-run` enumera solo `20260925000000_inventory.sql`, sin seed ni roles. Es planificación: no ejecuta el SQL nuevo.
-- SQLite 0008 agrega `tracks_inventory=false` a Product y SaleItem, balances por Business/Branch/Product, movimientos con UUID, outbox y cursor de recepción. Triggers generan movimientos de venta a partir de las líneas nuevas y actualizan balance en la misma transacción. Las ventas anteriores no generan movimientos.
-- Cloud `20260925000000_inventory.sql` contiene FK compuestas, RLS de lectura, RPC para cambios manuales y extensión de `complete_pos_sale`. Está preparado para aplicar; no fue ejecutado ni validado en PostgreSQL local o remoto.
-- `SaleItem.id` es el UUID de su movimiento `sale`. Sale Sync crea el movimiento Cloud por trigger y el posterior push de StockMovement reconoce el mismo UUID. Pull repetido no vuelve a aplicar delta en SQLite. Product `tracks_inventory` viaja con el sync mutable y conserva su resolución de conflictos existente.
-- Owner/admin puede activar tracking, cargar inicial, entradas y ajustes; staff ve stock y vende. El control se valida en la UI, en el comando local y en la RPC Cloud. El balance admite negativos; el POS muestra aviso sin bloquear.
-- La pantalla Stock muestra catálogo, categoría, estado de control, balance de la sucursal, movimientos y acciones manuales. La UI usa BusinessContext/BranchContext; no expone un selector de otros negocios o sucursales.
-- `pnpm` provisto por este entorno es versión 11.19.0 y trató de reinstalar dependencias al ejecutar scripts del workspace (declarado con pnpm 9.6.0). Se ejecutaron las herramientas locales equivalentes directamente para evitar modificar `node_modules`.
+- `AppointmentType` contiene nombre, duración predeterminada y estado activo. Owner/admin puede crear, editar, activar y desactivar. No contiene precio ni servicio.
+- `Appointment` conserva UUID al editar o reprogramar; vincula Business, Branch, Customer y tipo opcional. El título es obligatorio e independiente del tipo. Cancelar, completar y ausente son updates, no DELETE.
+- Calendario permite Día/Semana, anterior/hoy/siguiente, filtro simple y creación desde el día. Turnos agrega búsqueda por cliente/título y período/estado. La CSS adapta semana, formularios y listados a móvil.
+- El formulario reutiliza `CustomerRepository`, permite alta rápida y selecciona el Customer creado. Elegir tipo copia su nombre cuando corresponde y calcula el fin por duración; el fin sigue editable.
+- Overlap consulta solo `scheduled` de la Branch actual con intervalo semiabierto. Advierte y exige una segunda confirmación, pero no bloquea. Cancelados no participan.
+- Inicio consulta el día actual de la Branch, muestra cantidad de programados y próximos tres.
+- SQLite 0009 crea `appointment_types`, `appointments`, outbox y cursores. Triggers validan Customer/AppointmentType del mismo Business, compactan updates y no encolan pulls con `sync_origin='remote'`.
+- Cloud `20261011000000_appointments.sql` prepara FK compuestas, índices, reloj monotónico, RLS y permisos. Owner/admin gestiona tipos y transiciones hacia/desde cancelado; staff ve, crea, edita, completa y marca ausente. No concede DELETE ni usa `service_role`.
+- Desktop sincroniza `appointment_type` y `appointment` después de Customer. Usa UUID estable, comparación por `cloud_updated_at`, cursor `(updated_at,id)` y resolución “este equipo/Web” con ambas versiones visibles.
+- Entrada `datetime-local` se transforma a ISO UTC; Cloud usa `timestamptz` y SQLite texto. No hay offsets hardcodeados. Una zona IANA por Business no existe aún.
+- Events, reservas de recursos, cabina/pantalla, marquetería, notificaciones y pagos de turnos no fueron implementados.
 
 ## Verificación de esta sesión
 
-- `tsc --noEmit` para domain, application, features, desktop y web: pasa.
-- `eslint .`: pasa.
-- `vitest run --configLoader runner`: 52 pruebas en 20 archivos, pasa. Preserva las pruebas Customer/Product/Sale y añade pruebas de inventario/sync.
-- `tests/inventory_sqlite.py`, `tests/pos_sqlite.py`, `tests/pos_sync_sqlite.py`, `tests/pos_cloud_fk.py`: pasan. Inventory SQLite cubre saldo inicial, entrada, ajustes positivos/negativos, varios productos en venta, producto sin tracking, UUID repetido, pull sin outbox, negativos, aislamiento Business/Branch y restricción local de tracking para staff.
-- `cargo check --offline`: pasa. Los builds de frontends Web y Desktop con Vite pasan. El build release Desktop posterior a los cambios de Rust/UI generó el instalador NSIS `CentroColor_0.1.0_x64-setup.exe`.
-- Falta prueba SQL real de la migración nueva por ausencia de daemon Docker local. Falta prueba end-to-end con usuario, membership, dispositivos reales y red intermitente. El dry-run no sustituye estas pruebas.
+- `pnpm typecheck`: pasa en domain, application, features, web y desktop.
+- `pnpm lint`: pasa.
+- `pnpm test`: 59 pruebas en 22 archivos, pasa. Incluye dominio de turnos, duración, end > start, overlap/cancelados, push/pull sin loop, conflicto concurrente y sync de estado.
+- `tests/appointments_sqlite.py`: pasa; cubre tipo activar/desactivar, create, reprogram mismo UUID, cancel/complete/no_show, overlap, UTC, pull sin outbox, referencias multiempresa y Branch.
+- `tests/appointments_cloud_sql.py`: pasa; verifica estáticamente FK multiempresa, RLS, roles, reloj de sync y ausencia de DELETE/service_role.
+- `tests/customer_sync_sqlite.py`, `tests/pos_sqlite.py`, `tests/pos_sync_sqlite.py`, `tests/pos_cloud_fk.py`, `tests/inventory_sqlite.py`: pasan. La prueba Customer requirió ejecución fuera del sandbox para usar su directorio temporal.
+- `pnpm build`: pasa para Web PWA y Desktop Vite. Advierte chunks JS mayores a 500 kB.
+- `pnpm format:check`: pasa.
+- `pnpm build:desktop`: pasa después de permitir la descarga de NSIS; genera `CentroColor_0.1.0_x64-setup.exe`.
+- `supabase migration list` y `pnpm exec supabase db push --dry-run`: ambos fallan antes de consultar/planificar migraciones. El endpoint de rol de login responde `403` por privilegios insuficientes de la cuenta vinculada. No se ejecutó SQL ni push.
 
-## Límites
+## Límites y pendientes
 
-La app Desktop sigue dependiendo de una copia local de autorización para operar offline; la revocación remota no se conoce hasta revalidar. Un stock inicial concurrente desde dos dispositivos genera un pendiente con error para revisión, ya que fusionar dos conteos físicos sumándolos sería incorrecto. El historial muestra el UUID abreviado del usuario porque Profile de otros usuarios no forma parte de la sincronización local. No se implementaron proveedores, compras, transferencias, devoluciones, reservas ni módulos fuera del Sprint 7.
+No hubo PostgreSQL local porque este entorno no dispone de una instancia Supabase/Docker validada. La migración Cloud de Agenda requiere revisión y aplicación administrativa junto con la de inventario; luego hacen falta pruebas RLS reales con owner/admin/staff, referencias entre negocios/sucursales, flujo móvil, Desktop offline→reconexión y conflicto simultáneo. La búsqueda Web filtra como máximo 500 turnos del período ya acotado; si crece el volumen conviene mover la búsqueda combinada Customer/título a una RPC o vista indexada. El bundle creció por encima del umbral de 500 kB y queda pendiente code-splitting.
+
+La autorización offline Desktop continúa dependiendo de la última copia local validada; una revocación remota no se conoce hasta reconectar. Appointment muestra horario en la zona del dispositivo: una futura operación multi-zona necesita `business_timezone` IANA antes de asumir que todos los usuarios comparten zona.

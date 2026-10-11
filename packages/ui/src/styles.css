@@ -1007,3 +1007,320 @@ button {
     grid-column: 1/-1;
   }
 }
+
+.agenda-toolbar,
+.date-navigation,
+.segmented,
+.appointment-editor-actions,
+.appointment-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+.agenda-toolbar {
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.agenda-toolbar button,
+.agenda-toolbar select,
+.appointment-editor button,
+.appointment-editor input,
+.appointment-editor select,
+.appointment-editor textarea,
+.appointment-list-filters input,
+.appointment-list-filters select,
+.appointment-type-form input,
+.appointment-type-form button,
+.appointment-type-list button {
+  min-height: 2.65rem;
+  border: 1px solid #cfd6cf;
+  border-radius: 0.55rem;
+  background: #fff;
+  padding: 0.55rem 0.75rem;
+}
+.segmented {
+  gap: 0;
+}
+.segmented button {
+  border-radius: 0;
+}
+.segmented button:first-child {
+  border-radius: 0.55rem 0 0 0.55rem;
+}
+.segmented button:last-child {
+  border-radius: 0 0.55rem 0.55rem 0;
+}
+.segmented .active {
+  background: #22332f;
+  color: #fff;
+}
+.agenda-period-title {
+  font-size: 1.1rem;
+  margin: 1.2rem 0 0.75rem;
+}
+.calendar-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+.calendar-grid.week {
+  grid-template-columns: repeat(7, minmax(145px, 1fr));
+  overflow-x: auto;
+  padding-bottom: 0.7rem;
+}
+.calendar-day {
+  min-width: 0;
+  min-height: 17rem;
+  border: 1px solid #dfe3dd;
+  border-radius: 0.8rem;
+  background: #fff;
+  padding: 0.65rem;
+}
+.calendar-day > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.2rem 0.2rem 0.65rem;
+  border-bottom: 1px solid #eceee9;
+  text-transform: capitalize;
+}
+.calendar-day > header button {
+  border: 0;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  background: #edf3ee;
+  cursor: pointer;
+}
+.appointment-card,
+.empty-day {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  text-align: left;
+  border: 0;
+  border-left: 4px solid #4f7e6c;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+  margin-top: 0.55rem;
+  background: #eef5f0;
+  color: #26332f;
+  cursor: pointer;
+}
+.calendar-grid.day .appointment-card {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1.5fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+}
+.appointment-card.status-completed {
+  border-color: #668271;
+  background: #f1f4f1;
+}
+.appointment-card.status-cancelled {
+  border-color: #9b8882;
+  background: #f4f1f0;
+  opacity: 0.78;
+}
+.appointment-card.status-no_show {
+  border-color: #bd7c45;
+  background: #fbf2e9;
+}
+.appointment-time {
+  font-weight: 750;
+  color: #2f6252;
+}
+.empty-day {
+  min-height: 5rem;
+  justify-content: center;
+  align-items: center;
+  border: 1px dashed #bdc8bf;
+  color: #68746d;
+  background: #fafbf8;
+  text-align: center;
+}
+.appointment-editor-backdrop {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: #15282088;
+}
+.appointment-editor {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+.appointment-editor-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+.appointment-editor-heading h2 {
+  margin: 0.2rem 0 1rem;
+}
+.appointment-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+.appointment-form label,
+.appointment-list-filters label,
+.appointment-type-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+.appointment-form-wide {
+  grid-column: 1 / -1;
+}
+.quick-customer > div {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.quick-customer input {
+  flex: 1;
+}
+.appointment-overlap,
+.appointment-error {
+  border-radius: 0.65rem;
+  padding: 0.75rem 0.9rem;
+}
+.appointment-overlap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  background: #fff0ca;
+  color: #6b3900;
+}
+.appointment-error {
+  background: #fde8e5;
+  color: #842c27;
+}
+.appointment-status {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  background: #edf3ee;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+.appointment-state-actions {
+  border-top: 1px solid #e1e5df;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+.danger-action {
+  color: #9a2d28;
+  border-color: #d9aaa7 !important;
+}
+.appointment-list-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) repeat(3, minmax(9rem, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+.appointment-list-card {
+  padding: 0;
+  overflow: hidden;
+}
+.appointment-list-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 7rem 5rem minmax(9rem, 1fr) minmax(12rem, 1.5fr) auto;
+  gap: 0.8rem;
+  align-items: center;
+  border: 0;
+  border-bottom: 1px solid #e5e8e2;
+  background: #fff;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  cursor: pointer;
+}
+.appointment-type-form form {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto auto;
+  align-items: end;
+  gap: 0.8rem;
+}
+.appointment-type-list > div {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) 1fr 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid #e5e8e2;
+}
+.metric-value {
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: #2f6252;
+  margin: 0.4rem 0;
+}
+.today-appointments p {
+  margin: 0.35rem 0;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 760px) {
+  .agenda-toolbar,
+  .date-navigation {
+    align-items: stretch;
+  }
+  .agenda-toolbar > * {
+    flex: 1 1 auto;
+  }
+  .date-navigation button,
+  .segmented button {
+    flex: 1;
+  }
+  .calendar-grid.week {
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+  }
+  .calendar-day {
+    min-height: 7rem;
+  }
+  .calendar-grid.day .appointment-card,
+  .appointment-list-row {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+  .appointment-form,
+  .appointment-list-filters,
+  .appointment-type-form form {
+    grid-template-columns: 1fr;
+  }
+  .appointment-form-wide {
+    grid-column: auto;
+  }
+  .appointment-editor-backdrop {
+    padding: 0;
+    place-items: stretch;
+  }
+  .appointment-editor {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .appointment-type-list > div {
+    grid-template-columns: 1fr 1fr;
+  }
+  .appointment-type-list > div strong {
+    grid-column: 1 / -1;
+  }
+}

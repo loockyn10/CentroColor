@@ -4,7 +4,10 @@ import type { BusinessContext } from '@centrocolor/application';
 import { AppShell, navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
+  AppointmentTypesPage,
+  AppointmentsPage,
   BusinessContextProvider,
+  CalendarPage,
   CustomersPage,
   HomePage,
   LoginPage,
@@ -24,6 +27,7 @@ import {
   SupabaseSaleRepository,
 } from './supabase-pos-repositories';
 import { SupabaseInventoryRepository } from './supabase-inventory-repository';
+import { SupabaseAppointmentRepository } from './supabase-appointment-repository';
 
 function PosSection({
   section,
@@ -68,6 +72,10 @@ function App() {
   const [context, setContext] = useState<BusinessContext | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [customerRepository] = useState(() => new SupabaseCustomerRepository());
+  const [appointmentRepository] = useState(
+    () => new SupabaseAppointmentRepository(),
+  );
 
   useEffect(() => {
     let live = true;
@@ -204,7 +212,19 @@ function App() {
         onLogout={() => void logout()}
       >
         {activeId === 'home' ? (
-          <HomePage />
+          <HomePage appointmentRepository={appointmentRepository} />
+        ) : activeId === 'calendar' ? (
+          <CalendarPage
+            repository={appointmentRepository}
+            customerRepository={customerRepository}
+          />
+        ) : activeId === 'appointments' ? (
+          <AppointmentsPage
+            repository={appointmentRepository}
+            customerRepository={customerRepository}
+          />
+        ) : activeId === 'appointment-types' ? (
+          <AppointmentTypesPage repository={appointmentRepository} />
         ) : activeId === 'customers' ? (
           <CustomerSection />
         ) : activeId === 'products' ? (

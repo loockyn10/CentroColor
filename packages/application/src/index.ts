@@ -70,3 +70,24 @@ export type {
   PosSyncCloudPort,
   PosSyncResult,
 } from './pos-sync';
+export {
+  changeAppointmentStatus,
+  createAppointment,
+  createAppointmentType,
+  updateAppointment,
+  updateAppointmentType,
+} from './appointment';
+export type {
+  AppointmentListQuery,
+  AppointmentRepository,
+  AppointmentSummary,
+} from './appointment';
+export { syncAppointments } from './appointment-sync';
+export type {
+  AppointmentSyncCloudPort,
+  AppointmentSyncCursor,
+  AppointmentSyncEntity,
+  AppointmentSyncLocalPort,
+  AppointmentSyncType,
+  PendingAppointmentChange,
+} from './appointment-sync';

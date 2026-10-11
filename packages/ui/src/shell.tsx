@@ -14,6 +14,7 @@ export const navigation: NavigationItem[] = [
   { id: 'sales-jobs', label: 'Trabajos' },
   { id: 'calendar', label: 'Calendario', section: 'AGENDA' },
   { id: 'appointments', label: 'Turnos' },
+  { id: 'appointment-types', label: 'Tipos de turno' },
   { id: 'events', label: 'Eventos' },
   { id: 'new-quote', label: 'Nueva cotización', section: 'MARQUETERÍA' },
   { id: 'frame-jobs', label: 'Trabajos' },
