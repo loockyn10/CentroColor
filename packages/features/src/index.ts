@@ -9,6 +9,12 @@ export {
   TodayAppointments,
 } from './appointments';
 export {
+  EventsPage,
+  ResourcesPage,
+  ResourceCalendarPage,
+  UpcomingEvents,
+} from './events';
+export {
   AuthStatePage,
   BusinessContextProvider,
   LoginPage,

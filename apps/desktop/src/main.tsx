@@ -4,6 +4,7 @@ import {
   syncPosMutable,
   syncPosSales,
   syncAppointments,
+  syncEventEntities,
   syncStockMovements,
   type BusinessContext,
 } from '@centrocolor/application';
@@ -22,6 +23,9 @@ import {
   NewSalePage,
   SalesPage,
   StockPage,
+  EventsPage,
+  ResourcesPage,
+  ResourceCalendarPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -62,6 +66,13 @@ import {
   type AppointmentSyncSummary,
 } from './sqlite-appointment-sync-adapter';
 import { CloudAppointmentSyncAdapter } from './cloud-appointment-sync-adapter';
+import { SQLiteEventRepository } from './sqlite-event-repository';
+import {
+  SQLiteEventSyncAdapter,
+  type EventConflict,
+  type EventSyncSummary,
+} from './sqlite-event-sync-adapter';
+import { CloudEventSyncAdapter } from './cloud-event-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
@@ -72,6 +83,8 @@ const inventoryRepository = new SQLiteInventoryRepository();
 const stockSyncLocal = new SQLiteStockSyncAdapter();
 const appointmentRepository = new SQLiteAppointmentRepository();
 const appointmentSyncLocal = new SQLiteAppointmentSyncAdapter();
+const eventRepository = new SQLiteEventRepository();
+const eventSyncLocal = new SQLiteEventSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -102,6 +115,9 @@ function App() {
   const [appointmentConflicts, setAppointmentConflicts] = useState<
     AppointmentConflict[]
   >([]);
+  const [eventSyncSummary, setEventSyncSummary] =
+    useState<EventSyncSummary | null>(null);
+  const [eventConflicts, setEventConflicts] = useState<EventConflict[]>([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const [resolutionBusy, setResolutionBusy] = useState(false);
@@ -120,6 +136,8 @@ function App() {
         stockSummary,
         agendaSummary,
         agendaConflicts,
+        eventsSummary,
+        eventsConflicts,
       ] = await Promise.all([
         customerSyncLocal.summary(businessId),
         customerSyncLocal.conflicts(businessId),
@@ -128,6 +146,8 @@ function App() {
         stockSyncLocal.summary(businessId),
         appointmentSyncLocal.summary(businessId),
         appointmentSyncLocal.conflicts(businessId),
+        eventSyncLocal.summary(businessId),
+        eventSyncLocal.conflicts(businessId),
       ]);
       setSyncSummary(summary);
       setConflicts(currentConflicts);
@@ -136,6 +156,8 @@ function App() {
       setPosConflicts(currentPosConflicts);
       setAppointmentSyncSummary(agendaSummary);
       setAppointmentConflicts(agendaConflicts);
+      setEventSyncSummary(eventsSummary);
+      setEventConflicts(eventsConflicts);
     } catch {
       setSyncPhase('error');
     }
@@ -184,6 +206,27 @@ function App() {
         target.businessId,
         appointmentSyncLocal,
         cloudAppointments,
+      );
+      const cloudEvents = new CloudEventSyncAdapter(getSupabaseClient());
+      for (const type of [
+        'event_type',
+        'resource',
+        'event',
+        'event_service_item',
+        'resource_reservation',
+      ] as const)
+        await syncEventEntities(
+          type,
+          target.businessId,
+          eventSyncLocal,
+          cloudEvents,
+        );
+      // Reservation edits can unblock a pending quoted → reserved transition.
+      await syncEventEntities(
+        'event',
+        target.businessId,
+        eventSyncLocal,
+        cloudEvents,
       );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
@@ -296,6 +339,59 @@ function App() {
           remote,
           item.localRevision,
         );
+      await refreshSyncSummary(context.businessId);
+      resolved = true;
+    } catch (failure) {
+      setResolutionError(
+        failure instanceof Error
+          ? failure.message
+          : 'No se pudo resolver el conflicto.',
+      );
+    } finally {
+      resolving.current = false;
+      setResolutionBusy(false);
+    }
+    if (resolved) void runSync(context);
+  }
+
+  async function resolveEventConflict(
+    item: EventConflict,
+    choice: 'local' | 'cloud',
+  ) {
+    if (
+      item.kind === 'availability' ||
+      !context ||
+      !cloudSessionReady ||
+      syncing.current ||
+      resolving.current
+    )
+      return;
+    resolving.current = true;
+    setResolutionBusy(true);
+    setResolutionError(null);
+    let resolved = false;
+    try {
+      const client = getSupabaseClient();
+      await validateCloudBusinessContext(context, client);
+      const adapter = new CloudEventSyncAdapter(client);
+      const remote = await adapter.get(item.type, context.businessId, item.id);
+      if (!remote) throw new Error('El registro Cloud ya no está disponible.');
+      if (item.cloudUpdatedAt !== remote.updatedAt) {
+        const change = await eventSyncLocal.pendingFor(
+          item.type,
+          context.businessId,
+          item.id,
+        );
+        if (change) await eventSyncLocal.conflict(change, remote);
+        await refreshSyncSummary(context.businessId);
+        throw new Error(
+          'Web volvió a cambiar este registro. Revisá las versiones.',
+        );
+      }
+      if (choice === 'cloud')
+        await eventSyncLocal.keepCloud(item.type, remote, item.localRevision);
+      else
+        await eventSyncLocal.keepLocal(item.type, remote, item.localRevision);
       await refreshSyncSummary(context.businessId);
       resolved = true;
     } catch (failure) {
@@ -469,6 +565,8 @@ function App() {
     setPosConflicts([]);
     setAppointmentSyncSummary(null);
     setAppointmentConflicts([]);
+    setEventSyncSummary(null);
+    setEventConflicts([]);
     setError(null);
     setGate('login');
   }
@@ -511,7 +609,8 @@ function App() {
   const syncLabel =
     (syncSummary?.conflicts ?? 0) +
       (posSyncSummary?.conflicts ?? 0) +
-      (appointmentSyncSummary?.conflicts ?? 0) >
+      (appointmentSyncSummary?.conflicts ?? 0) +
+      (eventSyncSummary?.conflicts ?? 0) >
     0
       ? 'Conflicto'
       : syncPhase === 'syncing'
@@ -523,7 +622,8 @@ function App() {
             : (syncSummary?.pending ?? 0) +
                   (posSyncSummary?.pending ?? 0) +
                   (stockSyncSummary?.pending ?? 0) +
-                  (appointmentSyncSummary?.pending ?? 0) >
+                  (appointmentSyncSummary?.pending ?? 0) +
+                  (eventSyncSummary?.pending ?? 0) >
                 0
               ? 'Cambios pendientes'
               : 'Sincronizado';
@@ -541,24 +641,28 @@ function App() {
               {(syncSummary?.pending ?? 0) +
                 (posSyncSummary?.pending ?? 0) +
                 (stockSyncSummary?.pending ?? 0) +
-                (appointmentSyncSummary?.pending ?? 0) >
+                (appointmentSyncSummary?.pending ?? 0) +
+                (eventSyncSummary?.pending ?? 0) >
                 0 && (
                 <span>
                   {(syncSummary?.pending ?? 0) +
                     (posSyncSummary?.pending ?? 0) +
                     (stockSyncSummary?.pending ?? 0) +
-                    (appointmentSyncSummary?.pending ?? 0)}{' '}
+                    (appointmentSyncSummary?.pending ?? 0) +
+                    (eventSyncSummary?.pending ?? 0)}{' '}
                   pendiente(s)
                 </span>
               )}
               {(syncSummary?.conflicts ?? 0) +
                 (posSyncSummary?.conflicts ?? 0) +
-                (appointmentSyncSummary?.conflicts ?? 0) >
+                (appointmentSyncSummary?.conflicts ?? 0) +
+                (eventSyncSummary?.conflicts ?? 0) >
                 0 && (
                 <span>
                   {(syncSummary?.conflicts ?? 0) +
                     (posSyncSummary?.conflicts ?? 0) +
-                    (appointmentSyncSummary?.conflicts ?? 0)}{' '}
+                    (appointmentSyncSummary?.conflicts ?? 0) +
+                    (eventSyncSummary?.conflicts ?? 0)}{' '}
                   conflicto(s)
                 </span>
               )}
@@ -581,7 +685,8 @@ function App() {
               </button>
               {conflicts.length +
                 posConflicts.length +
-                appointmentConflicts.length >
+                appointmentConflicts.length +
+                eventConflicts.length >
                 0 && (
                 <button
                   type="button"
@@ -592,7 +697,8 @@ function App() {
               )}
               {(syncSummary?.conflicts ?? 0) +
                 (posSyncSummary?.conflicts ?? 0) +
-                (appointmentSyncSummary?.conflicts ?? 0) >
+                (appointmentSyncSummary?.conflicts ?? 0) +
+                (eventSyncSummary?.conflicts ?? 0) >
               0 ? (
                 <small>Los cambios locales siguen guardados.</small>
               ) : !cloudSessionReady ? (
@@ -600,6 +706,7 @@ function App() {
               ) : syncPhase === 'error' ? (
                 <small>
                   {stockSyncSummary?.lastError ??
+                    eventSyncSummary?.lastError ??
                     appointmentSyncSummary?.lastError ??
                     posSyncSummary?.lastError ??
                     syncSummary?.lastError ??
@@ -610,7 +717,8 @@ function App() {
             {showConflicts &&
               conflicts.length +
                 posConflicts.length +
-                appointmentConflicts.length >
+                appointmentConflicts.length +
+                eventConflicts.length >
                 0 && (
                 <div className="sync-conflict-panel">
                   <p>
@@ -720,12 +828,69 @@ function App() {
                       </button>
                     </div>
                   ))}
+                  {eventConflicts.map((item) => (
+                    <div
+                      className="sync-conflict-row"
+                      key={`${item.type}-${item.id}`}
+                    >
+                      <strong>
+                        {item.kind === 'availability'
+                          ? 'Reserva de recurso en conflicto'
+                          : 'Evento/recursos'}
+                        : {item.label}
+                      </strong>
+                      <small>Este equipo: {item.localSummary}</small>
+                      <small>Cloud: {item.cloudSummary}</small>
+                      {item.kind === 'availability' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveId('events');
+                            setShowConflicts(false);
+                          }}
+                        >
+                          Abrir Eventos para resolver
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={
+                              !cloudSessionReady ||
+                              resolutionBusy ||
+                              syncPhase === 'syncing'
+                            }
+                            onClick={() =>
+                              void resolveEventConflict(item, 'local')
+                            }
+                          >
+                            Conservar este equipo
+                          </button>
+                          <button
+                            type="button"
+                            disabled={
+                              !cloudSessionReady ||
+                              resolutionBusy ||
+                              syncPhase === 'syncing'
+                            }
+                            onClick={() =>
+                              void resolveEventConflict(item, 'cloud')
+                            }
+                          >
+                            Conservar Web
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
                   {(syncSummary?.conflicts ?? 0) +
                     (posSyncSummary?.conflicts ?? 0) +
-                    (appointmentSyncSummary?.conflicts ?? 0) >
+                    (appointmentSyncSummary?.conflicts ?? 0) +
+                    (eventSyncSummary?.conflicts ?? 0) >
                     conflicts.length +
                       posConflicts.length +
-                      appointmentConflicts.length && (
+                      appointmentConflicts.length +
+                      eventConflicts.length && (
                     <p>Se muestran los primeros 20 conflictos.</p>
                   )}
                 </div>
@@ -736,6 +901,8 @@ function App() {
         {activeId === 'home' ? (
           <HomePage
             appointmentRepository={appointmentRepository}
+            eventRepository={eventRepository}
+            refreshToken={dataRefresh}
             onRevalidate={
               context.authorization === 'offline-authenticated'
                 ? () => setGate('login')
@@ -770,6 +937,30 @@ function App() {
               void refreshSyncSummary(context.businessId);
               if (cloudSessionReady) void runSync(context);
             }}
+          />
+        ) : activeId === 'events' ? (
+          <EventsPage
+            repository={eventRepository}
+            customerRepository={customerRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'resources' ? (
+          <ResourcesPage
+            repository={eventRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'resource-calendar' ? (
+          <ResourceCalendarPage
+            repository={eventRepository}
+            refreshToken={dataRefresh}
           />
         ) : activeId === 'customers' ? (
           <CustomersPage

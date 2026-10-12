@@ -75,4 +75,18 @@ Cloud usa FK compuestas `(business_id,branch_id)`, `(business_id,customer_id)` y
 
 SQLite agrega `sync_origin`, `local_revision` y `cloud_updated_at` solo como metadata local. `appointment_sync_outbox` compacta una operación mutable por negocio/tipo/UUID y conserva estado `pending` o `conflict`, error, versión y snapshot remoto. `appointment_sync_cursor` mantiene `(updated_at,entity_id)` por `appointment_type` y `appointment`. Cloud usa un reloj monotónico privado por negocio para que el pull incremental no omita commits concurrentes.
 
-Entidades previstas, aún no modeladas: Service, Resource, Event, EventService, ResourceReservation, Order, Payment, Supplier, Purchase, FrameMoulding y FrameQuote.
+Antes de Sprint 9, Resource, Event y sus relaciones figuraban únicamente como entidades previstas.
+
+## Eventos y recursos — Sprint 9
+
+| Entidad                 | Columnas principales                                                                                                                                                 | Reglas                                                                                                                |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `event_types`           | `id`, `business_id`, `name`, `is_active`, timestamps                                                                                                                 | Configurable por owner/admin; sin DELETE.                                                                             |
+| `events`                | `id`, `business_id`, `branch_id`, `customer_id`, `event_type_id`, `title`, `starts_at`, `ends_at`, lugar/dirección, `status`, `notes`, `created_by`, timestamps      | `ends_at > starts_at`; estados `inquiry`, `quoted`, `reserved`, `completed`, `cancelled`; FK compuestas por Business. |
+| `event_service_items`   | `id`, `business_id`, `event_id`, `source_service_id` nullable, snapshot `name`/`description`, `quantity`, `unit_price_cents`, `total_cents`, `is_active`, timestamps | `total = quantity × unit_price`; centavos enteros; preparado para catálogo futuro sin depender de él.                 |
+| `resources`             | `id`, `business_id`, `name`, `description`, `default_price_cents`, `is_active`, timestamps                                                                           | Cada fila es una unidad física. No es Product ni tiene `quantity_available`.                                          |
+| `resource_reservations` | `id`, `business_id`, `event_id`, `resource_id`, `starts_at`, `ends_at`, `price_cents`, `notes`, `is_active`, timestamps                                              | Horario independiente del Event; intervalo semiabierto; FK Event/Resource del mismo Business; sin DELETE.             |
+
+SQLite añade `sync_origin`, `local_revision` y `cloud_updated_at`, además de `event_sync_outbox` y `event_sync_cursor`. El outbox distingue conflictos de versión y disponibilidad. Cloud usa `private.event_sync_clock` para versiones monotónicas. El total no se almacena en Event: se deriva de items y reservas activas, separando subtotal de servicios, subtotal de recursos y total general.
+
+Una reserva bloquea sólo cuando está activa y su Event está `reserved` o `completed`. Un Event `cancelled` libera disponibilidad sin borrar reservas. Cloud serializa comprobaciones concurrentes mediante advisory locks por recurso. Appointment continúa siendo una cita corta independiente. Service universal, Order, Payment, Supplier, Purchase, FrameMoulding y FrameQuote siguen sin modelarse.

@@ -16,6 +16,7 @@ export const navigation: NavigationItem[] = [
   { id: 'appointments', label: 'Turnos' },
   { id: 'appointment-types', label: 'Tipos de turno' },
   { id: 'events', label: 'Eventos' },
+  { id: 'resource-calendar', label: 'Disponibilidad recursos' },
   { id: 'new-quote', label: 'Nueva cotización', section: 'MARQUETERÍA' },
   { id: 'frame-jobs', label: 'Trabajos' },
   { id: 'mouldings', label: 'Varillas' },

@@ -46,3 +46,28 @@ export type {
   AppointmentType,
   AppointmentTypeDetails,
 } from './appointment';
+export {
+  eventStatuses,
+  eventStatusBlocksResources,
+  eventTotals,
+  normalizeEventDetails,
+  normalizeEventServiceItemDetails,
+  normalizeEventTypeDetails,
+  normalizeResourceDetails,
+  normalizeResourceReservationDetails,
+  parseEventStatus,
+  reservationsOverlap,
+} from './event';
+export type {
+  Event,
+  EventDetails,
+  EventServiceItem,
+  EventServiceItemDetails,
+  EventStatus,
+  EventType,
+  EventTypeDetails,
+  Resource,
+  ResourceDetails,
+  ResourceReservation,
+  ResourceReservationDetails,
+} from './event';

@@ -91,3 +91,32 @@ export type {
   AppointmentSyncType,
   PendingAppointmentChange,
 } from './appointment-sync';
+export {
+  changeEventStatus,
+  createEvent,
+  createEventServiceItem,
+  createEventType,
+  createResource,
+  createResourceReservation,
+  updateEvent,
+  updateEventType,
+  updateResource,
+} from './event';
+export type {
+  EventBundle,
+  EventListQuery,
+  EventRepository,
+  EventSummary,
+  ResourceReservationQuery,
+  ResourceReservationSummary,
+} from './event';
+export { syncEventEntities } from './event-sync';
+export type {
+  EventPushResult,
+  EventSyncCloudPort,
+  EventSyncCursor,
+  EventSyncEntity,
+  EventSyncLocalPort,
+  EventSyncType,
+  PendingEventChange,
+} from './event-sync';

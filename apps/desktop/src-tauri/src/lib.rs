@@ -358,6 +358,12 @@ pub fn run() {
             sql: include_str!("../migrations/0009_appointments.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "create_events_resources",
+            sql: include_str!("../migrations/0010_events_resources.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     tauri::Builder::default()

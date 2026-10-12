@@ -16,6 +16,9 @@ import {
   NewSalePage,
   SalesPage,
   StockPage,
+  EventsPage,
+  ResourcesPage,
+  ResourceCalendarPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -28,6 +31,7 @@ import {
 } from './supabase-pos-repositories';
 import { SupabaseInventoryRepository } from './supabase-inventory-repository';
 import { SupabaseAppointmentRepository } from './supabase-appointment-repository';
+import { SupabaseEventRepository } from './supabase-event-repository';
 
 function PosSection({
   section,
@@ -76,6 +80,7 @@ function App() {
   const [appointmentRepository] = useState(
     () => new SupabaseAppointmentRepository(),
   );
+  const [eventRepository] = useState(() => new SupabaseEventRepository());
 
   useEffect(() => {
     let live = true;
@@ -212,7 +217,10 @@ function App() {
         onLogout={() => void logout()}
       >
         {activeId === 'home' ? (
-          <HomePage appointmentRepository={appointmentRepository} />
+          <HomePage
+            appointmentRepository={appointmentRepository}
+            eventRepository={eventRepository}
+          />
         ) : activeId === 'calendar' ? (
           <CalendarPage
             repository={appointmentRepository}
@@ -225,6 +233,15 @@ function App() {
           />
         ) : activeId === 'appointment-types' ? (
           <AppointmentTypesPage repository={appointmentRepository} />
+        ) : activeId === 'events' ? (
+          <EventsPage
+            repository={eventRepository}
+            customerRepository={customerRepository}
+          />
+        ) : activeId === 'resources' ? (
+          <ResourcesPage repository={eventRepository} />
+        ) : activeId === 'resource-calendar' ? (
+          <ResourceCalendarPage repository={eventRepository} />
         ) : activeId === 'customers' ? (
           <CustomerSection />
         ) : activeId === 'products' ? (

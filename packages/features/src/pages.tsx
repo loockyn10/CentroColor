@@ -1,16 +1,22 @@
 import type { AppointmentRepository } from '@centrocolor/application';
+import type { EventRepository } from '@centrocolor/application';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { TodayAppointments } from './appointments';
+import { UpcomingEvents } from './events';
 
-const cards = ['Trabajos pendientes', 'Próximos eventos', 'Ventas de hoy'];
+const cards = ['Trabajos pendientes', 'Ventas de hoy'];
 
 export function HomePage({
   onRevalidate,
   appointmentRepository,
+  eventRepository,
+  refreshToken,
 }: {
   onRevalidate?: () => void;
   appointmentRepository?: AppointmentRepository;
+  eventRepository?: EventRepository;
+  refreshToken?: number;
 }) {
   const context = useBusinessContext();
   return (
@@ -38,6 +44,12 @@ export function HomePage({
       <div className="cards-grid">
         {appointmentRepository && (
           <TodayAppointments repository={appointmentRepository} />
+        )}
+        {eventRepository && (
+          <UpcomingEvents
+            repository={eventRepository}
+            refreshToken={refreshToken}
+          />
         )}
         {cards.map((title) => (
           <Card key={title} className="metric-card">
