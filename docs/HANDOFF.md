@@ -2,6 +2,10 @@
 
 ## Punto de reanudación
 
+Sprint 10 comenzó el 11/10/2026. Existen `packages/domain/src/framing.ts`, el puerto `packages/application/src/framing.ts`, pantallas compartidas de catálogo/cotizador/trabajos, adaptadores SQLite y Supabase, y las migraciones nuevas `apps/desktop/src-tauri/migrations/0011_framing.sql` y `supabase/migrations/20261013000000_framing.sql`. El dominio usa `opening` (medida interior) y una fórmula explícita `2 × ((ancho + frente) + (alto + frente))`, con merma y redondeo hacia arriba. Los precios históricos son snapshots de `frame_quote_items`; no hay pagos, compras ni stock de varillas.
+
+El sync incremental de Sprint 10 ya está conectado en código para los seis tipos, con outbox SQLite, cursor y push/pull Cloud. La migración Cloud `20261014000000_framing_sync_rls.sql` restringe varillas, materiales y configuración a owner/admin; staff consulta catálogos y opera quotes/jobs. Falta validar estas garantías con PostgreSQL remoto y dos clientes reales, porque el dry-run continúa bloqueado por 403. No aplicar las migraciones pendientes ni hacer push real sin autorización.
+
 Sprint 9 Eventos + Recursos reservables está implementado en código. **No aplicar automáticamente** `supabase/migrations/20260925000000_inventory.sql`, `supabase/migrations/20261011000000_appointments.sql` ni `supabase/migrations/20261012000000_events_resources.sql`. No hubo push real. El último historial remoto confirmado sigue siendo el del 21/9/2026: migraciones `20260919000000` a `20260924000000` aplicadas. En esta sesión `migration list` y `db push --dry-run` volvieron a fallar antes de consultar/planificar con `LegacyDbConfigLoginRoleStatusError` 403, de modo que el estado remoto actual no pudo reconfirmarse.
 
 Con acceso administrativo, repetir `supabase migration list` y `pnpm exec supabase db push --dry-run`, revisar el plan exacto y aplicar únicamente con autorización humana. Después validar con usuarios reales:

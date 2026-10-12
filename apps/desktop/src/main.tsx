@@ -5,6 +5,7 @@ import {
   syncPosSales,
   syncAppointments,
   syncEventEntities,
+  syncFramingEntities,
   syncStockMovements,
   type BusinessContext,
 } from '@centrocolor/application';
@@ -26,6 +27,9 @@ import {
   EventsPage,
   ResourcesPage,
   ResourceCalendarPage,
+  FramingCatalogPage,
+  NewFrameQuotePage,
+  FrameJobsPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -73,6 +77,9 @@ import {
   type EventSyncSummary,
 } from './sqlite-event-sync-adapter';
 import { CloudEventSyncAdapter } from './cloud-event-sync-adapter';
+import { SQLiteFramingSyncAdapter } from './sqlite-framing-sync-adapter';
+import { CloudFramingSyncAdapter } from './cloud-framing-sync-adapter';
+import { SQLiteFramingRepository } from './sqlite-framing-repository';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
@@ -85,6 +92,8 @@ const appointmentRepository = new SQLiteAppointmentRepository();
 const appointmentSyncLocal = new SQLiteAppointmentSyncAdapter();
 const eventRepository = new SQLiteEventRepository();
 const eventSyncLocal = new SQLiteEventSyncAdapter();
+const framingRepository = new SQLiteFramingRepository();
+const framingSyncLocal = new SQLiteFramingSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -228,6 +237,21 @@ function App() {
         eventSyncLocal,
         cloudEvents,
       );
+      const cloudFraming = new CloudFramingSyncAdapter();
+      for (const type of [
+        'moulding',
+        'material',
+        'settings',
+        'quote',
+        'quote_item',
+        'job',
+      ] as const)
+        await syncFramingEntities(
+          type,
+          target.businessId,
+          framingSyncLocal,
+          cloudFraming,
+        );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
     } catch (syncError) {
@@ -961,6 +985,25 @@ function App() {
           <ResourceCalendarPage
             repository={eventRepository}
             refreshToken={dataRefresh}
+          />
+        ) : activeId === 'new-quote' ? (
+          <NewFrameQuotePage
+            repository={framingRepository}
+            onMutation={() => setDataRefresh((x) => x + 1)}
+          />
+        ) : activeId === 'frame-jobs' ? (
+          <FrameJobsPage repository={framingRepository} />
+        ) : activeId === 'mouldings' ? (
+          <FramingCatalogPage
+            repository={framingRepository}
+            kind="mouldings"
+            onMutation={() => setDataRefresh((x) => x + 1)}
+          />
+        ) : activeId === 'materials' ? (
+          <FramingCatalogPage
+            repository={framingRepository}
+            kind="materials"
+            onMutation={() => setDataRefresh((x) => x + 1)}
           />
         ) : activeId === 'customers' ? (
           <CustomersPage

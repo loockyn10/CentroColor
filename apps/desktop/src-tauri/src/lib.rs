@@ -364,6 +364,13 @@ pub fn run() {
             sql: include_str!("../migrations/0010_events_resources.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "create_framing",
+            sql: include_str!("../migrations/0011_framing.sql"),
+            kind: MigrationKind::Up,
+        },
+        Migration { version: 12, description: "create_framing_sync", sql: include_str!("../migrations/0012_framing_sync.sql"), kind: MigrationKind::Up },
     ];
 
     tauri::Builder::default()

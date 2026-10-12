@@ -2,6 +2,8 @@
 
 Sprint 9 Eventos + Recursos reservables implementado en código el 11 de octubre de 2026. Desktop y Web/PWA comparten modelo, casos de uso y pantallas. Desktop persiste en SQLite, opera offline y sincroniza con Cloud; Web usa Supabase online-first. **Las migraciones Cloud `20260925000000_inventory.sql`, `20261011000000_appointments.sql` y `20261012000000_events_resources.sql` están pendientes de aplicar**; no se hizo push real.
 
+Sprint 10 Marquetería está implementado en código: dominio puro, catálogos, configuración, cotizador, snapshots, presupuestos, conversión a trabajo, estados de producción y paridad Desktop/Web. SQLite 0011/0012 y Cloud `20261013000000`/`20261014000000` agregan las entidades, outbox/cursor y sincronización incremental. Desktop sincroniza Customer → moulding/material/settings → quote → quote_item → job; pull escribe con origen remoto y no genera outbox. Cloud usa reloj monotónico, comparación optimista y conserva el snapshot remoto al detectar una divergencia. No hubo push Cloud.
+
 ## Hechos implementados
 
 - `EventType` es configurable y activable/desactivable por owner/admin. No hay valores cerrados ni DELETE.

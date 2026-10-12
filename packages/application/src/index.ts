@@ -120,3 +120,14 @@ export type {
   EventSyncType,
   PendingEventChange,
 } from './event-sync';
+export { createMoulding, createMaterial, newQuote } from './framing';
+export type { FramingRepository } from './framing';
+export { syncFramingEntities } from './framing-sync';
+export type {
+  FramingSyncCloudPort,
+  FramingSyncEntity,
+  FramingSyncLocalPort,
+  FramingSyncType,
+  PendingFramingChange,
+  FramingCursor,
+} from './framing-sync';

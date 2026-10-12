@@ -10,6 +10,12 @@
 
 Cloud usa UUID nativos y `timestamptz`. SQLite usa UUID como texto e instantes UTC ISO 8601; las dos representaciones se traducen a los mismos tipos de dominio. Los IDs se generan sin conexión cuando procede. `created_at` y `updated_at` se fijan al insertar; los futuros adaptadores de escritura deben renovar `updated_at` al modificar. `last_seen_at` es opcional y no implica que exista seguimiento en tiempo real.
 
+## Marquetería — Sprint 10
+
+`frame_mouldings` registra costo/precio por metro, frente opcional en mm y merma; `frame_materials` registra tipo, unidad (`square_meter`, `linear_meter`, `unit`) y precio/costo. `framing_settings` conserva markup, mano de obra y mermas por Business. `frame_quotes` usa dimensiones enteras `width_mm`/`height_mm`, modo `opening` y estados draft/quoted/accepted/rejected/expired. Sus `frame_quote_items` conservan cantidades racionales, precio y nombre snapshot. `frame_jobs` referencia una cotización aceptada y tiene estados pending/in_progress/ready/delivered/cancelled. No hay DELETE ni movimientos de stock asociados.
+
+SQLite registra cambios locales en `framing_sync_outbox`; el cursor por Business/tipo usa `(updated_at, entity_id)`. Cloud asigna `updated_at` monotónico por Business. Los catálogos/configuración se mutan únicamente con membership owner/admin; staff sólo consulta esos datos y puede crear/operar quotes y jobs.
+
 La base Desktop mantiene también `app_meta` para `installation_id` y la selección provisional de Sprint 2. El seed Cloud es solo de desarrollo y crea CentroColor + Sucursal principal sin IDs fijos. En producción, el bootstrap inicial de Business, Branch y primer owner se realizó manualmente; no depende del seed.
 
 ## Autenticación y autorización

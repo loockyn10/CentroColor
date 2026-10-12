@@ -19,6 +19,9 @@ import {
   EventsPage,
   ResourcesPage,
   ResourceCalendarPage,
+  FramingCatalogPage,
+  NewFrameQuotePage,
+  FrameJobsPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -32,6 +35,7 @@ import {
 import { SupabaseInventoryRepository } from './supabase-inventory-repository';
 import { SupabaseAppointmentRepository } from './supabase-appointment-repository';
 import { SupabaseEventRepository } from './supabase-event-repository';
+import { SupabaseFramingRepository } from './supabase-framing-repository';
 
 function PosSection({
   section,
@@ -81,6 +85,7 @@ function App() {
     () => new SupabaseAppointmentRepository(),
   );
   const [eventRepository] = useState(() => new SupabaseEventRepository());
+  const [framingRepository] = useState(() => new SupabaseFramingRepository());
 
   useEffect(() => {
     let live = true;
@@ -242,6 +247,14 @@ function App() {
           <ResourcesPage repository={eventRepository} />
         ) : activeId === 'resource-calendar' ? (
           <ResourceCalendarPage repository={eventRepository} />
+        ) : activeId === 'new-quote' ? (
+          <NewFrameQuotePage repository={framingRepository} />
+        ) : activeId === 'frame-jobs' ? (
+          <FrameJobsPage repository={framingRepository} />
+        ) : activeId === 'mouldings' ? (
+          <FramingCatalogPage repository={framingRepository} kind="mouldings" />
+        ) : activeId === 'materials' ? (
+          <FramingCatalogPage repository={framingRepository} kind="materials" />
         ) : activeId === 'customers' ? (
           <CustomerSection />
         ) : activeId === 'products' ? (

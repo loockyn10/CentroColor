@@ -15,6 +15,11 @@ export {
   UpcomingEvents,
 } from './events';
 export {
+  FramingCatalogPage,
+  NewFrameQuotePage,
+  FrameJobsPage,
+} from './framing';
+export {
   AuthStatePage,
   BusinessContextProvider,
   LoginPage,
