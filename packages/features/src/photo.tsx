@@ -9,6 +9,7 @@ import {
   type PhotoJobBundle,
   type PhotoJobSummary,
   type PhotoRepository,
+  type WorkPaymentRepository,
 } from '@centrocolor/application';
 import {
   isPhotoJobOverdue,
@@ -22,6 +23,7 @@ import {
 } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { PaymentAccountPanel } from './payments';
 const money = (x: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
     x / 100,
@@ -582,10 +584,12 @@ export function NewPhotoJobPage({
 
 export function PhotoJobsPage({
   repository,
+  paymentRepository,
   onMutation,
   refreshToken,
 }: {
   repository: PhotoRepository;
+  paymentRepository: WorkPaymentRepository;
   onMutation?: () => void;
   refreshToken?: number;
 }) {
@@ -887,6 +891,15 @@ export function PhotoJobsPage({
                   .reduce((s, x) => s + x.totalCents, 0),
               )}
             </h3>
+            <PaymentAccountPanel
+              repository={paymentRepository}
+              sourceType="photo_job"
+              sourceId={selected.job.id}
+              onMutation={() => {
+                load();
+                onMutation?.();
+              }}
+            />
             {!['delivered', 'cancelled'].includes(selected.job.status) && (
               <button
                 className="customer-primary"

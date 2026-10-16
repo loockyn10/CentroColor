@@ -40,6 +40,7 @@ import { SupabaseAppointmentRepository } from './supabase-appointment-repository
 import { SupabaseEventRepository } from './supabase-event-repository';
 import { SupabaseFramingRepository } from './supabase-framing-repository';
 import { SupabasePhotoRepository } from './supabase-photo-repository';
+import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repository';
 
 function PosSection({
   section,
@@ -73,9 +74,19 @@ function PosSection({
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
-function CustomerSection() {
+function CustomerSection({
+  paymentRepository,
+}: {
+  paymentRepository: SupabaseWorkPaymentRepository;
+}) {
   const [repository] = useState(() => new SupabaseCustomerRepository());
-  return <CustomersPage repository={repository} storage="cloud" />;
+  return (
+    <CustomersPage
+      repository={repository}
+      paymentRepository={paymentRepository}
+      storage="cloud"
+    />
+  );
 }
 
 function App() {
@@ -91,6 +102,9 @@ function App() {
   const [eventRepository] = useState(() => new SupabaseEventRepository());
   const [framingRepository] = useState(() => new SupabaseFramingRepository());
   const [photoRepository] = useState(() => new SupabasePhotoRepository());
+  const [paymentRepository] = useState(
+    () => new SupabaseWorkPaymentRepository(),
+  );
 
   useEffect(() => {
     let live = true;
@@ -231,6 +245,7 @@ function App() {
             appointmentRepository={appointmentRepository}
             eventRepository={eventRepository}
             photoRepository={photoRepository}
+            paymentRepository={paymentRepository}
           />
         ) : activeId === 'calendar' ? (
           <CalendarPage
@@ -248,6 +263,7 @@ function App() {
           <EventsPage
             repository={eventRepository}
             customerRepository={customerRepository}
+            paymentRepository={paymentRepository}
           />
         ) : activeId === 'resources' ? (
           <ResourcesPage repository={eventRepository} />
@@ -256,7 +272,10 @@ function App() {
         ) : activeId === 'new-quote' ? (
           <NewFrameQuotePage repository={framingRepository} />
         ) : activeId === 'frame-jobs' ? (
-          <FrameJobsPage repository={framingRepository} />
+          <FrameJobsPage
+            repository={framingRepository}
+            paymentRepository={paymentRepository}
+          />
         ) : activeId === 'mouldings' ? (
           <FramingCatalogPage repository={framingRepository} kind="mouldings" />
         ) : activeId === 'materials' ? (
@@ -267,11 +286,14 @@ function App() {
             customerRepository={customerRepository}
           />
         ) : activeId === 'photo-jobs' ? (
-          <PhotoJobsPage repository={photoRepository} />
+          <PhotoJobsPage
+            repository={photoRepository}
+            paymentRepository={paymentRepository}
+          />
         ) : activeId === 'photo-services' ? (
           <PhotoServicesPage repository={photoRepository} />
         ) : activeId === 'customers' ? (
-          <CustomerSection />
+          <CustomerSection paymentRepository={paymentRepository} />
         ) : activeId === 'products' ? (
           <PosSection section="products" />
         ) : activeId === 'new-sale' ? (

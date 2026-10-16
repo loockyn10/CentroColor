@@ -14,6 +14,7 @@ import {
   type EventRepository,
   type EventSummary,
   type ResourceReservationSummary,
+  type WorkPaymentRepository,
 } from '@centrocolor/application';
 import {
   eventStatuses,
@@ -29,6 +30,7 @@ import {
 } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { PaymentAccountPanel } from './payments';
 
 const statusLabels: Record<EventStatus, string> = {
   inquiry: 'Consulta',
@@ -123,12 +125,16 @@ function MoneyInput({
 function EventEditor({
   repository,
   customerRepository,
+  paymentRepository,
+  onMutation,
   eventId,
   onClose,
   onSaved,
 }: {
   repository: EventRepository;
   customerRepository: CustomerRepository;
+  paymentRepository: WorkPaymentRepository;
+  onMutation?: () => void;
   eventId?: string;
   onClose: () => void;
   onSaved: () => void;
@@ -772,6 +778,12 @@ function EventEditor({
         </form>
         {loaded && (
           <>
+            <PaymentAccountPanel
+              repository={paymentRepository}
+              sourceType="event"
+              sourceId={loaded.event.id}
+              onMutation={onMutation}
+            />
             <div className="event-contact">
               <strong>Contacto</strong>
               <span>{loaded.event.customerName}</span>
@@ -911,11 +923,13 @@ function EventTypesManager({
 export function EventsPage({
   repository,
   customerRepository,
+  paymentRepository,
   refreshToken,
   onMutation,
 }: {
   repository: EventRepository;
   customerRepository: CustomerRepository;
+  paymentRepository: WorkPaymentRepository;
   refreshToken?: number;
   onMutation?: () => void;
 }) {
@@ -1065,6 +1079,8 @@ export function EventsPage({
         <EventEditor
           repository={repository}
           customerRepository={customerRepository}
+          paymentRepository={paymentRepository}
+          onMutation={onMutation}
           eventId={typeof editor === 'string' ? editor : undefined}
           onClose={() => setEditor(null)}
           onSaved={saved}

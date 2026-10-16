@@ -7,10 +7,12 @@ import {
   searchCustomers,
   updateCustomer,
   type CustomerRepository,
+  type WorkPaymentRepository,
 } from '@centrocolor/application';
 import type { Customer, CustomerDetails } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { CustomerAccountPanel } from './payments';
 
 const emptyDetails: CustomerDetails = {
   fullName: '',
@@ -31,11 +33,13 @@ export function CustomersPage({
   storage,
   refreshToken,
   onLocalMutation,
+  paymentRepository,
 }: {
   repository: CustomerRepository;
   storage: 'cloud' | 'local';
   refreshToken?: number;
   onLocalMutation?: () => void;
+  paymentRepository: WorkPaymentRepository;
 }) {
   const { businessId } = useBusinessContext();
   const [query, setQuery] = useState('');
@@ -320,10 +324,11 @@ export function CustomersPage({
             </div>
           </form>
           {selected && (
-            <p className="customer-future">
-              El historial de este cliente estará disponible en un sprint
-              futuro.
-            </p>
+            <CustomerAccountPanel
+              repository={paymentRepository}
+              customerId={selected.id}
+              refreshToken={refreshToken}
+            />
           )}
         </Card>
       )}

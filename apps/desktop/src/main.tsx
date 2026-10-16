@@ -8,6 +8,7 @@ import {
   syncFramingEntities,
   syncPhotoEntities,
   syncStockMovements,
+  syncWorkPayments,
   type BusinessContext,
 } from '@centrocolor/application';
 import { AppShell, navigation } from '@centrocolor/ui';
@@ -87,6 +88,9 @@ import { SQLiteFramingRepository } from './sqlite-framing-repository';
 import { SQLitePhotoRepository } from './sqlite-photo-repository';
 import { SQLitePhotoSyncAdapter } from './sqlite-photo-sync-adapter';
 import { CloudPhotoSyncAdapter } from './cloud-photo-sync-adapter';
+import { SQLiteWorkPaymentRepository } from './sqlite-work-payment-repository';
+import { SQLiteWorkPaymentSyncAdapter } from './sqlite-work-payment-sync-adapter';
+import { CloudWorkPaymentSyncAdapter } from './cloud-work-payment-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
@@ -103,6 +107,8 @@ const framingRepository = new SQLiteFramingRepository();
 const framingSyncLocal = new SQLiteFramingSyncAdapter();
 const photoRepository = new SQLitePhotoRepository();
 const photoSyncLocal = new SQLitePhotoSyncAdapter();
+const workPaymentRepository = new SQLiteWorkPaymentRepository();
+const workPaymentSyncLocal = new SQLiteWorkPaymentSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -273,6 +279,11 @@ function App() {
           photoSyncLocal,
           cloudPhoto,
         );
+      await syncWorkPayments(
+        target.businessId,
+        workPaymentSyncLocal,
+        new CloudWorkPaymentSyncAdapter(),
+      );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
     } catch (syncError) {
@@ -948,6 +959,7 @@ function App() {
             appointmentRepository={appointmentRepository}
             eventRepository={eventRepository}
             photoRepository={photoRepository}
+            paymentRepository={workPaymentRepository}
             refreshToken={dataRefresh}
             onRevalidate={
               context.authorization === 'offline-authenticated'
@@ -988,6 +1000,7 @@ function App() {
           <EventsPage
             repository={eventRepository}
             customerRepository={customerRepository}
+            paymentRepository={workPaymentRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
               void refreshSyncSummary(context.businessId);
@@ -1014,7 +1027,10 @@ function App() {
             onMutation={() => setDataRefresh((x) => x + 1)}
           />
         ) : activeId === 'frame-jobs' ? (
-          <FrameJobsPage repository={framingRepository} />
+          <FrameJobsPage
+            repository={framingRepository}
+            paymentRepository={workPaymentRepository}
+          />
         ) : activeId === 'mouldings' ? (
           <FramingCatalogPage
             repository={framingRepository}
@@ -1034,6 +1050,7 @@ function App() {
         ) : activeId === 'photo-jobs' ? (
           <PhotoJobsPage
             repository={photoRepository}
+            paymentRepository={workPaymentRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
               setDataRefresh((x) => x + 1);
@@ -1058,6 +1075,7 @@ function App() {
         ) : activeId === 'customers' ? (
           <CustomersPage
             repository={customerRepository}
+            paymentRepository={workPaymentRepository}
             storage="local"
             refreshToken={dataRefresh}
             onLocalMutation={() => {

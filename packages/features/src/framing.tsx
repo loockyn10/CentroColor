@@ -5,6 +5,7 @@ import {
   createMoulding,
   newQuote,
   type FramingRepository,
+  type WorkPaymentRepository,
 } from '@centrocolor/application';
 import {
   centimetersToMillimeters,
@@ -14,6 +15,7 @@ import {
 } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { PaymentAccountPanel } from './payments';
 const money = (x: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
     x / 100,
@@ -271,12 +273,15 @@ export function NewFrameQuotePage({
 }
 export function FrameJobsPage({
   repository,
+  paymentRepository,
 }: {
   repository: FramingRepository;
+  paymentRepository: WorkPaymentRepository;
 }) {
   const c = useBusinessContext();
   const [jobs, setJobs] = useState<any[]>([]);
   const [quotes, setQuotes] = useState<any[]>([]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const load = () =>
     Promise.all([
@@ -356,6 +361,21 @@ export function FrameJobsPage({
                   <button onClick={() => void status(x.id, 'delivered')}>
                     Entregado
                   </button>
+                )}
+                <button
+                  onClick={() =>
+                    setSelectedJobId(selectedJobId === x.id ? null : x.id)
+                  }
+                >
+                  {selectedJobId === x.id ? 'Cerrar cuenta' : 'Ver cuenta'}
+                </button>
+                {selectedJobId === x.id && (
+                  <PaymentAccountPanel
+                    repository={paymentRepository}
+                    sourceType="frame_job"
+                    sourceId={x.id}
+                    onMutation={() => void load()}
+                  />
                 )}
               </div>
             ))

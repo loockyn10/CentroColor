@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad, acceso, Clientes, POS, inventario, Agenda/Turnos, Eventos/Recursos, Marquetería y Trabajos fotográficos Desktop/Web. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda la operación en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud posteriores a POS siguen pendientes de aplicación y validación operativa real.
+Fundación técnica, identidad, acceso, Clientes, POS, inventario, Agenda/Turnos, Eventos/Recursos, Marquetería, Trabajos fotográficos y pagos de trabajos Desktop/Web. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda la operación en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud posteriores a POS siguen pendientes de aplicación y validación operativa real.
 
 ## Requisitos
 
@@ -27,6 +27,8 @@ python tests/events_sqlite.py
 python tests/events_cloud_sql.py
 python tests/photo_sqlite.py
 python tests/photo_cloud_sql.py
+python tests/work_payments_sqlite.py
+python tests/work_payments_cloud_sql.py
 pnpm exec supabase db push --dry-run
 ```
 

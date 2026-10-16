@@ -26,6 +26,11 @@ export {
   PhotoJobsDashboard,
 } from './photo';
 export {
+  PaymentAccountPanel,
+  CustomerAccountPanel,
+  WorkPaymentsDashboard,
+} from './payments';
+export {
   AuthStatePage,
   BusinessContextProvider,
   LoginPage,

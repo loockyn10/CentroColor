@@ -1799,3 +1799,88 @@ button {
     flex: 1 1 100%;
   }
 }
+.work-account {
+  margin-top: 1rem;
+  width: 100%;
+}
+.work-account-heading,
+.work-account-totals,
+.work-payment-actions,
+.work-payment-row,
+.customer-account-source {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.work-account-heading {
+  justify-content: space-between;
+}
+.work-account-totals {
+  justify-content: space-between;
+  padding: 0.75rem 0;
+}
+.work-paid {
+  color: #176b3a;
+  background: #dff5e8;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+}
+.work-cancel-warning,
+.is-conflict {
+  color: #8a3d00;
+  background: #fff0df;
+  padding: 0.65rem;
+  border-radius: 0.5rem;
+}
+.work-payment-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+  padding: 1rem;
+  background: var(--surface-subtle, #f6f5f2);
+  border-radius: 0.75rem;
+}
+.work-payment-form h4,
+.work-payment-form p,
+.work-payment-form div {
+  grid-column: 1/-1;
+}
+.work-payment-form label {
+  display: grid;
+  gap: 0.3rem;
+}
+.work-payment-history {
+  margin-top: 1rem;
+}
+.work-payment-row {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1fr 0.8fr 0.8fr auto;
+  padding: 0.55rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.work-payment-row.is-voided {
+  opacity: 0.62;
+  text-decoration: line-through;
+}
+.customer-account {
+  margin-top: 1rem;
+}
+.customer-account-source {
+  justify-content: space-between;
+  padding: 0.65rem 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+.customer-account > small {
+  display: block;
+  margin: 0.35rem 0;
+}
+@media (max-width: 720px) {
+  .work-payment-form {
+    grid-template-columns: 1fr;
+  }
+  .work-payment-row {
+    grid-template-columns: 1fr 1fr;
+  }
+}

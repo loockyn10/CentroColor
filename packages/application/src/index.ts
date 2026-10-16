@@ -151,3 +151,12 @@ export type {
   PhotoSyncLocalPort,
   PhotoSyncCloudPort,
 } from './photo-sync';
+export { postWorkPayment, voidWorkPayment } from './payment';
+export type { WorkPaymentRepository } from './payment';
+export { syncWorkPayments } from './payment-sync';
+export type {
+  WorkPaymentCursor,
+  PendingWorkPayment,
+  WorkPaymentSyncLocalPort,
+  WorkPaymentSyncCloudPort,
+} from './payment-sync';

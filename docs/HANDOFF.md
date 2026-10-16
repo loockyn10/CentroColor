@@ -2,22 +2,23 @@
 
 ## Punto de reanudación
 
-Sprint 11 Trabajos fotográficos quedó implementado en código el 16/10/2026. Los archivos principales son `packages/domain/src/photo.ts`, `packages/application/src/photo.ts`, `packages/application/src/photo-sync.ts`, `packages/features/src/photo.tsx`, los adaptadores `*photo*` de Desktop/Web, SQLite `0013_photo_jobs.sql` y Cloud `20261015000000_photo_jobs.sql`.
+Sprint 12 WorkPayment quedó implementado en código el 16/10/2026. Los archivos principales son `packages/domain/src/payment.ts`, `packages/application/src/payment.ts`, `packages/application/src/payment-sync.ts`, `packages/features/src/payments.tsx`, los adaptadores `*work-payment*` de Desktop/Web, SQLite `0014_work_payments.sql` y Cloud `20261016000000_work_payments.sql`.
 
-No aplicar migraciones ni ejecutar `db push` real sin autorización. El último remoto confirmado (21/9/2026) solo llegaba a POS. Inventario, Agenda, Eventos, Marquetería y Fotografía figuran pendientes en el repositorio; `migration list` y el dry-run actuales no pudieron reconfirmarlo porque el endpoint de login role devolvió `LegacyDbConfigLoginRoleStatusError` 403.
+No aplicar migraciones ni ejecutar `db push` real sin autorización. El dry-run remoto del 16/10/2026 conectó correctamente y propuso sólo `20261016000000_work_payments.sql`; las migraciones previas ya son reconocidas por el proyecto vinculado.
 
-Con acceso administrativo:
+Con autorización administrativa:
 
-1. Ejecutar `pnpm exec supabase migration list` y `pnpm exec supabase db push --dry-run`.
-2. Revisar el plan exacto, en especial las seis migraciones desde `20260925000000` hasta `20261015000000`.
-3. Aplicar únicamente con autorización humana.
-4. Validar owner/admin/staff: catálogo PhotoService, alta Web/Desktop, estados y aislamiento por Business.
-5. Crear offline un trabajo con varios items, cerrar/reabrir Desktop, cambiarlo a `in_progress`, reconectar y comprobar UUID/snapshots en Web.
-6. Provocar `received → in_progress` en Desktop offline y `received → ready` en Web; comprobar que el outbox queda en conflicto y no pierde silenciosamente un estado.
-7. Verificar Dashboard/cola mobile y `ready → delivered` con un teléfono real.
+1. Revisar y aplicar únicamente `20261016000000_work_payments.sql`.
+2. Validar owner/admin/staff: todos leen cuentas y registran pagos; sólo owner/admin anula.
+3. Probar Event $500.000 con seña $100.000 y pago $400.000; FrameJob $80.000 con seña $30.000; PhotoJob $10.000 con pago total.
+4. Verificar refund, refund anulado, pago anulado con motivo y persistencia visual del historial.
+5. Abrir Web y otro Web/Desktop sobre el último saldo: Cloud debe aceptar uno y rechazar el segundo sin sobrepago.
+6. Repetir con Desktop offline: al reconectar, el pago rechazado debe quedar “Conflicto Cloud”; owner/admin puede “Descartar conflicto”, que lo anula localmente sin borrarlo.
+7. Cancelar una fuente con dinero recibido y confirmar la advertencia sin devolución automática.
+8. Revisar Customer account y Dashboard owner/admin con datos reales y volumen representativo.
 
 ## Garantías y límites
 
-Appointment != Event != PhotoJob != FrameJob. Product != PhotoService. El catálogo no altera precios históricos. Customer es obligatorio. Los totales usan centavos enteros y se derivan de items activos. No hay DELETE físico, pagos, archivos/fotos, notificaciones ni integración POS.
+WorkPayment es un ledger común para Event/FrameJob/PhotoJob con FK reales y una sola fuente. Deposit/payment suman, refund resta y voided no cuenta. Cloud es autoridad final del saldo y serializa por fuente. Sale/POS no fue modificado ni integrado. No hay DELETE físico, facturación fiscal, caja, contabilidad, bancos ni cuenta corriente manual.
 
-Los checks locales pasan: typecheck, lint, 74 tests, regresión Python completa, build, format, build Desktop y `git diff --check`. El instalador está en `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Ver `CURRENT_STATE.md` para resultados exactos y deuda técnica.
+Los checks locales pasan: typecheck, lint, 79 tests, regresión Python completa, build, format, build Desktop y `git diff --check`. El instalador está en `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. El dry-run remoto pasa y propone sólo la migración de WorkPayment. Ver `CURRENT_STATE.md` para resultados exactos y deuda técnica.
