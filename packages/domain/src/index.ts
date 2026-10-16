@@ -59,6 +59,28 @@ export {
   reservationsOverlap,
 } from './event';
 export {
+  photoServiceTypes,
+  photoJobStatuses,
+  photoJobPriorities,
+  requirePhotoQuantity,
+  photoItemTotal,
+  photoJobTotal,
+  normalizePhotoServiceDetails,
+  isPhotoServiceSelectable,
+  normalizePhotoJobDetails,
+  normalizePhotoJobItemDetails,
+  isPhotoJobOverdue,
+  comparePhotoProductionQueue,
+} from './photo';
+export type {
+  PhotoService,
+  PhotoServiceType,
+  PhotoJob,
+  PhotoJobStatus,
+  PhotoJobPriority,
+  PhotoJobItem,
+} from './photo';
+export {
   frameMaterialTypes,
   framePricingUnits,
   frameQuoteStatuses,

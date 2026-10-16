@@ -22,6 +22,9 @@ import {
   FramingCatalogPage,
   NewFrameQuotePage,
   FrameJobsPage,
+  PhotoServicesPage,
+  NewPhotoJobPage,
+  PhotoJobsPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -36,6 +39,7 @@ import { SupabaseInventoryRepository } from './supabase-inventory-repository';
 import { SupabaseAppointmentRepository } from './supabase-appointment-repository';
 import { SupabaseEventRepository } from './supabase-event-repository';
 import { SupabaseFramingRepository } from './supabase-framing-repository';
+import { SupabasePhotoRepository } from './supabase-photo-repository';
 
 function PosSection({
   section,
@@ -86,6 +90,7 @@ function App() {
   );
   const [eventRepository] = useState(() => new SupabaseEventRepository());
   const [framingRepository] = useState(() => new SupabaseFramingRepository());
+  const [photoRepository] = useState(() => new SupabasePhotoRepository());
 
   useEffect(() => {
     let live = true;
@@ -225,6 +230,7 @@ function App() {
           <HomePage
             appointmentRepository={appointmentRepository}
             eventRepository={eventRepository}
+            photoRepository={photoRepository}
           />
         ) : activeId === 'calendar' ? (
           <CalendarPage
@@ -255,6 +261,15 @@ function App() {
           <FramingCatalogPage repository={framingRepository} kind="mouldings" />
         ) : activeId === 'materials' ? (
           <FramingCatalogPage repository={framingRepository} kind="materials" />
+        ) : activeId === 'new-photo-job' ? (
+          <NewPhotoJobPage
+            repository={photoRepository}
+            customerRepository={customerRepository}
+          />
+        ) : activeId === 'photo-jobs' ? (
+          <PhotoJobsPage repository={photoRepository} />
+        ) : activeId === 'photo-services' ? (
+          <PhotoServicesPage repository={photoRepository} />
         ) : activeId === 'customers' ? (
           <CustomerSection />
         ) : activeId === 'products' ? (

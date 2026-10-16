@@ -2,30 +2,22 @@
 
 ## Punto de reanudación
 
-Sprint 10 comenzó el 11/10/2026. Existen `packages/domain/src/framing.ts`, el puerto `packages/application/src/framing.ts`, pantallas compartidas de catálogo/cotizador/trabajos, adaptadores SQLite y Supabase, y las migraciones nuevas `apps/desktop/src-tauri/migrations/0011_framing.sql` y `supabase/migrations/20261013000000_framing.sql`. El dominio usa `opening` (medida interior) y una fórmula explícita `2 × ((ancho + frente) + (alto + frente))`, con merma y redondeo hacia arriba. Los precios históricos son snapshots de `frame_quote_items`; no hay pagos, compras ni stock de varillas.
+Sprint 11 Trabajos fotográficos quedó implementado en código el 16/10/2026. Los archivos principales son `packages/domain/src/photo.ts`, `packages/application/src/photo.ts`, `packages/application/src/photo-sync.ts`, `packages/features/src/photo.tsx`, los adaptadores `*photo*` de Desktop/Web, SQLite `0013_photo_jobs.sql` y Cloud `20261015000000_photo_jobs.sql`.
 
-El sync incremental de Sprint 10 ya está conectado en código para los seis tipos, con outbox SQLite, cursor y push/pull Cloud. La migración Cloud `20261014000000_framing_sync_rls.sql` restringe varillas, materiales y configuración a owner/admin; staff consulta catálogos y opera quotes/jobs. Falta validar estas garantías con PostgreSQL remoto y dos clientes reales, porque el dry-run continúa bloqueado por 403. No aplicar las migraciones pendientes ni hacer push real sin autorización.
+No aplicar migraciones ni ejecutar `db push` real sin autorización. El último remoto confirmado (21/9/2026) solo llegaba a POS. Inventario, Agenda, Eventos, Marquetería y Fotografía figuran pendientes en el repositorio; `migration list` y el dry-run actuales no pudieron reconfirmarlo porque el endpoint de login role devolvió `LegacyDbConfigLoginRoleStatusError` 403.
 
-Sprint 9 Eventos + Recursos reservables está implementado en código. **No aplicar automáticamente** `supabase/migrations/20260925000000_inventory.sql`, `supabase/migrations/20261011000000_appointments.sql` ni `supabase/migrations/20261012000000_events_resources.sql`. No hubo push real. El último historial remoto confirmado sigue siendo el del 21/9/2026: migraciones `20260919000000` a `20260924000000` aplicadas. En esta sesión `migration list` y `db push --dry-run` volvieron a fallar antes de consultar/planificar con `LegacyDbConfigLoginRoleStatusError` 403, de modo que el estado remoto actual no pudo reconfirmarse.
+Con acceso administrativo:
 
-Con acceso administrativo, repetir `supabase migration list` y `pnpm exec supabase db push --dry-run`, revisar el plan exacto y aplicar únicamente con autorización humana. Después validar con usuarios reales:
+1. Ejecutar `pnpm exec supabase migration list` y `pnpm exec supabase db push --dry-run`.
+2. Revisar el plan exacto, en especial las seis migraciones desde `20260925000000` hasta `20261015000000`.
+3. Aplicar únicamente con autorización humana.
+4. Validar owner/admin/staff: catálogo PhotoService, alta Web/Desktop, estados y aislamiento por Business.
+5. Crear offline un trabajo con varios items, cerrar/reabrir Desktop, cambiarlo a `in_progress`, reconectar y comprobar UUID/snapshots en Web.
+6. Provocar `received → in_progress` en Desktop offline y `received → ready` en Web; comprobar que el outbox queda en conflicto y no pierde silenciosamente un estado.
+7. Verificar Dashboard/cola mobile y `ready → delivered` con un teléfono real.
 
-1. PWA crea un casamiento que cruza medianoche con Fotografía, Video y Cabina; Desktop recibe el bundle completo.
-2. Una reserva Web superpuesta del mismo Resource queda bloqueada; una contigua u otro Resource se acepta.
-3. Cancelar el Event libera la disponibilidad sin borrar la reserva.
-4. Un alquiler de Pantalla sin servicios se guarda y sincroniza.
-5. Owner/admin gestiona EventTypes/Resources; staff opera Events pero no configuración.
-6. Desktop crea offline mientras Web reserva el mismo recurso; al reconectar, Cloud conserva su reserva y Desktop muestra el conflicto local para editar/desactivar.
-7. Customer, Branch, EventType, Event o Resource de otro Business son rechazados.
+## Garantías y límites
 
-## Implementación
+Appointment != Event != PhotoJob != FrameJob. Product != PhotoService. El catálogo no altera precios históricos. Customer es obligatorio. Los totales usan centavos enteros y se derivan de items activos. No hay DELETE físico, pagos, archivos/fotos, notificaciones ni integración POS.
 
-`packages/domain/src/event.ts` define modelos y reglas. `packages/application/src/event.ts` contiene el puerto/casos de uso y `event-sync.ts` el ciclo incremental. `packages/features/src/events.tsx` implementa listado, ficha/editor, alta rápida de Customer, tipos, catálogo, disponibilidad y dashboard. Los adaptadores concretos están en `apps/desktop/src/*event*` y `apps/web/src/supabase-event-repository.ts`.
-
-SQLite 0010 almacena entidades, metadata local, outbox y cursores. Cloud `20261012000000_events_resources.sql` agrega tablas, reloj monotónico, FK compuestas, RLS y guards transaccionales con advisory locks. El orden Desktop respeta Customer antes de EventType/Resource/Event/items/reservas. Pull remoto no genera outbox. Conflictos de versión permiten elegir Desktop/Web; conflictos físicos conservan ambas reservas y requieren editar/desactivar la local.
-
-Event no es Appointment. Resource no es Product. No se agregaron pagos, señas, contratos, Marquetería ni otros módulos fuera de Sprint 9.
-
-## Verificación y deuda
-
-Ver `CURRENT_STATE.md` para resultados exactos. Typecheck, lint, 67 unit tests, regresión Python, build Web/Desktop, formato e instalador NSIS pasan. El SQL Cloud nuevo no se ejecutó contra PostgreSQL y el dry-run no produjo plan por el 403. Deuda conocida: prueba E2E/RLS real contra PostgreSQL, validación de carrera concurrente con dos sesiones reales, transacción/RPC opcional para guardar todo el bundle Web en una sola operación, búsqueda server-side al superar 500 filas, timezone IANA por Business y code-splitting por el warning de bundle.
+Los checks locales pasan: typecheck, lint, 74 tests, regresión Python completa, build, format, build Desktop y `git diff --check`. El instalador está en `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Ver `CURRENT_STATE.md` para resultados exactos y deuda técnica.

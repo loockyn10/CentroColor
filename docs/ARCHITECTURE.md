@@ -84,3 +84,11 @@ Cloud usa FK compuestas para Customer, Branch, EventType, Event y Resource dentr
 ## Marquetería — Sprint 10
 
 `packages/domain/src/framing.ts` contiene el cálculo puro y las invariantes de medidas, merma, markup y snapshots; `packages/application/src/framing.ts` define el puerto compartido. Desktop persiste los catálogos, configuración, cotizaciones, ítems y trabajos con SQLite; Web los consulta directamente en Supabase bajo RLS. Las cotizaciones se construyen a partir de catálogos, pero al guardarlas nunca vuelven a derivar precio de esos registros. `framing_sync_outbox` y `framing_sync_cursor` sincronizan `moulding → material → settings → quote → quote_item → job` después de Customer; cada push conserva UUID, usa comparación optimista y cada pull remoto evita crear outbox. Las divergencias quedan como conflicto con snapshot remoto; no existe overwrite silencioso.
+
+## Trabajos fotográficos — Sprint 11
+
+`packages/domain/src/photo.ts` define `PhotoService`, `PhotoJob`, `PhotoJobItem`, estados, prioridad, validaciones monetarias, total, atraso y orden de producción. `packages/application/src/photo.ts` contiene el puerto común y la construcción de bundles con snapshots. La feature React compartida ofrece catálogo, alta rápida, listado/cola, ficha operativa, edición básica y tarjeta de Dashboard; Desktop y Web inyectan adaptadores SQLite/Supabase distintos.
+
+Desktop escribe siempre en SQLite y sincroniza `PhotoService → PhotoJob → PhotoJobItem` después de Customer, Appointment y Event. `photo_sync_outbox` compacta cambios, conserva revisión local, error, versión y snapshot remoto; `photo_sync_cursor` pagina por `(updated_at,id)`. El push compara `cloud_updated_at`; una divergencia —incluida una transición de estado distinta— conserva el cambio local como conflicto. El pull usa `sync_origin='remote'` y no crea loops. UUID, snapshots y líneas inactivas convergen sin DELETE.
+
+Cloud usa un reloj monotónico por Business, FK compuestas hacia Branch, Customer, Appointment/Event opcionales, PhotoJob y PhotoService, y RLS. Owner/admin administra `PhotoService`; staff lo lee. Todo membership activo opera PhotoJobs e items. No se concede DELETE ni se usa `service_role`. `PhotoService` no reutiliza Product y el módulo no persiste archivos fotográficos.

@@ -1,38 +1,37 @@
 # Estado actual
 
-Sprint 9 Eventos + Recursos reservables implementado en código el 11 de octubre de 2026. Desktop y Web/PWA comparten modelo, casos de uso y pantallas. Desktop persiste en SQLite, opera offline y sincroniza con Cloud; Web usa Supabase online-first. **Las migraciones Cloud `20260925000000_inventory.sql`, `20261011000000_appointments.sql` y `20261012000000_events_resources.sql` están pendientes de aplicar**; no se hizo push real.
+Sprint 11 Trabajos / Pedidos fotográficos está implementado en código al 16 de octubre de 2026. Desktop y Web/PWA comparten dominio, contratos y pantallas; Desktop persiste en SQLite y sincroniza al recuperar sesión Cloud, mientras Web usa Supabase. No se ejecutó ningún push real ni SQL manual.
 
-Sprint 10 Marquetería está implementado en código: dominio puro, catálogos, configuración, cotizador, snapshots, presupuestos, conversión a trabajo, estados de producción y paridad Desktop/Web. SQLite 0011/0012 y Cloud `20261013000000`/`20261014000000` agregan las entidades, outbox/cursor y sincronización incremental. Desktop sincroniza Customer → moulding/material/settings → quote → quote_item → job; pull escribe con origen remoto y no genera outbox. Cloud usa reloj monotónico, comparación optimista y conserva el snapshot remoto al detectar una divergencia. No hubo push Cloud.
+Las migraciones Cloud posteriores a POS continúan pendientes según el último historial remoto confirmado del 21/9/2026: `20260925000000_inventory.sql`, `20261011000000_appointments.sql`, `20261012000000_events_resources.sql`, `20261013000000_framing.sql`, `20261014000000_framing_sync_rls.sql` y la nueva `20261015000000_photo_jobs.sql`. El estado remoto no pudo reconfirmarse: `supabase migration list` y `pnpm exec supabase db push --dry-run` respondieron `LegacyDbConfigLoginRoleStatusError`, `unexpected login role status 403`.
 
-## Hechos implementados
+## Sprint 11 implementado
 
-- `EventType` es configurable y activable/desactivable por owner/admin. No hay valores cerrados ni DELETE.
-- `Event` es independiente de Appointment, vincula Business, Branch, Customer y tipo opcional, admite cruce de medianoche y estados `inquiry`, `quoted`, `reserved`, `completed`, `cancelled`.
-- `EventServiceItem` conserva snapshot de nombre, descripción, cantidad y precio. `source_service_id` queda nullable para un catálogo futuro. Los importes se guardan en centavos enteros.
-- `Resource` representa una unidad física reservable, no Product ni stock. Owner/admin puede crear, editar y activar/desactivar.
-- `ResourceReservation` posee intervalo y precio propios. Los intervalos son semiabiertos: contiguos no solapan. Sólo Events `reserved` y `completed` bloquean; `cancelled` libera sin borrar historial y `quoted` no bloquea.
-- La ficha/editor permite buscar Customer, alta rápida, lugar, notas, servicios, recursos y cambios de estado. Un alquiler sin servicios es válido. Listado, búsqueda, filtros, próximos eventos, disponibilidad Día/Semana y dashboard existen en Desktop y Web con layout responsive.
-- Subtotal de servicios, subtotal de recursos y total general se derivan de líneas activas; no se modelaron pagos ni señas.
-- SQLite 0010 agrega las cinco entidades, validaciones, metadata local, outbox y cursores. Pull remoto usa `sync_origin='remote'` y no genera outbox.
-- Desktop sincroniza Customer antes de `EventType → Resource → Event → EventServiceItem → ResourceReservation`, conservando UUID y usando cursor `(updated_at,id)`, comparación optimista y retry idempotente.
-- Cloud `20261012000000_events_resources.sql` agrega FK compuestas, RLS, grants sin DELETE, reloj monotónico y validación transaccional de disponibilidad. Un advisory lock por Business+Resource serializa Web y sync Desktop; la transición del Event a estado bloqueante valida sus reservas en orden.
-- Si un Desktop offline no conocía una reserva Cloud, la autoridad final rechaza el push y el outbox conserva conflicto de disponibilidad y snapshot remoto. No hay override silencioso.
-- Appointment continúa separado de Event; Product/Inventory continúan separados de Resource. No se implementaron Marquetería, pagos, contratos, WhatsApp, proveedores/compras, galerías ni logística avanzada.
+- `PhotoService` es un catálogo configurable con tipo, dimensiones opcionales, precio en centavos y activación. Owner/admin administra; staff consulta. No es Product.
+- `PhotoJob` requiere Customer y Branch, conserva usuario creador, prioridad `normal`/`urgent`, fecha prometida, notas y referencias opcionales a Appointment/Event. Estados: `received`, `in_progress`, `ready`, `delivered`, `cancelled`; no existe DELETE.
+- `PhotoJobItem` admite PhotoService o concepto custom, congela nombre, dimensiones y precio, exige cantidad positiva y deriva `total_cents`. El total del trabajo suma items activos.
+- Nuevo trabajo permite buscar/crear Customer, agregar varios servicios, sobrescribir precio, crear línea personalizada y guardar con UUID estable. La ficha permite editar fecha, prioridad, notas, cantidad/precio de líneas, desactivar líneas y cambiar estados.
+- La cola responsive filtra activos/estado/urgentes/histórico, busca por cliente, teléfono, servicio y notas, y ordena urgente → atrasado → fecha prometida → creación. `ready` se destaca como “Listo para entregar”.
+- Dashboard muestra pendientes (`received` + `in_progress`), urgentes, listos y los próximos tres trabajos.
+- Desktop registra las tres entidades en SQLite mediante migración 0013, opera offline y conserva historial. Web usa el repositorio Supabase con la misma feature.
+- Sync incremental usa `photo_sync_outbox` y `photo_sync_cursor` en orden `PhotoService → PhotoJob → PhotoJobItem`, después de Customer/Appointment/Event. Pull remoto no genera outbox. La comparación optimista registra snapshot remoto y deja la fila local en conflicto ante una divergencia, incluidos cambios de estado concurrentes.
+- Cloud `20261015000000_photo_jobs.sql` incluye tablas, checks monetarios/dimensionales, FK compuestas Business-aware, índices, reloj monotónico, RLS y permisos sin DELETE/service_role.
+- Appointment/Event integration queda preparada mediante `source_appointment_id` y `source_event_id` y se muestra en detalle; no se agregó conversión automática ni se modificaron Agenda/Eventos.
 
 ## Verificación de esta sesión
 
-- `pnpm typecheck`: pasa en domain, UI, application, features, Web y Desktop.
+- `pnpm typecheck`: pasa en los seis paquetes/apps compilables.
 - `pnpm lint`: pasa.
-- `pnpm test`: 67 pruebas en 24 archivos, pasa. Sprint 9 cubre intervalos y cruce de medianoche, estados, totales, overlap/contiguas/recursos distintos, sync idempotente, pull y conflicto de disponibilidad.
-- La regresión Python completa pasa: Customer Sync, POS, POS Sync/FK Cloud, Inventory, Appointments SQLite/Cloud y Events SQLite/Cloud. `events_sqlite.py` cubre recurso activo/inactivo, alquiler puro, cancelación, aislamiento, Branch autorizada, outbox offline y pull sin loop; `events_cloud_sql.py` verifica FK, RLS, search path, locks, estados bloqueantes y ausencia de DELETE/service_role.
-- `pnpm build`: pasa para Web PWA y Desktop Vite. Mantiene warnings no bloqueantes por chunks mayores a 500 kB (Web 559.08 kB; Desktop 638.70 kB).
+- `pnpm test`: 74 pruebas en 28 archivos, pasa. Incluye dominio Photo y orquestador de sync.
+- Regresión Python completa: Customer Sync, POS, POS Sync/FK Cloud, Inventory, Appointments SQLite/Cloud, Events SQLite/Cloud y Photo SQLite/Cloud, pasa.
+- `pnpm build`: pasa. Warnings no bloqueantes por chunks mayores a 500 kB: Web 602.75 kB; Desktop 707.87 kB.
 - `pnpm format:check`: pasa.
-- `pnpm build:desktop`: pasa; genera `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Rust informa sólo el warning del linker al crear la import library.
-- `supabase migration list` y `pnpm exec supabase db push --dry-run`: fallan antes de consultar o planificar. Resultado exacto: `LegacyDbConfigLoginRoleStatusError`, `unexpected login role status 403`, porque la cuenta no tiene privilegios para ese endpoint. Por lo tanto no hubo lista remota ni plan de dry-run actualizado.
-- `git diff --check`: sin errores de whitespace; Git sólo avisa la conversión LF→CRLF propia del checkout Windows.
+- `pnpm build:desktop`: pasa tras permitir la descarga oficial de NSIS; genera `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Rust informa solo el warning del linker al crear la import library.
+- `git diff --check`: sin errores; solo avisos LF→CRLF del checkout Windows.
+- `pnpm exec supabase db push --dry-run`: falla antes de producir plan. Resultado exacto: `LegacyDbConfigLoginRoleStatusError`, `unexpected login role status 403: {"message":"Your account does not have the necessary privileges to access this endpoint. For more details, refer to our documentation https://supabase.com/docs/guides/platform/access-control"}`.
+- `pnpm exec supabase migration list`: falla con el mismo 403; no se inventa el estado remoto.
 
-No se ejecutó SQL manual, `supabase db push` real ni seed.
+## Límites y deuda
 
-## Límites y pendientes
+La migración Cloud no fue ejecutada ni validada contra PostgreSQL real. Falta probar RLS con owner/admin/staff, dos clientes reales y reconexión offline con conflicto de estado. El guardado Web del job y sus items no usa todavía una RPC transaccional; un fallo intermedio puede dejar el job sin todas sus líneas y requiere reabrir/corregir, por lo que conviene migrarlo a una operación bundle idempotente. Los conflictos Photo se conservan en outbox, pero todavía no tienen un panel de resolución específico como Customer/POS. La búsqueda Web filtra hasta 200 trabajos cargados; a mayor volumen conviene vista/RPC server-side. Customer detail no incorpora aún un bloque PhotoJobs. Appointment/Event tienen vínculo preparado, sin botón “Crear trabajo fotográfico”.
 
-La migración Cloud necesita aplicación administrativa y validación real con owner/admin/staff, RLS, concurrencia Web y reconexión Desktop. El guardado Web de un bundle se realiza en pasos idempotentes: si una operación intermedia falla, el Event queda recuperable pero puede requerir reabrir y completar líneas. La búsqueda Web enriquece y filtra hasta 500 Events por consulta; a mayor volumen conviene una vista/RPC server-side. La zona se presenta según el dispositivo, igual que Appointment; una operación multi-zona futura requiere `business_timezone` IANA. Los Events `completed` conservan el bloqueo histórico por decisión del sprint.
+No se implementaron almacenamiento/upload de fotos, galería, selección online, edición real, integración Lightroom/Photoshop, impresión/drivers, pagos/señas, facturación, WhatsApp/notificaciones, proveedores/compras, consumibles, integración PhotoJob→POS/Sale ni postproducción avanzada.

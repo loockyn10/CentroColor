@@ -131,3 +131,23 @@ export type {
   PendingFramingChange,
   FramingCursor,
 } from './framing-sync';
+export {
+  createPhotoService,
+  buildPhotoJob,
+  sortPhotoProductionQueue,
+} from './photo';
+export type {
+  PhotoRepository,
+  PhotoJobSummary,
+  PhotoJobBundle,
+  PhotoJobListQuery,
+} from './photo';
+export { syncPhotoEntities } from './photo-sync';
+export type {
+  PhotoSyncType,
+  PhotoSyncEntity,
+  PhotoSyncCursor,
+  PendingPhotoChange,
+  PhotoSyncLocalPort,
+  PhotoSyncCloudPort,
+} from './photo-sync';

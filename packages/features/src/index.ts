@@ -20,6 +20,12 @@ export {
   FrameJobsPage,
 } from './framing';
 export {
+  PhotoServicesPage,
+  NewPhotoJobPage,
+  PhotoJobsPage,
+  PhotoJobsDashboard,
+} from './photo';
+export {
   AuthStatePage,
   BusinessContextProvider,
   LoginPage,

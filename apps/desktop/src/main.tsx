@@ -6,6 +6,7 @@ import {
   syncAppointments,
   syncEventEntities,
   syncFramingEntities,
+  syncPhotoEntities,
   syncStockMovements,
   type BusinessContext,
 } from '@centrocolor/application';
@@ -30,6 +31,9 @@ import {
   FramingCatalogPage,
   NewFrameQuotePage,
   FrameJobsPage,
+  PhotoServicesPage,
+  NewPhotoJobPage,
+  PhotoJobsPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -80,6 +84,9 @@ import { CloudEventSyncAdapter } from './cloud-event-sync-adapter';
 import { SQLiteFramingSyncAdapter } from './sqlite-framing-sync-adapter';
 import { CloudFramingSyncAdapter } from './cloud-framing-sync-adapter';
 import { SQLiteFramingRepository } from './sqlite-framing-repository';
+import { SQLitePhotoRepository } from './sqlite-photo-repository';
+import { SQLitePhotoSyncAdapter } from './sqlite-photo-sync-adapter';
+import { CloudPhotoSyncAdapter } from './cloud-photo-sync-adapter';
 
 const customerRepository = new SQLiteCustomerRepository();
 const customerSyncLocal = new SQLiteCustomerSyncAdapter();
@@ -94,6 +101,8 @@ const eventRepository = new SQLiteEventRepository();
 const eventSyncLocal = new SQLiteEventSyncAdapter();
 const framingRepository = new SQLiteFramingRepository();
 const framingSyncLocal = new SQLiteFramingSyncAdapter();
+const photoRepository = new SQLitePhotoRepository();
+const photoSyncLocal = new SQLitePhotoSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
@@ -251,6 +260,18 @@ function App() {
           target.businessId,
           framingSyncLocal,
           cloudFraming,
+        );
+      const cloudPhoto = new CloudPhotoSyncAdapter();
+      for (const type of [
+        'photo_service',
+        'photo_job',
+        'photo_job_item',
+      ] as const)
+        await syncPhotoEntities(
+          type,
+          target.businessId,
+          photoSyncLocal,
+          cloudPhoto,
         );
       setSyncPhase('idle');
       setDataRefresh((value) => value + 1);
@@ -926,6 +947,7 @@ function App() {
           <HomePage
             appointmentRepository={appointmentRepository}
             eventRepository={eventRepository}
+            photoRepository={photoRepository}
             refreshToken={dataRefresh}
             onRevalidate={
               context.authorization === 'offline-authenticated'
@@ -998,6 +1020,34 @@ function App() {
             repository={framingRepository}
             kind="mouldings"
             onMutation={() => setDataRefresh((x) => x + 1)}
+          />
+        ) : activeId === 'new-photo-job' ? (
+          <NewPhotoJobPage
+            repository={photoRepository}
+            customerRepository={customerRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'photo-jobs' ? (
+          <PhotoJobsPage
+            repository={photoRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'photo-services' ? (
+          <PhotoServicesPage
+            repository={photoRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
           />
         ) : activeId === 'materials' ? (
           <FramingCatalogPage

@@ -1,21 +1,25 @@
 import type { AppointmentRepository } from '@centrocolor/application';
 import type { EventRepository } from '@centrocolor/application';
+import type { PhotoRepository } from '@centrocolor/application';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { TodayAppointments } from './appointments';
 import { UpcomingEvents } from './events';
+import { PhotoJobsDashboard } from './photo';
 
-const cards = ['Trabajos pendientes', 'Ventas de hoy'];
+const cards = ['Ventas de hoy'];
 
 export function HomePage({
   onRevalidate,
   appointmentRepository,
   eventRepository,
+  photoRepository,
   refreshToken,
 }: {
   onRevalidate?: () => void;
   appointmentRepository?: AppointmentRepository;
   eventRepository?: EventRepository;
+  photoRepository?: PhotoRepository;
   refreshToken?: number;
 }) {
   const context = useBusinessContext();
@@ -48,6 +52,12 @@ export function HomePage({
         {eventRepository && (
           <UpcomingEvents
             repository={eventRepository}
+            refreshToken={refreshToken}
+          />
+        )}
+        {photoRepository && (
+          <PhotoJobsDashboard
+            repository={photoRepository}
             refreshToken={refreshToken}
           />
         )}
