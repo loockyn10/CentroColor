@@ -47,7 +47,10 @@ export const getEnv = (name: string) => ENV[name];
 export type StoreState = {
   integrations: DriveIntegrationRow[];
   jobs: JobContextRow[];
-  links: (UploadLinkRow & { token_hash: string; created_by: string })[];
+  links: (UploadLinkRow & {
+    token_hash: string;
+    created_by: string | null;
+  })[];
   files: FileRow[];
   folders: Map<string, string>;
   refreshTokens: Map<string, string>;
@@ -78,6 +81,8 @@ const job = (
   business_id: businessId,
   status: 'received',
   file_intake_status: 'not_requested',
+  source_channel: 'manual',
+  is_draft: false,
   created_at: '2026-10-16T12:00:00Z',
   drive_folder_id: null,
   drive_edited_folder_id: null,
@@ -245,7 +250,10 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
       return (
         [...state.links]
           .filter(
-            (x) => x.business_id === businessId && x.photo_job_id === jobId,
+            (x) =>
+              x.business_id === businessId &&
+              x.photo_job_id === jobId &&
+              x.purpose === 'upload',
           )
           .sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null
       );
@@ -255,9 +263,10 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
       sequence += 1;
       const row = {
         ...link,
+        purpose: link.purpose ?? 'upload',
         id: `link-${sequence}`,
         revoked_at: null,
-        submitted_at: null,
+        submitted_at: link.submitted_at ?? null,
         created_at: new Date(
           Date.UTC(2026, 9, 17, 0, 0, sequence),
         ).toISOString(),
@@ -271,6 +280,7 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
         if (
           row.business_id === businessId &&
           row.photo_job_id === jobId &&
+          row.purpose === 'upload' &&
           row.id !== except &&
           !row.revoked_at
         )
@@ -420,7 +430,7 @@ export function createFakeDrive(
       const file = state.files.find((x) => x.drive_file_id === id);
       if (!file)
         throw new ApiError(
-          'Drive todavía no recibió el archivo completo.',
+          'El archivo todavía no llegó completo. Reintentá en unos segundos.',
           409,
           'drive_file_missing',
         );

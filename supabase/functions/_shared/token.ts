@@ -36,12 +36,35 @@ export async function validateUploadToken(
   if (typeof token !== 'string' || !TOKEN_PATTERN.test(token))
     throw new ApiError('Link inválido.', 404, 'link_invalid');
   const link = await store.getLinkByHash(await sha256Hex(token));
-  if (!link) throw new ApiError('Link inválido.', 404, 'link_invalid');
+  // A tracking link is read-only: it never authorizes a file mutation, whatever else is true.
+  if (!link || link.purpose !== 'upload')
+    throw new ApiError('Link inválido.', 404, 'link_invalid');
   const problem = uploadLinkError(
     link,
     options.now ?? Date.now(),
     options.allowSubmitted ?? false,
   );
+  if (problem)
+    throw new ApiError(problem.message, problem.status, problem.code);
+  return { link };
+}
+
+/**
+ * The tracking capability: resolves, like the upload one, to exactly one link → Business →
+ * PhotoJob, but only links issued for tracking are accepted. It can show the order status
+ * and nothing else; upload endpoints reject it and it rejects upload tokens.
+ */
+export async function validateTrackingToken(
+  store: PhotoIntakeStore,
+  token: unknown,
+  options: { now?: number } = {},
+): Promise<{ link: UploadLinkRow }> {
+  if (typeof token !== 'string' || !TOKEN_PATTERN.test(token))
+    throw new ApiError('Link inválido.', 404, 'link_invalid');
+  const link = await store.getLinkByHash(await sha256Hex(token));
+  if (!link || link.purpose !== 'tracking')
+    throw new ApiError('Link inválido.', 404, 'link_invalid');
+  const problem = uploadLinkError(link, options.now ?? Date.now(), true);
   if (problem)
     throw new ApiError(problem.message, problem.status, problem.code);
   return { link };

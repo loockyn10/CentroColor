@@ -2,21 +2,22 @@
 
 ## Punto de reanudación
 
-Sprint 13 está implementado y auditado. El 17/10/2026 se encontró y corrigió en código la causa raíz del error al generar el link (sin privilegios DML de `service_role` y un trigger de Sprint 11 que hacía fallar todo UPDATE de PhotoJob/PhotoJobItem/PhotoService); ver CURRENT_STATE. **Nada de esto está aplicado ni desplegado todavía**: no se ejecutó `db push` real ni `functions deploy`.
+Sprint 14 está implementado y verificado en código (ver `docs/CURRENT_STATE.md`). **Nada está aplicado ni desplegado**: no se ejecutó `db push` real ni `functions deploy`, no hay credenciales de Meta cargadas y la Web no se publicó. El dry-run del 17/10/2026 propone únicamente `20261018000000_public_photo_orders.sql` y `20261018010000_whatsapp_notifications.sql` (la estabilización de Sprint 13 ya figura aplicada en el remoto).
 
-Arquitectura Edge actual: handlers con dependencias inyectadas en `supabase/functions/_shared`, entrypoints de una línea, errores curados con código y `requestId`, store de una sola capa, test de contrato de grants y `stack.e2e.test.ts` (ver ARCHITECTURE y decisiones 67–72). Los puntos principales siguen en `packages/domain/src/photo.ts`, `packages/features/src/photo.tsx`, `apps/web/src/photo-upload-client.ts`, `photo-upload-portal.tsx`, `photo-file-intake.ts` y `edge-functions.ts`, las migraciones `20261017000000`, `20261017010000` y `20261017020000`, y SQLite `0015_photo_file_intake.sql`.
+Puntos de entrada: pedido público en `apps/web/src/public-order/`, funciones en `supabase/functions/_shared/public-order-*.ts`, `whatsapp-*.ts`, `meta-client.ts`, migraciones `20261018*`, SQLite `0016_public_orders.sql`, puertos en `packages/application/src/whatsapp.ts` y UI administrativa en `packages/features/src/photo.tsx`. Arquitectura y decisiones 73–84 en `docs/ARCHITECTURE.md` y `docs/DECISIONS.md`.
 
 ## Próximos pasos (en este orden)
 
-1. `pnpm exec supabase db push --dry-run` debe listar sólo `20261017020000_photo_file_intake_stabilization.sql`; luego `db push`. Comandos exactos en `docs/GOOGLE_DRIVE_SETUP.md`.
-2. Redesplegar `photo-file-admin`, `photo-upload-context`, `photo-upload-session`, `photo-upload-finalize` y `photo-upload-submit`. No redesplegar `google-drive-oauth-callback` ni `google-drive-oauth-start`.
-3. Publicar la Web en Vercel (helper de errores, portal con reintentos, link visible).
-4. Verificar `PHOTO_UPLOAD_MAX_BYTES` (su digest no coincide con 2147483648): reconfigurarlo si es necesario.
-5. Prueba manual única: owner abre un Job con un servicio que requiere archivos → Generar link → abrir el link en una ventana privada → subir 2-3 fotos (una de ≥ 10 MB) a Laboratorio y una a Edición → “Terminé”. Comprobar carpetas, `PEDIDO.txt`, colas de Producción y que el Job quede `submitted`. Opcional antes: `node scripts/smoke-photo-intake.mjs --link <url> --upload`.
-6. Pruebas posteriores: link expirado/revocado/enviado, Drive desconectado, refresh revocado, corte de una carga grande y reintento, Desktop (sync de metadata, sin binarios en SQLite).
+1. `pnpm exec supabase db push --dry-run` (debe listar sólo las dos migraciones `20261018*`) y, con autorización, `db push`. Comandos exactos: `docs/PUBLIC_ORDERS_SETUP.md`.
+2. Desplegar las funciones nuevas y **redesplegar** `photo-file-admin`, `photo-upload-context`, `photo-upload-session`, `photo-upload-finalize` y `photo-upload-submit` (obligatorio: ahora distinguen links de subida y de seguimiento y aplican los límites del pedido anónimo). No tocar las dos de OAuth.
+3. Publicar la Web en Vercel (sin variables nuevas).
+4. En Fotografía → Servicios marcar los tamaños públicos (Laboratorio + requiere archivos → «Mostrar en la web» + «Aceptar pedidos directos») y revisar la lista en `/imprimir`.
+5. Prueba humo de pedido (checklist de `docs/PUBLIC_ORDERS_SETUP.md`) desde un celular real, incluyendo una foto grande y el PUT resumable de Google desde el navegador.
+6. WhatsApp (opcional, no bloquea los pedidos): seguir `docs/WHATSAPP_SETUP.md` (app Meta, número, token permanente, plantilla `pedido_listo` de utilidad, secrets, secretos de Vault para `pg_net`, webhook) y probar con un número verificado: Listo → aviso → reintento → reenvío. Probar también Desktop: marcar Listo sin conexión, sincronizar y ver que sale un solo aviso.
+7. Definir la política de abandono (retención) y, si se desea, programar `cc_public_order_mark_abandoned`.
 
 ## Garantías y límites
 
-Drive es almacenamiento primario; Supabase/SQLite sólo guardan metadata. El token real no se persiste, las credenciales Google son server-side y el portal no tiene acceso anon a tablas. Finalize verifica Drive y submit/manifest son idempotentes. Reabrir exige regenerar link y revoca el anterior.
+El navegador nunca decide un precio ni autoriza con un UUID; los borradores no llegan a Producción ni a Desktop; el aviso de «listo» es único por trabajo y depende del estado Cloud; el token de WhatsApp sólo vive en Vault. Drive sigue siendo la autoridad binaria (Sprint 13) y Desktop sigue sin binarios.
 
-No se implementaron login/galería/entrega digital del cliente, IA, Google Photos, Photoshop/Lightroom, impresión automática, WhatsApp/email, Event/FrameJob files ni duplicación en Supabase Storage. Ver CURRENT_STATE para checks y deuda.
+No se implementaron: editor Polaroid/plantillas/recorte/texto, Gmail (sólo se reserva `future_gmail`), galería, IA, impresión automática, pago online, envíos, promociones, cuentas de clientes, marketing por WhatsApp ni emails automáticos. Deuda técnica y no verificado contra servicios reales: ver `docs/CURRENT_STATE.md`.

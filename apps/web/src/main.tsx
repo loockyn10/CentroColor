@@ -45,6 +45,13 @@ import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repositor
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
 import { PhotoUploadPortal } from './photo-upload-portal';
 import { DriveSettingsPage } from './drive-settings';
+import { WhatsAppSettingsPage } from './whatsapp-settings';
+import {
+  SupabasePhotoJobNotificationRepository,
+  SupabaseWhatsAppAdminRepository,
+} from './whatsapp-admin';
+import { PrintOrderPortal } from './public-order/print-order-portal';
+import { OrderTracking } from './public-order/order-tracking';
 
 function PosSection({
   section,
@@ -116,6 +123,12 @@ function App() {
   );
   const [fileIntakeRepository] = useState(
     () => new SupabasePhotoFileIntakeAdminRepository(),
+  );
+  const [whatsappRepository] = useState(
+    () => new SupabaseWhatsAppAdminRepository(),
+  );
+  const [notificationRepository] = useState(
+    () => new SupabasePhotoJobNotificationRepository(),
   );
 
   useEffect(() => {
@@ -302,6 +315,7 @@ function App() {
             repository={photoRepository}
             paymentRepository={paymentRepository}
             fileIntakeRepository={fileIntakeRepository}
+            notificationRepository={notificationRepository}
             initialJobId={openPhotoJobId}
           />
         ) : activeId === 'photo-production' ? (
@@ -326,10 +340,16 @@ function App() {
         ) : activeId === 'stock' ? (
           <PosSection section="stock" />
         ) : activeId === 'settings' ? (
-          <DriveSettingsPage
-            context={context}
-            repository={fileIntakeRepository}
-          />
+          <>
+            <DriveSettingsPage
+              context={context}
+              repository={fileIntakeRepository}
+            />
+            <WhatsAppSettingsPage
+              context={context}
+              repository={whatsappRepository}
+            />
+          </>
         ) : (
           <PlaceholderPage title={title} />
         )}
@@ -338,13 +358,21 @@ function App() {
   );
 }
 
-const portalMatch = window.location.pathname.match(/^\/enviar\/([^/]+)\/?$/);
+/**
+ * Public routes are resolved before the administrative gate: no login, no Business
+ * context, no navigation. Everything else is the authenticated application.
+ */
+function publicRoute(pathname: string) {
+  const upload = pathname.match(/^\/enviar\/([^/]+)\/?$/);
+  if (upload)
+    return <PhotoUploadPortal token={decodeURIComponent(upload[1]!)} />;
+  if (/^\/imprimir\/?$/.test(pathname)) return <PrintOrderPortal />;
+  const tracking = pathname.match(/^\/pedido\/([^/]+)\/?$/);
+  if (tracking)
+    return <OrderTracking token={decodeURIComponent(tracking[1]!)} />;
+  return null;
+}
+
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {portalMatch ? (
-      <PhotoUploadPortal token={decodeURIComponent(portalMatch[1])} />
-    ) : (
-      <App />
-    )}
-  </StrictMode>,
+  <StrictMode>{publicRoute(window.location.pathname) ?? <App />}</StrictMode>,
 );

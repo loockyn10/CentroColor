@@ -427,3 +427,24 @@ verify_jwt = false
 
 [functions.photo-upload-submit]
 verify_jwt = false
+
+# Sprint 14: public order portal (anonymous; each endpoint authorizes by capability token).
+[functions.public-photo-catalog]
+verify_jwt = false
+
+[functions.public-photo-order-start]
+verify_jwt = false
+
+[functions.public-photo-order-submit]
+verify_jwt = false
+
+[functions.public-photo-order-track]
+verify_jwt = false
+
+# WhatsApp: the dispatcher is woken by the database with a shared secret, Meta's webhook is
+# authenticated by its HMAC signature; admin and send validate the caller's JWT themselves.
+[functions.whatsapp-dispatch]
+verify_jwt = false
+
+[functions.whatsapp-webhook]
+verify_jwt = false

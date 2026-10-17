@@ -145,6 +145,18 @@ export type {
   GoogleDriveIntegrationView,
   UploadLinkView,
 } from './photo';
+export { describeNotificationFailure, latestNotification } from './whatsapp';
+export type {
+  NotificationState,
+  PhotoJobNotification,
+  PhotoJobNotificationRepository,
+  PhotoJobWhatsAppStatus,
+  WhatsAppAdminRepository,
+  WhatsAppConfigureInput,
+  WhatsAppIntegrationState,
+  WhatsAppIntegrationView,
+  WhatsAppTestResult,
+} from './whatsapp';
 export { syncPhotoEntities } from './photo-sync';
 export { syncPhotoFiles } from './photo-file-sync';
 export type {

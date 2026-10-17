@@ -30,6 +30,13 @@ export const photoJobFileStatuses = [
 ] as const;
 export type PhotoJobFileStatus = (typeof photoJobFileStatuses)[number];
 
+export const photoJobSourceChannels = [
+  'manual',
+  'public_web',
+  'future_gmail',
+] as const;
+export type PhotoJobSourceChannel = (typeof photoJobSourceChannels)[number];
+
 export const photoJobStatuses = [
   'received',
   'in_progress',
@@ -52,10 +59,35 @@ export interface PhotoService {
   defaultUnitPriceCents: number;
   workflowRoute: PhotoWorkflowRoute;
   requiresCustomerFiles: boolean;
+  /** Published on the public price list (/imprimir). */
+  isPublic: boolean;
+  /** Customer-facing name; the administrative `name` is used when null. */
+  publicName: string | null;
+  publicDescription: string | null;
+  publicSortOrder: number;
+  /** Accepts direct self-service orders. Requires a public, lab, file-receiving service. */
+  publicOrderEnabled: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+export type PhotoServiceDetails = Pick<
+  PhotoService,
+  | 'code'
+  | 'name'
+  | 'serviceType'
+  | 'widthMm'
+  | 'heightMm'
+  | 'defaultUnitPriceCents'
+  | 'workflowRoute'
+  | 'requiresCustomerFiles'
+  | 'isPublic'
+  | 'publicName'
+  | 'publicDescription'
+  | 'publicSortOrder'
+  | 'publicOrderEnabled'
+>;
 
 export interface PhotoJob {
   id: string;
@@ -71,6 +103,8 @@ export interface PhotoJob {
   fileIntakeStatus: PhotoFileIntakeStatus;
   driveFolderId: string | null;
   driveEditedFolderId: string | null;
+  /** Where the job came from. Set by the server; clients never change it. */
+  sourceChannel: PhotoJobSourceChannel;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -145,19 +179,10 @@ export function photoJobTotal(items: PhotoJobItem[]) {
     throw new Error('El total está fuera de rango.');
   return total;
 }
-export function normalizePhotoServiceDetails(
-  value: Pick<
-    PhotoService,
-    | 'code'
-    | 'name'
-    | 'serviceType'
-    | 'widthMm'
-    | 'heightMm'
-    | 'defaultUnitPriceCents'
-    | 'workflowRoute'
-    | 'requiresCustomerFiles'
-  >,
-) {
+export const PUBLIC_NAME_MAX = 80;
+export const PUBLIC_DESCRIPTION_MAX = 300;
+
+export function normalizePhotoServiceDetails(value: PhotoServiceDetails) {
   if (!(photoServiceTypes as readonly string[]).includes(value.serviceType))
     throw new Error('Tipo de servicio fotográfico inválido.');
   if (!(photoWorkflowRoutes as readonly string[]).includes(value.workflowRoute))
@@ -166,6 +191,28 @@ export function normalizePhotoServiceDetails(
   const heightMm = optionalMillimeters(value.heightMm);
   if ((widthMm === null) !== (heightMm === null))
     throw new Error('Completá ambas dimensiones o dejá ambas vacías.');
+  const publicName = value.publicName?.trim().replace(/\s+/g, ' ') || null;
+  if (publicName && publicName.length > PUBLIC_NAME_MAX)
+    throw new Error(
+      `El nombre público admite hasta ${PUBLIC_NAME_MAX} caracteres.`,
+    );
+  const publicDescription = value.publicDescription?.trim() || null;
+  if (publicDescription && publicDescription.length > PUBLIC_DESCRIPTION_MAX)
+    throw new Error(
+      `La descripción pública admite hasta ${PUBLIC_DESCRIPTION_MAX} caracteres.`,
+    );
+  if (!Number.isInteger(value.publicSortOrder))
+    throw new Error('El orden público debe ser un número entero.');
+  if (value.publicOrderEnabled) {
+    if (!value.isPublic)
+      throw new Error(
+        'Para recibir pedidos directos el servicio debe ser público.',
+      );
+    if (value.workflowRoute !== 'lab' || !value.requiresCustomerFiles)
+      throw new Error(
+        'Los pedidos directos requieren flujo Laboratorio y archivos del cliente.',
+      );
+  }
   return {
     code: value.code?.trim() || null,
     name: cleanName(value.name, 'El nombre del servicio es obligatorio.'),
@@ -175,6 +222,11 @@ export function normalizePhotoServiceDetails(
     defaultUnitPriceCents: requireCents(value.defaultUnitPriceCents),
     workflowRoute: value.workflowRoute,
     requiresCustomerFiles: value.requiresCustomerFiles,
+    isPublic: value.isPublic,
+    publicName,
+    publicDescription,
+    publicSortOrder: value.publicSortOrder,
+    publicOrderEnabled: value.publicOrderEnabled,
   };
 }
 
@@ -209,6 +261,29 @@ export function sanitizeDriveName(value: string) {
     .replace(/^[. ]+|[. ]+$/g, '');
   return (cleaned || 'Sin nombre').slice(0, 120);
 }
+/** The name a customer sees on the public price list. */
+export const photoServicePublicName = (
+  service: Pick<PhotoService, 'name' | 'publicName'>,
+) => service.publicName?.trim() || service.name;
+
+/**
+ * Public tracking states. A customer sees four steps; the internal state machine keeps
+ * its own names. `cancelled` is shown as such so a cancelled order never looks pending.
+ */
+export const publicOrderStatusLabels: Record<PhotoJobStatus, string> = {
+  received: 'Pedido recibido',
+  in_progress: 'En preparación',
+  ready: 'Listo para retirar',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado',
+};
+export function publicOrderStatusLabel(status: string) {
+  return (
+    (publicOrderStatusLabels as Record<string, string>)[status] ??
+    'Pedido recibido'
+  );
+}
+
 export function isPhotoServiceSelectable(
   service: Pick<PhotoService, 'isActive'>,
 ) {

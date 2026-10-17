@@ -157,6 +157,8 @@ function serviceAccess(source: string) {
 
 const sources = [
   '_shared/store-supabase.ts',
+  '_shared/public-order-store-supabase.ts',
+  '_shared/whatsapp-store-supabase.ts',
   'google-drive-oauth-start/index.ts',
   'google-drive-oauth-callback/index.ts',
 ].map((file) => ({
@@ -178,6 +180,10 @@ describe('service_role: lo que las Edge Functions usan está otorgado en migraci
       'photo_job_upload_links',
       'photo_job_files',
       'photo_job_drive_folders',
+      // Sprint 14
+      'public_photo_orders',
+      'whatsapp_integrations',
+      'outbound_notifications',
     ])
       expect(tables, table).toContain(table);
   });
@@ -240,6 +246,66 @@ describe('service_role: lo que las Edge Functions usan está otorgado en migraci
         ),
       );
     }
+  });
+});
+
+describe('RLS y exposición de las tablas de Sprint 14', () => {
+  const tables = [
+    'public_photo_orders',
+    'whatsapp_integrations',
+    'outbound_notifications',
+    'outbound_notification_events',
+  ];
+
+  it('todas tienen RLS habilitado y anon no tiene ningún privilegio', () => {
+    const anon = grantsFor('anon');
+    for (const table of tables) {
+      expect(allSql, table).toMatch(
+        new RegExp(
+          `alter\\s+table\\s+public\\.${table}\\s+enable\\s+row\\s+level\\s+security`,
+          'i',
+        ),
+      );
+      expect(anon.has(table), table).toBe(false);
+    }
+  });
+
+  it('authenticated sólo puede leer (nunca INSERT/UPDATE/DELETE); la integración WhatsApp no es legible', () => {
+    const authenticated = grantsFor('authenticated');
+    for (const table of tables) {
+      const grant = authenticated.get(table);
+      if (!grant) continue;
+      expect(grant.insert, table).toBe(false);
+      expect(grant.update, table).toBe(false);
+      expect(grant.delete, table).toBe(false);
+    }
+    expect(authenticated.has('whatsapp_integrations')).toBe(false);
+  });
+
+  it('service_role no tiene DELETE sobre ninguna (notificaciones y pedidos son históricos)', () => {
+    for (const table of tables)
+      expect(serviceGrants.get(table)?.delete ?? false, table).toBe(false);
+  });
+
+  it('service_role no puede escribir directo pedidos ni notificaciones: sólo a través de funciones auditadas', () => {
+    for (const table of [
+      'public_photo_orders',
+      'outbound_notifications',
+      'outbound_notification_events',
+    ]) {
+      const grant = serviceGrants.get(table)!;
+      expect(grant.insert, table).toBe(false);
+      expect(grant.update, table).toBe(false);
+    }
+  });
+
+  it('ninguna tabla guarda un token: la integración sólo referencia un secreto de Vault', () => {
+    const create =
+      /create\s+table\s+public\.whatsapp_integrations\s*\(([\s\S]*?)\n\);/i.exec(
+        allSql,
+      )![1]!;
+    expect(create).toMatch(/access_token_secret_id\s+uuid/);
+    expect(create).not.toMatch(/\b(access_)?token\s+text/i);
   });
 });
 

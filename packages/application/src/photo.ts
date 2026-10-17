@@ -10,6 +10,7 @@ import {
   type PhotoJobStatus,
   type PhotoJobFile,
   type PhotoService,
+  type PhotoServiceDetails,
 } from '@centrocolor/domain';
 
 export interface PhotoJobSummary {
@@ -41,17 +42,7 @@ export interface PhotoRepository {
   updateService(
     businessId: string,
     id: string,
-    value: Pick<
-      PhotoService,
-      | 'code'
-      | 'name'
-      | 'serviceType'
-      | 'widthMm'
-      | 'heightMm'
-      | 'defaultUnitPriceCents'
-      | 'workflowRoute'
-      | 'requiresCustomerFiles'
-    >,
+    value: PhotoServiceDetails,
   ): Promise<PhotoService>;
   setServiceActive(
     businessId: string,
@@ -106,17 +97,7 @@ export interface PhotoFileIntakeAdminRepository {
 export function createPhotoService(
   repository: PhotoRepository,
   businessId: string,
-  details: Pick<
-    PhotoService,
-    | 'code'
-    | 'name'
-    | 'serviceType'
-    | 'widthMm'
-    | 'heightMm'
-    | 'defaultUnitPriceCents'
-    | 'workflowRoute'
-    | 'requiresCustomerFiles'
-  >,
+  details: PhotoServiceDetails,
   now = new Date().toISOString(),
 ) {
   return repository.createService({
@@ -175,6 +156,7 @@ export function buildPhotoJob(
     fileIntakeStatus: input.fileIntakeStatus ?? 'not_requested',
     driveFolderId: null,
     driveEditedFolderId: null,
+    sourceChannel: 'manual',
     createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,

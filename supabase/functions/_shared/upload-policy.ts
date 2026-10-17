@@ -57,6 +57,22 @@ export const ALLOWED_EXTENSIONS = new Set([
 ]);
 
 export const MAX_FILES_PER_JOB = 500;
+/**
+ * Anonymous self-service orders are held to tighter limits than staff-issued links: only the
+ * photo formats phones and cameras produce (no RAW), 100 MiB per file and 200 files per order,
+ * so an unauthenticated visitor cannot fill the shop's Drive.
+ */
+export const PUBLIC_ORDER_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'heic',
+  'heif',
+  'tif',
+  'tiff',
+]);
+export const PUBLIC_ORDER_MAX_FILE_BYTES = 100 * 1024 * 1024;
+export const PUBLIC_ORDER_MAX_FILES = 200;
 /** Sequential uploads of many small photos are legitimate; this only stops runaway clients. */
 export const MAX_SESSIONS_PER_MINUTE = 120;
 export const MAX_COPIES = 9999;
@@ -71,10 +87,10 @@ export function driveFileError(
   expected: { folderId: string; sizeBytes: number; storedFilename?: string },
 ) {
   if (remote.trashed || !remote.parents?.includes(expected.folderId))
-    return 'Drive no confirmó la carpeta esperada.';
+    return 'No pudimos confirmar la carpeta de destino de la foto. Reintentá.';
   if (Number(remote.size) !== expected.sizeBytes)
-    return 'Drive no confirmó el tamaño completo del archivo.';
+    return 'No pudimos confirmar el tamaño completo de la foto. Reintentá.';
   if (expected.storedFilename && remote.name !== expected.storedFilename)
-    return 'Drive no confirmó el nombre esperado del archivo.';
+    return 'No pudimos confirmar el nombre de la foto. Reintentá.';
   return null;
 }

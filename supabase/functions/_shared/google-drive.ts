@@ -434,7 +434,7 @@ export function createDriveGateway(deps: DriveGatewayDeps): DriveGateway {
       } catch (cause) {
         if (cause instanceof ApiError && cause.code === 'drive_not_found')
           throw new ApiError(
-            'Drive todavía no recibió el archivo completo.',
+            'El archivo todavía no llegó completo. Reintentá en unos segundos.',
             409,
             'drive_file_missing',
           );

@@ -110,3 +110,89 @@ export function googleCredentials(getEnv: GetEnv): GoogleCredentials {
   if (problems.length) throw configurationError(problems);
   return { clientId: clientId!, clientSecret: clientSecret! };
 }
+
+export type PublicOrderSettings = {
+  businessSlug: string;
+  trackingDays: number;
+};
+export const DEFAULT_PUBLIC_BUSINESS_SLUG = 'centrocolor';
+export const DEFAULT_TRACKING_DAYS = 180;
+export const MAX_TRACKING_DAYS = 730;
+
+/**
+ * Which Business answers /imprimir (the public site belongs to a single Business) and for
+ * how long a confirmed order can be tracked. Both have safe defaults.
+ */
+export function publicOrderSettings(getEnv: GetEnv): PublicOrderSettings {
+  const problems: ConfigProblem[] = [];
+  let businessSlug = DEFAULT_PUBLIC_BUSINESS_SLUG;
+  const rawSlug = present(getEnv, 'PUBLIC_ORDER_BUSINESS_SLUG');
+  if (rawSlug !== undefined) {
+    if (/^[a-z0-9]+(-[a-z0-9]+)*$/.test(rawSlug)) businessSlug = rawSlug;
+    else
+      problems.push({ name: 'PUBLIC_ORDER_BUSINESS_SLUG', reason: 'invalid' });
+  }
+  let trackingDays = DEFAULT_TRACKING_DAYS;
+  const rawDays = present(getEnv, 'PUBLIC_ORDER_TRACKING_DAYS');
+  if (rawDays !== undefined) {
+    const parsed = Number(rawDays);
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_TRACKING_DAYS)
+      problems.push({
+        name: 'PUBLIC_ORDER_TRACKING_DAYS',
+        reason: 'invalid',
+      });
+    else trackingDays = parsed;
+  }
+  if (problems.length) throw configurationError(problems);
+  return { businessSlug, trackingDays };
+}
+
+export type WhatsAppSettings = {
+  graphApiVersion: string;
+  dropArgentineNine: boolean;
+};
+export const DEFAULT_GRAPH_API_VERSION = 'v22.0';
+
+export function whatsAppSettings(getEnv: GetEnv): WhatsAppSettings {
+  const rawVersion = present(getEnv, 'WHATSAPP_GRAPH_API_VERSION');
+  if (rawVersion !== undefined && !/^v\d{1,2}\.\d$/.test(rawVersion))
+    throw configurationError([
+      { name: 'WHATSAPP_GRAPH_API_VERSION', reason: 'invalid' },
+    ]);
+  return {
+    graphApiVersion: rawVersion ?? DEFAULT_GRAPH_API_VERSION,
+    dropArgentineNine:
+      present(getEnv, 'WHATSAPP_AR_DROP_MOBILE_NINE')?.toLowerCase() === 'true',
+  };
+}
+
+/** Secret shared with the pg_net trigger that wakes the sender. At least 24 characters. */
+export function dispatchSecret(getEnv: GetEnv) {
+  const value = present(getEnv, 'WHATSAPP_DISPATCH_SECRET');
+  if (!value || value.length < 24 || isPlaceholder(value))
+    throw configurationError([
+      {
+        name: 'WHATSAPP_DISPATCH_SECRET',
+        reason: value ? 'invalid' : 'missing',
+      },
+    ]);
+  return value;
+}
+
+export function webhookSettings(getEnv: GetEnv) {
+  const appSecret = present(getEnv, 'WHATSAPP_APP_SECRET');
+  const verifyToken = present(getEnv, 'WHATSAPP_WEBHOOK_VERIFY_TOKEN');
+  const problems: ConfigProblem[] = [];
+  if (!appSecret || isPlaceholder(appSecret))
+    problems.push({
+      name: 'WHATSAPP_APP_SECRET',
+      reason: appSecret ? 'invalid' : 'missing',
+    });
+  if (!verifyToken || verifyToken.length < 16 || isPlaceholder(verifyToken))
+    problems.push({
+      name: 'WHATSAPP_WEBHOOK_VERIFY_TOKEN',
+      reason: verifyToken ? 'invalid' : 'missing',
+    });
+  if (problems.length) throw configurationError(problems);
+  return { appSecret: appSecret!, verifyToken: verifyToken! };
+}

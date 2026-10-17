@@ -23,6 +23,11 @@ const service = (x: any): PhotoService => ({
   defaultUnitPriceCents: x.default_unit_price_cents,
   workflowRoute: x.workflow_route,
   requiresCustomerFiles: x.requires_customer_files === 1,
+  isPublic: x.is_public === 1,
+  publicName: x.public_name ?? null,
+  publicDescription: x.public_description ?? null,
+  publicSortOrder: x.public_sort_order ?? 0,
+  publicOrderEnabled: x.public_order_enabled === 1,
   isActive: x.is_active === 1,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
@@ -41,6 +46,7 @@ const job = (x: any): PhotoJob => ({
   fileIntakeStatus: x.file_intake_status,
   driveFolderId: x.drive_folder_id,
   driveEditedFolderId: x.drive_edited_folder_id,
+  sourceChannel: x.source_channel ?? 'manual',
   createdBy: x.created_by,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
@@ -95,7 +101,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
     await (
       await db()
     ).execute(
-      `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,workflow_route,requires_customer_files,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,workflow_route,requires_customer_files,is_public,public_name,public_description,public_sort_order,public_order_enabled,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         x.id,
         x.businessId,
@@ -107,6 +113,11 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.defaultUnitPriceCents,
         x.workflowRoute,
         x.requiresCustomerFiles ? 1 : 0,
+        x.isPublic ? 1 : 0,
+        x.publicName,
+        x.publicDescription,
+        x.publicSortOrder,
+        x.publicOrderEnabled ? 1 : 0,
         x.isActive ? 1 : 0,
         x.createdAt,
         x.updatedAt,
@@ -118,7 +129,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
     await (
       await db()
     ).execute(
-      `UPDATE photo_services SET code=?,name=?,service_type=?,width_mm=?,height_mm=?,default_unit_price_cents=?,workflow_route=?,requires_customer_files=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
+      `UPDATE photo_services SET code=?,name=?,service_type=?,width_mm=?,height_mm=?,default_unit_price_cents=?,workflow_route=?,requires_customer_files=?,is_public=?,public_name=?,public_description=?,public_sort_order=?,public_order_enabled=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
       [
         x.code,
         x.name,
@@ -128,6 +139,11 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.defaultUnitPriceCents,
         x.workflowRoute,
         x.requiresCustomerFiles ? 1 : 0,
+        x.isPublic ? 1 : 0,
+        x.publicName,
+        x.publicDescription,
+        x.publicSortOrder,
+        x.publicOrderEnabled ? 1 : 0,
         new Date().toISOString(),
         b,
         id,

@@ -31,6 +31,9 @@ python tests/work_payments_sqlite.py
 python tests/work_payments_cloud_sql.py
 python tests/photo_file_intake_sqlite.py
 python tests/photo_file_intake_cloud_sql.py
+python tests/public_orders_sqlite.py
+python tests/public_orders_cloud_sql.py
+python tests/whatsapp_cloud_sql.py
 pnpm exec supabase db push --dry-run
 ```
 
@@ -45,3 +48,5 @@ Vite incorpora las variables `VITE_` al bundle **durante el build**. En Vercel d
 Las migraciones Cloud y el seed local están en `supabase/`. Consultar `supabase/README.md` para validar con Docker y vincular/aplicar al proyecto remoto sin guardar secretos. El seed no se envía al remoto con `db push` normal.
 
 La puesta en marcha de OAuth, Vault, Edge Functions y el portal de archivos de Sprint 13 está detallada en `docs/GOOGLE_DRIVE_SETUP.md`. Los secretos Google nunca se configuran en `VITE_` ni en Vercel.
+
+Sprint 14 (pedidos públicos `/imprimir`, seguimiento `/pedido/:token` y avisos por WhatsApp): puesta en marcha en `docs/PUBLIC_ORDERS_SETUP.md` y `docs/WHATSAPP_SETUP.md`. `pnpm test` ejecuta las migraciones reales en PGlite (PostgreSQL embebido), sin Docker. El token de WhatsApp se guarda sólo en Supabase Vault; nunca en `VITE_`, Vercel, SQLite ni el repositorio.

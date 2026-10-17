@@ -27,6 +27,11 @@ const payload = (t: PhotoSyncType, x: any) =>
         default_unit_price_cents: x.defaultUnitPriceCents,
         workflow_route: x.workflowRoute,
         requires_customer_files: x.requiresCustomerFiles,
+        is_public: x.isPublic,
+        public_name: x.publicName,
+        public_description: x.publicDescription,
+        public_sort_order: x.publicSortOrder,
+        public_order_enabled: x.publicOrderEnabled,
         is_active: x.isActive,
         created_at: x.createdAt,
       }
@@ -81,6 +86,11 @@ const decode = (t: PhotoSyncType, r: any): any => {
         defaultUnitPriceCents: r.default_unit_price_cents,
         workflowRoute: r.workflow_route,
         requiresCustomerFiles: r.requires_customer_files,
+        isPublic: r.is_public ?? false,
+        publicName: r.public_name ?? null,
+        publicDescription: r.public_description ?? null,
+        publicSortOrder: r.public_sort_order ?? 0,
+        publicOrderEnabled: r.public_order_enabled ?? false,
         isActive: r.is_active,
       }
     : t === 'photo_job'
@@ -97,6 +107,7 @@ const decode = (t: PhotoSyncType, r: any): any => {
           fileIntakeStatus: r.file_intake_status,
           driveFolderId: r.drive_folder_id,
           driveEditedFolderId: r.drive_edited_folder_id,
+          sourceChannel: r.source_channel ?? 'manual',
           createdBy: r.created_by,
         }
       : {

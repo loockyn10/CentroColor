@@ -10,15 +10,7 @@ export const serviceClient = () =>
     { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
-/**
- * Admin authentication, in this order and nothing else before it:
- * 1. JWT from the caller (authenticated/RLS client, never the service role);
- * 2. auth user resolved from that JWT;
- * 3. active business_memberships row read under RLS;
- * 4. role must be owner/admin for the requested Business.
- * The service-role client is created by the caller only after this resolves.
- */
-export async function authenticateAdmin(request: Request, businessId: string) {
+async function resolveMembership(request: Request, businessId: string) {
   const authorization = request.headers.get('Authorization');
   if (!authorization)
     throw new ApiError('Autorización requerida.', 401, 'unauthorized');
@@ -45,8 +37,33 @@ export async function authenticateAdmin(request: Request, businessId: string) {
     .maybeSingle();
   if (membershipError)
     throw new DatabaseError('business_memberships.get', membershipError);
+  return { user, membership };
+}
+
+/**
+ * Admin authentication, in this order and nothing else before it:
+ * 1. JWT from the caller (authenticated/RLS client, never the service role);
+ * 2. auth user resolved from that JWT;
+ * 3. active business_memberships row read under RLS;
+ * 4. role must be owner/admin for the requested Business.
+ * The service-role client is created by the caller only after this resolves.
+ */
+export async function authenticateAdmin(request: Request, businessId: string) {
+  const { user, membership } = await resolveMembership(request, businessId);
   assertBusinessAdmin(user.id, businessId, membership);
   return { user, membership: membership! };
+}
+
+/** Same chain, but any active member (owner, admin or staff) of the Business is accepted. */
+export async function authenticateMember(request: Request, businessId: string) {
+  const { user, membership } = await resolveMembership(request, businessId);
+  if (
+    !membership ||
+    !membership.is_active ||
+    membership.business_id !== businessId
+  )
+    throw new ApiError('No tenés acceso a este negocio.', 403, 'forbidden');
+  return { user, membership };
 }
 
 export async function requireAdmin(request: Request, businessId: string) {

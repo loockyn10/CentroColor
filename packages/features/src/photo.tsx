@@ -5,8 +5,13 @@ import {
   createPhotoService,
   searchCustomers,
   sortPhotoProductionQueue,
+  describeNotificationFailure,
+  latestNotification,
   type CustomerRepository,
   type PhotoJobBundle,
+  type PhotoJobNotification,
+  type PhotoJobNotificationRepository,
+  type PhotoJobWhatsAppStatus,
   type PhotoJobSummary,
   type PhotoRepository,
   type PhotoFileIntakeAdminRepository,
@@ -66,6 +71,98 @@ const intakeLabel = {
   submitted: 'Archivos recibidos',
 } as const;
 
+const noticeStatusLabel: Record<PhotoJobNotification['status'], string> = {
+  pending: 'Enviando aviso…',
+  sending: 'Enviando aviso…',
+  sent: '✓ Aviso enviado',
+  delivered: '✓ Aviso entregado',
+  read: '✓ Aviso leído',
+  failed: '⚠ No pudo enviarse',
+};
+
+function OriginBadge({ channel }: { channel: string }) {
+  return channel === 'public_web' ? (
+    <b className="photo-origin" title="Pedido hecho por el cliente en la web">
+      ORIGEN: WEB
+    </b>
+  ) : null;
+}
+
+function WhatsAppNoticePanel({
+  jobStatus,
+  value,
+  busy,
+  onRetry,
+  onResend,
+}: {
+  jobStatus: PhotoJobStatus;
+  value: PhotoJobWhatsAppStatus;
+  busy: boolean;
+  onRetry: (notice: PhotoJobNotification) => void;
+  onResend: () => void;
+}) {
+  const latest = latestNotification(value.notifications);
+  if (!value.consent)
+    return (
+      <section className="whatsapp-panel">
+        <h3>WHATSAPP</h3>
+        <p>El cliente no pidió avisos por WhatsApp.</p>
+      </section>
+    );
+  const delivered =
+    latest && ['sent', 'delivered', 'read'].includes(latest.status);
+  return (
+    <section
+      className={`whatsapp-panel ${latest?.status === 'failed' ? 'whatsapp-failed' : ''}`}
+    >
+      <h3>WHATSAPP</h3>
+      <p>{value.consent.phone}</p>
+      {!latest && (
+        <p>
+          {jobStatus === 'ready'
+            ? 'El aviso quedó pendiente de envío.'
+            : 'Se avisará automáticamente cuando el trabajo esté listo.'}
+        </p>
+      )}
+      {latest && (
+        <p className="whatsapp-state">
+          <strong>{noticeStatusLabel[latest.status]}</strong>
+          {latest.sentAt &&
+            ` · ${new Date(latest.sentAt).toLocaleString('es-AR')}`}
+        </p>
+      )}
+      {latest?.status === 'failed' && (
+        <>
+          <p className="whatsapp-error">
+            {describeNotificationFailure(latest)}
+          </p>
+          <button type="button" disabled={busy} onClick={() => onRetry(latest)}>
+            Reintentar
+          </button>
+        </>
+      )}
+      {delivered && jobStatus === 'ready' && (
+        <button type="button" disabled={busy} onClick={onResend}>
+          Reenviar aviso
+        </button>
+      )}
+      {value.notifications.length > 1 && (
+        <ul className="whatsapp-history">
+          {value.notifications.map((notice) => (
+            <li key={notice.id}>
+              {notice.triggerKind === 'manual_resend'
+                ? 'Reenvío'
+                : 'Automático'}{' '}
+              · {noticeStatusLabel[notice.status].replace(/^[✓⚠] /, '')} ·{' '}
+              {new Date(notice.createdAt).toLocaleString('es-AR')}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export function PhotoServicesPage({
   repository,
   onMutation,
@@ -87,7 +184,12 @@ export function PhotoServicesPage({
     [height, setHeight] = useState(''),
     [price, setPrice] = useState('0'),
     [workflowRoute, setWorkflowRoute] = useState<PhotoWorkflowRoute>('none'),
-    [requiresFiles, setRequiresFiles] = useState(false);
+    [requiresFiles, setRequiresFiles] = useState(false),
+    [isPublic, setIsPublic] = useState(false),
+    [publicName, setPublicName] = useState(''),
+    [publicDescription, setPublicDescription] = useState(''),
+    [publicSortOrder, setPublicSortOrder] = useState('0'),
+    [publicOrder, setPublicOrder] = useState(false);
   const load = () =>
     repository
       .listServices(c.businessId, true)
@@ -106,6 +208,11 @@ export function PhotoServicesPage({
     setPrice(String(x.defaultUnitPriceCents / 100));
     setWorkflowRoute(x.workflowRoute);
     setRequiresFiles(x.requiresCustomerFiles);
+    setIsPublic(x.isPublic);
+    setPublicName(x.publicName ?? '');
+    setPublicDescription(x.publicDescription ?? '');
+    setPublicSortOrder(String(x.publicSortOrder));
+    setPublicOrder(x.publicOrderEnabled);
   }
   function clear() {
     setEditing(null);
@@ -117,6 +224,11 @@ export function PhotoServicesPage({
     setPrice('0');
     setWorkflowRoute('none');
     setRequiresFiles(false);
+    setIsPublic(false);
+    setPublicName('');
+    setPublicDescription('');
+    setPublicSortOrder('0');
+    setPublicOrder(false);
   }
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -136,6 +248,11 @@ export function PhotoServicesPage({
         ),
         workflowRoute,
         requiresCustomerFiles: requiresFiles,
+        isPublic,
+        publicName: publicName || null,
+        publicDescription: publicDescription || null,
+        publicSortOrder: Number(publicSortOrder || 0),
+        publicOrderEnabled: publicOrder,
       });
       if (editing)
         await repository.updateService(c.businessId, editing.id, details);
@@ -239,6 +356,60 @@ export function PhotoServicesPage({
               />
               Requiere archivos del cliente
             </label>
+            <fieldset className="photo-public-fields">
+              <legend>Catálogo público (/imprimir)</legend>
+              <label className="photo-checkbox">
+                <input
+                  type="checkbox"
+                  checked={isPublic}
+                  onChange={(e) => {
+                    setIsPublic(e.target.checked);
+                    if (!e.target.checked) setPublicOrder(false);
+                  }}
+                />
+                Mostrar en la web
+              </label>
+              <label className="photo-checkbox">
+                <input
+                  type="checkbox"
+                  checked={publicOrder}
+                  disabled={
+                    !isPublic || workflowRoute !== 'lab' || !requiresFiles
+                  }
+                  onChange={(e) => setPublicOrder(e.target.checked)}
+                />
+                Aceptar pedidos directos
+              </label>
+              <small>
+                Los pedidos directos requieren flujo Laboratorio y archivos del
+                cliente. El precio publicado es el precio unitario de arriba.
+              </small>
+              <label>
+                Nombre público
+                <input
+                  maxLength={80}
+                  placeholder={name || 'Ej.: 10x15'}
+                  value={publicName}
+                  onChange={(e) => setPublicName(e.target.value)}
+                />
+              </label>
+              <label>
+                Descripción pública
+                <input
+                  maxLength={300}
+                  value={publicDescription}
+                  onChange={(e) => setPublicDescription(e.target.value)}
+                />
+              </label>
+              <label>
+                Orden en la lista
+                <input
+                  inputMode="numeric"
+                  value={publicSortOrder}
+                  onChange={(e) => setPublicSortOrder(e.target.value)}
+                />
+              </label>
+            </fieldset>
             <div>
               <button className="customer-primary" type="submit">
                 {editing ? 'Guardar cambios' : 'Crear servicio'}
@@ -275,6 +446,13 @@ export function PhotoServicesPage({
                 : 'sin carga del cliente'}
             </span>
             <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
+            {x.isPublic && (
+              <span className="photo-web-tag">
+                {x.publicOrderEnabled
+                  ? `Web · pedido directo${x.publicName ? ` · «${x.publicName}»` : ''}`
+                  : 'Web · sólo lista de precios'}
+              </span>
+            )}
             {canEdit && (
               <div>
                 <button onClick={() => select(x)}>Editar</button>
@@ -648,6 +826,7 @@ export function PhotoJobsPage({
   repository,
   paymentRepository,
   fileIntakeRepository,
+  notificationRepository,
   onMutation,
   refreshToken,
   initialJobId,
@@ -655,6 +834,8 @@ export function PhotoJobsPage({
   repository: PhotoRepository;
   paymentRepository: WorkPaymentRepository;
   fileIntakeRepository?: PhotoFileIntakeAdminRepository;
+  /** Web only: WhatsApp notices are sent by the Cloud, so Desktop has no repository. */
+  notificationRepository?: PhotoJobNotificationRepository;
   onMutation?: () => void;
   refreshToken?: number;
   initialJobId?: string | null;
@@ -675,7 +856,21 @@ export function PhotoJobsPage({
     [filter, setFilter] = useState('active'),
     [query, setQuery] = useState(''),
     [message, setMessage] = useState<string | null>(null),
-    [uploadLink, setUploadLink] = useState<UploadLinkView | null>(null);
+    [uploadLink, setUploadLink] = useState<UploadLinkView | null>(null),
+    [whatsapp, setWhatsapp] = useState<PhotoJobWhatsAppStatus | null>(null),
+    [whatsappBusy, setWhatsappBusy] = useState(false);
+  const loadWhatsapp = async (jobId: string, channel: string) => {
+    if (!notificationRepository || channel !== 'public_web') {
+      setWhatsapp(null);
+      return;
+    }
+    try {
+      setWhatsapp(await notificationRepository.getStatus(c.businessId, jobId));
+    } catch (e) {
+      setWhatsapp(null);
+      setMessage(errorText(e));
+    }
+  };
   const load = () => {
     const statuses =
       filter === 'active'
@@ -702,6 +897,7 @@ export function PhotoJobsPage({
     try {
       const bundle = await repository.getJob(c.businessId, id);
       setSelected(bundle);
+      void loadWhatsapp(id, bundle?.job.sourceChannel ?? 'manual');
       setUploadLink(
         fileIntakeRepository && c.role !== 'staff'
           ? await fileIntakeRepository.getUploadLink(id)
@@ -814,8 +1010,26 @@ export function PhotoJobsPage({
       setSelected(await repository.getJob(c.businessId, selected.job.id));
       load();
       onMutation?.();
+      if (next === 'ready' && selected.job.sourceChannel === 'public_web') {
+        // The notice is queued by the database the moment the job becomes ready; this only
+        // asks the Cloud to deliver it now. A failure never undoes the status change.
+        await notificationRepository?.wake(c.businessId, selected.job.id);
+        await loadWhatsapp(selected.job.id, selected.job.sourceChannel);
+      }
     } catch (e) {
       setMessage(errorText(e));
+    }
+  }
+  async function noticeAction(work: () => Promise<unknown>) {
+    if (!selected) return;
+    setWhatsappBusy(true);
+    try {
+      await work();
+    } catch (e) {
+      setMessage(errorText(e));
+    } finally {
+      await loadWhatsapp(selected.job.id, selected.job.sourceChannel);
+      setWhatsappBusy(false);
     }
   }
   return (
@@ -860,6 +1074,7 @@ export function PhotoJobsPage({
                   <b className="photo-urgent">URGENTE</b>
                 )}
                 {overdue && <b className="photo-overdue">ATRASADO</b>}
+                <OriginBadge channel={x.job.sourceChannel} />
                 <strong>{x.customerName}</strong>
                 <span>{x.itemSummary || 'Sin ítems activos'}</span>
                 <span>
@@ -892,6 +1107,7 @@ export function PhotoJobsPage({
             {isPhotoJobOverdue(selected.job) && (
               <b className="photo-overdue">ATRASADO</b>
             )}
+            <OriginBadge channel={selected.job.sourceChannel} />
             <dl>
               <dt>Fecha ingreso</dt>
               <dd>
@@ -1105,6 +1321,32 @@ export function PhotoJobsPage({
                   <small>Google Drive requiere conexión.</small>
                 )}
             </section>
+            {selected.job.sourceChannel === 'public_web' &&
+              (whatsapp && notificationRepository ? (
+                <WhatsAppNoticePanel
+                  jobStatus={selected.job.status}
+                  value={whatsapp}
+                  busy={whatsappBusy}
+                  onRetry={(notice) =>
+                    void noticeAction(() =>
+                      notificationRepository.retry(c.businessId, notice.id),
+                    )
+                  }
+                  onResend={() =>
+                    void noticeAction(() =>
+                      notificationRepository.resend(
+                        c.businessId,
+                        selected.job.id,
+                      ),
+                    )
+                  }
+                />
+              ) : !notificationRepository ? (
+                <small className="whatsapp-panel">
+                  El aviso por WhatsApp lo envía la nube cuando este cambio se
+                  sincroniza; no hace falta hacer nada en este equipo.
+                </small>
+              ) : null)}
             <h3>
               TOTAL{' '}
               {money(
@@ -1303,6 +1545,7 @@ export function PhotoProductionPage({
                 {isPhotoJobOverdue(row.bundle.job) && (
                   <b className="photo-overdue">ATRASADO</b>
                 )}
+                <OriginBadge channel={row.bundle.job.sourceChannel} />
                 <strong>{row.bundle.customerName}</strong>
                 <span>{row.item.serviceNameSnapshot}</span>
               </div>

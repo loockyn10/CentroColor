@@ -39,6 +39,9 @@ export type JobItemRow = {
 };
 
 export type JobContextRow = JobRow & {
+  source_channel: 'manual' | 'public_web' | 'future_gmail';
+  /** Public self-service order not confirmed yet: invisible to every client role. */
+  is_draft: boolean;
   created_at: string;
   drive_folder_id: string | null;
   drive_edited_folder_id: string | null;
@@ -47,8 +50,12 @@ export type JobContextRow = JobRow & {
   items: JobItemRow[];
 };
 
+export type LinkPurpose = 'upload' | 'tracking';
+
 export type UploadLinkRow = {
   id: string;
+  /** `upload` mutates files; `tracking` can only read the order status. */
+  purpose: LinkPurpose;
   business_id: string;
   photo_job_id: string;
   expires_at: string | null;
@@ -61,8 +68,12 @@ export type NewUploadLink = {
   business_id: string;
   photo_job_id: string;
   token_hash: string;
-  created_by: string;
+  /** Null for links issued to anonymous customers. */
+  created_by: string | null;
   expires_at: string;
+  purpose?: LinkPurpose;
+  /** Tracking links are born closed to uploads. */
+  submitted_at?: string | null;
 };
 
 export type FileRow = {
@@ -130,11 +141,13 @@ export interface PhotoIntakeStore {
 
   // Upload links.
   getLinkByHash(tokenHash: string): Promise<UploadLinkRow | null>;
+  /** Latest `upload` link (tracking links are never offered to the admin as upload links). */
   getLatestLink(
     businessId: string,
     jobId: string,
   ): Promise<UploadLinkRow | null>;
   insertLink(link: NewUploadLink): Promise<UploadLinkRow>;
+  /** Revokes active `upload` links only: tracking links must survive an upload re-issue. */
   revokeActiveLinks(
     businessId: string,
     jobId: string,

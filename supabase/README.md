@@ -30,3 +30,7 @@ Web guarda el token de sesión en `localStorage` del origen mediante el SDK de S
 ## Sprint 13 — Google Drive
 
 `migrations/20261017000000_photo_file_intake.sql` agrega integración Drive/Vault, links públicos hasheados y metadata de archivos sin binarios. Las siete Edge Functions viven en `functions/`. La configuración exacta y los comandos de secrets/deploy están en `../docs/GOOGLE_DRIVE_SETUP.md`. El dry-run y el deploy remoto no requieren Docker.
+
+## Sprint 14 — Pedidos públicos y WhatsApp
+
+`migrations/20261018000000_public_photo_orders.sql` agrega el catálogo público sobre PhotoService, `source_channel`/`is_draft` en PhotoJob (borradores invisibles por RLS), `public_photo_orders`, el propósito de los links y las funciones transaccionales de inicio/confirmación/abandono. `migrations/20261018010000_whatsapp_notifications.sql` agrega la integración (token en Vault), `outbound_notifications` con su auditoría, el trigger idempotente de `ready` y las operaciones del emisor. Funciones nuevas: `public-photo-catalog`, `public-photo-order-start`, `public-photo-order-submit`, `public-photo-order-track`, `whatsapp-admin`, `whatsapp-send`, `whatsapp-dispatch` y `whatsapp-webhook`. Detalle y comandos en `../docs/PUBLIC_ORDERS_SETUP.md` y `../docs/WHATSAPP_SETUP.md`.

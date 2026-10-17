@@ -85,6 +85,12 @@ export {
   photoJobFileStatuses,
   photoJobStatuses,
   photoJobPriorities,
+  photoJobSourceChannels,
+  PUBLIC_NAME_MAX,
+  PUBLIC_DESCRIPTION_MAX,
+  photoServicePublicName,
+  publicOrderStatusLabel,
+  publicOrderStatusLabels,
   requirePhotoQuantity,
   photoItemTotal,
   photoJobTotal,
@@ -100,7 +106,9 @@ export {
 } from './photo';
 export type {
   PhotoService,
+  PhotoServiceDetails,
   PhotoServiceType,
+  PhotoJobSourceChannel,
   PhotoWorkflowRoute,
   PhotoFileIntakeStatus,
   PhotoJobFileStatus,

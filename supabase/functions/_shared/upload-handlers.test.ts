@@ -58,6 +58,7 @@ async function issueLink(
     id: `link-${state.links.length + 1}`,
     business_id: overrides.businessId ?? BUSINESS_A,
     photo_job_id: overrides.jobId ?? JOB_A,
+    purpose: 'upload',
     token_hash: await sha256(token),
     created_by: 'user-owner',
     expires_at:
@@ -580,7 +581,7 @@ describe('portal público — finalize y submit', () => {
     const ctx = await uploaded({
       getFileOverride: () =>
         new ApiError(
-          'Drive todavía no recibió el archivo completo.',
+          'El archivo todavía no llegó completo. Reintentá en unos segundos.',
           409,
           'drive_file_missing',
         ),

@@ -17,9 +17,13 @@ export type ServiceDb = {
   rpc(name: string, args: Record<string, unknown>): any;
 };
 
-type Result = { data: any; error: unknown; count?: number | null };
+export type Result = {
+  data: any;
+  error: unknown;
+  count?: number | null;
+};
 
-async function run(
+export async function run(
   operation: string,
   query: PromiseLike<Result>,
 ): Promise<Result> {
@@ -33,7 +37,7 @@ const unique = <T>(values: (T | null | undefined)[]) => [
 ];
 
 const linkColumns =
-  'id,business_id,photo_job_id,expires_at,revoked_at,submitted_at,created_at';
+  'id,business_id,photo_job_id,purpose,expires_at,revoked_at,submitted_at,created_at';
 
 export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
   return {
@@ -145,7 +149,7 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
         db
           .from('photo_jobs')
           .select(
-            'id,business_id,status,file_intake_status,created_at,customer_id,drive_folder_id,drive_edited_folder_id',
+            'id,business_id,status,file_intake_status,created_at,customer_id,drive_folder_id,drive_edited_folder_id,source_channel,is_draft',
           )
           .eq('business_id', businessId)
           .eq('id', jobId)
@@ -203,6 +207,8 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
         status: job.status,
         file_intake_status: job.file_intake_status,
         created_at: job.created_at,
+        source_channel: job.source_channel,
+        is_draft: job.is_draft,
         drive_folder_id: job.drive_folder_id ?? null,
         drive_edited_folder_id: job.drive_edited_folder_id ?? null,
         customer_name: String(customer.data?.full_name ?? ''),
@@ -254,6 +260,7 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
           .select(linkColumns)
           .eq('business_id', businessId)
           .eq('photo_job_id', jobId)
+          .eq('purpose', 'upload')
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
@@ -277,6 +284,7 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
         .update({ revoked_at: new Date().toISOString() })
         .eq('business_id', businessId)
         .eq('photo_job_id', jobId)
+        .eq('purpose', 'upload')
         .is('revoked_at', null);
       if (exceptLinkId) query = query.neq('id', exceptLinkId);
       await run('photo_job_upload_links.revoke', query);

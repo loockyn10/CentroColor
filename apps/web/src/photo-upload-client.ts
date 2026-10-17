@@ -75,12 +75,18 @@ export async function call<T = unknown>(
     throw new Error(NETWORK_MESSAGE);
   }
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.error)
-    throw new Error(
+  if (!response.ok || payload.error) {
+    // The server's code (e.g. `price_changed`, `link_expired`) lets callers react to it.
+    const failure = new Error(
       typeof payload.error === 'string'
         ? payload.error
         : 'No se pudo contactar a CentroColor.',
     );
+    throw Object.assign(failure, {
+      code: typeof payload.code === 'string' ? payload.code : null,
+      status: response.status,
+    });
+  }
   return payload as T;
 }
 

@@ -1,6 +1,15 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  resolve: {
+    // Edge Functions import `npm:libphonenumber-js@<version>/max` (native in Deno).
+    alias: [
+      {
+        find: /^npm:libphonenumber-js@[^/]+\/max$/,
+        replacement: 'libphonenumber-js/max',
+      },
+    ],
+  },
   test: {
     include: [
       'packages/**/*.test.ts',

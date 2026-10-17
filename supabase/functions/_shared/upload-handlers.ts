@@ -15,6 +15,9 @@ import {
   MAX_COPIES,
   MAX_FILES_PER_JOB,
   MAX_SESSIONS_PER_MINUTE,
+  PUBLIC_ORDER_EXTENSIONS,
+  PUBLIC_ORDER_MAX_FILES,
+  PUBLIC_ORDER_MAX_FILE_BYTES,
   driveFileError,
 } from './upload-policy.ts';
 
@@ -85,7 +88,7 @@ function publicFailure(cause: unknown, logger: Logger, requestId: string) {
   });
   return new ApiError(
     retryable
-      ? 'Google Drive está ocupado. Reintentá en unos minutos.'
+      ? 'El servicio de archivos está ocupado. Reintentá en unos minutos.'
       : SERVICE_UNAVAILABLE,
     503,
     'storage_unavailable',
@@ -96,9 +99,10 @@ function config(deps: PublicDeps): IntakeConfig {
   return intakeConfig(deps.getEnv);
 }
 
-async function run(
+/** Shared by every public (token-authorized) function: CORS, POST-only, curated errors. */
+export async function run(
   request: Request,
-  deps: PublicDeps,
+  deps: Pick<PublicDeps, 'logger'>,
   context: string,
   handler: (requestId: string, logger: Logger) => Promise<Response>,
 ) {
@@ -242,6 +246,21 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
       const job = assertJobOpen(
         await deps.store.getJobContext(link.business_id, link.photo_job_id),
       );
+      const publicOrder = job.source_channel === 'public_web';
+      if (publicOrder) {
+        if (!PUBLIC_ORDER_EXTENSIONS.has(extension))
+          throw new ApiError(
+            'Sólo se aceptan fotos JPG, PNG, HEIC o TIFF.',
+            400,
+            'invalid_format',
+          );
+        if (input.sizeBytes > PUBLIC_ORDER_MAX_FILE_BYTES)
+          throw new ApiError(
+            'La foto supera el tamaño máximo de 100 MB.',
+            400,
+            'invalid_size',
+          );
+      }
       let item: JobItemRow | null = null;
       for (const candidate of job.items)
         if (
@@ -266,7 +285,7 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
         'uploading',
         'uploaded',
       ]);
-      if (active >= MAX_FILES_PER_JOB)
+      if (active >= (publicOrder ? PUBLIC_ORDER_MAX_FILES : MAX_FILES_PER_JOB))
         throw new ApiError(
           'Este pedido alcanzó el máximo de archivos.',
           409,
@@ -493,6 +512,20 @@ export function handleUploadSubmit(request: Request, deps: PublicDeps) {
         now: (deps.now ?? Date.now)(),
       });
       if (link.submitted_at) return json({ ok: true, alreadySubmitted: true });
+      // A public self-service draft is confirmed by public-photo-order-submit, which
+      // reconciles quantities and releases the job. Closing it here would strand it as a
+      // hidden draft, so this endpoint refuses it. Reopened (already confirmed) web orders
+      // are not drafts and finish through the regular path.
+      const context = await deps.store.getJobContext(
+        link.business_id,
+        link.photo_job_id,
+      );
+      if (context?.is_draft)
+        throw new ApiError(
+          'Este pedido se confirma desde la página de pedidos.',
+          409,
+          'use_public_order_submit',
+        );
       const pending =
         (await deps.store.countFiles(link.business_id, link.photo_job_id, [
           'pending',

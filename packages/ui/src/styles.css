@@ -2051,3 +2051,67 @@ button {
   font: inherit;
   font-size: 0.85rem;
 }
+
+/* Sprint 14 · web order origin, public catalog fields and WhatsApp notices. */
+.photo-origin {
+  display: inline-block;
+  width: max-content;
+  padding: 0.18rem 0.45rem;
+  border-radius: 0.3rem;
+  background: #dcebf7;
+  color: #12456b;
+  font-size: 0.72rem;
+}
+.photo-web-tag {
+  color: #12456b;
+  font-weight: 650;
+}
+.photo-public-fields {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  border: 1px solid var(--line, #d8d4cc);
+  border-radius: 0.6rem;
+}
+.photo-public-fields legend {
+  padding: 0 0.4rem;
+  font-weight: 700;
+}
+.whatsapp-panel {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.8rem 0;
+  padding: 0.8rem;
+  border: 1px solid var(--line, #d8d4cc);
+  border-radius: 0.6rem;
+  background: var(--surface-soft, #f4f6f1);
+}
+.whatsapp-panel h3,
+.whatsapp-panel p {
+  margin: 0;
+}
+.whatsapp-failed {
+  border-color: #c9564b;
+  background: #fdf1ef;
+}
+.whatsapp-error {
+  color: #842c27;
+}
+.whatsapp-ok {
+  color: #1f6a43;
+}
+.whatsapp-history {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: #55655d;
+}
+.whatsapp-settings dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 1rem;
+}
+.whatsapp-settings dd {
+  margin: 0;
+}
