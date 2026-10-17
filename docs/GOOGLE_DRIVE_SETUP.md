@@ -24,12 +24,23 @@ pnpm exec supabase db push --dry-run
 pnpm exec supabase db push
 ```
 
-La migración Sprint 13 es `20261017000000_photo_file_intake.sql`; crea la extensión Vault si falta, tablas/RLS, metadata e integración. No ejecutar SQL manual equivalente.
+La migración Sprint 13 base es `20261017000000_photo_file_intake.sql`. Como ya está aplicada, no modificarla. El hardening OAuth posterior vive en `20261017010000_google_drive_oauth_hardening.sql`; agrega permisos server-only explícitos, `consumed_at` y finalización transaccional. Aplicar únicamente mediante migración, nunca con SQL manual equivalente.
+
+Para aplicar exclusivamente la corrección OAuth en el proyecto vinculado, ejecutar en este orden:
+
+```powershell
+pnpm exec supabase db push --dry-run
+pnpm exec supabase db push
+pnpm exec supabase functions deploy google-drive-oauth-start --use-api
+pnpm exec supabase functions deploy google-drive-oauth-callback --no-verify-jwt --use-api
+```
+
+El dry-run debe listar únicamente `20261017010000_google_drive_oauth_hardening.sql`. `--use-api` empaqueta en Supabase y no utiliza Docker.
 
 Configurar secrets de Edge Functions, sustituyendo los marcadores y usando la URL pública real del deployment Web:
 
 ```powershell
-pnpm exec supabase secrets set GOOGLE_DRIVE_CLIENT_ID="REEMPLAZAR" GOOGLE_DRIVE_CLIENT_SECRET="REEMPLAZAR" GOOGLE_DRIVE_REDIRECT_URI="https://rymxlyionglffbmammfu.supabase.co/functions/v1/google-drive-oauth-callback" WEB_APP_URL="https://REEMPLAZAR-DOMINIO-WEB" PUBLIC_WEB_URL="https://REEMPLAZAR-DOMINIO-WEB" PHOTO_UPLOAD_SIGNING_SECRET="REEMPLAZAR-POR-32-BYTES-ALEATORIOS-O-MAS" PHOTO_UPLOAD_LINK_DAYS="14" PHOTO_UPLOAD_MAX_BYTES="2147483648"
+pnpm exec supabase secrets set GOOGLE_DRIVE_CLIENT_ID="REEMPLAZAR" GOOGLE_DRIVE_CLIENT_SECRET="REEMPLAZAR" GOOGLE_DRIVE_REDIRECT_URI="https://rymxlyionglffbmammfu.supabase.co/functions/v1/google-drive-oauth-callback" WEB_APP_URL="https://centro-color-web.vercel.app" PUBLIC_WEB_URL="https://centro-color-web.vercel.app" PHOTO_UPLOAD_SIGNING_SECRET="REEMPLAZAR-POR-32-BYTES-ALEATORIOS-O-MAS" PHOTO_UPLOAD_LINK_DAYS="14" PHOTO_UPLOAD_MAX_BYTES="2147483648"
 ```
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` son secrets reservados que Supabase inyecta en Edge Functions; no duplicarlos ni exponerlos.

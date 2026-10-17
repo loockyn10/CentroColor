@@ -34,5 +34,5 @@ export async function requireAdmin(request: Request, businessId: string) {
   if (membershipError)
     throw new Error('No se pudo validar la membresía del Business.');
   assertBusinessAdmin(user.id, businessId, membership);
-  return { user, service: serviceClient() };
+  return { user, membership, service: serviceClient() };
 }

@@ -1,14 +1,37 @@
 import { corsHeaders, body, errorResponse, json } from '../_shared/http.ts';
-import { googleOAuthStateWindow } from '../_shared/google-oauth.ts';
+import { oauthRequestId, safeDatabaseError } from '../_shared/diagnostics.ts';
+import {
+  GOOGLE_DRIVE_SCOPE,
+  GoogleOAuthError,
+  googleOAuthConfig,
+  googleOAuthStateWindow,
+  requirePersistedGoogleOAuthState,
+} from '../_shared/google-oauth.ts';
 import { requireAdmin } from '../_shared/supabase.ts';
 import { randomToken, sha256 } from '../_shared/token.ts';
 
 Deno.serve(async (request) => {
+  const requestId = oauthRequestId();
   if (request.method === 'OPTIONS')
     return new Response('ok', { headers: corsHeaders });
   try {
     const { businessId } = await body<{ businessId: string }>(request);
-    const { user, service } = await requireAdmin(request, businessId);
+    console.info('google_drive_oauth_start_received', {
+      requestId,
+      authPresent: request.headers.has('Authorization'),
+      businessId,
+    });
+    const { user, membership, service } = await requireAdmin(
+      request,
+      businessId,
+    );
+    console.info('google_drive_oauth_start_authorized', {
+      requestId,
+      userId: user.id,
+      businessId,
+      membershipRole: membership.role,
+    });
+    const config = googleOAuthConfig((name) => Deno.env.get(name), false);
     const state = randomToken(32);
     const stateHash = await sha256(state);
     const nowMs = Date.now();
@@ -19,7 +42,7 @@ Deno.serve(async (request) => {
         state_hash: stateHash,
         business_id: businessId,
         user_id: user.id,
-        return_url: Deno.env.get('WEB_APP_URL')!,
+        return_url: config.webAppUrl,
         created_at: createdAt,
         expires_at: expiresAt,
       })
@@ -27,12 +50,14 @@ Deno.serve(async (request) => {
       .single();
     if (stateError || !persistedState) {
       console.error('google_drive_oauth_start_state_persist_failed', {
+        requestId,
         stateFingerprint: stateHash.slice(0, 12),
-        errorCode: stateError?.code ?? 'missing_row',
+        databaseError: safeDatabaseError(stateError),
       });
-      throw new Error('No se pudo crear la autorización OAuth.');
     }
+    requirePersistedGoogleOAuthState(persistedState, stateError);
     console.info('google_drive_oauth_start_state', {
+      requestId,
       stateCreated: true,
       stateFingerprint: stateHash.slice(0, 12),
       createdAt: persistedState.created_at,
@@ -40,10 +65,10 @@ Deno.serve(async (request) => {
       now: new Date(nowMs).toISOString(),
     });
     const query = new URLSearchParams({
-      client_id: Deno.env.get('GOOGLE_DRIVE_CLIENT_ID')!,
-      redirect_uri: Deno.env.get('GOOGLE_DRIVE_REDIRECT_URI')!,
+      client_id: config.clientId,
+      redirect_uri: config.redirectUri,
       response_type: 'code',
-      scope: 'https://www.googleapis.com/auth/drive.file',
+      scope: GOOGLE_DRIVE_SCOPE,
       access_type: 'offline',
       prompt: 'consent',
       include_granted_scopes: 'true',
@@ -54,6 +79,12 @@ Deno.serve(async (request) => {
     });
   } catch (cause) {
     if (cause instanceof Response) return cause;
+    console.error('google_drive_oauth_start_failed', {
+      requestId,
+      errorCode:
+        cause instanceof GoogleOAuthError ? cause.code : 'unexpected_error',
+      message: cause instanceof Error ? cause.message : 'Unknown error',
+    });
     return errorResponse(cause);
   }
 });

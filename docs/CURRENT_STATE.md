@@ -1,10 +1,10 @@
 # Estado actual
 
-Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado en código el 16 de octubre de 2026. No se ejecutó Docker, SQL manual, deploy de Edge Functions ni `db push` real.
+Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado en código el 16 de octubre de 2026. Según la validación runtime informada el 17 de octubre, las migraciones Sprint 12/13 y las Edge Functions ya están desplegadas; esta tarea no ejecutó `db push` real ni deploy.
 
 El 17 de octubre de 2026 se corrigió la autorización administrativa de las Edge Functions de Drive: el helper compartido ahora consulta `business_memberships` con el JWT autenticado y la RLS existente, valida explícitamente `user_id`, `business_id`, `is_active` y rol `owner`/`admin`, y recién después entrega el cliente service-role. Antes consultaba con el cliente service-role e ignoraba el error de PostgREST, convirtiéndolo incorrectamente en una membresía ausente. `staff`, otro Business y ausencia/inactividad continúan devolviendo 403. Requiere redesplegar `photo-file-admin` y `google-drive-oauth-start`.
 
-También el 17 de octubre se corrigió el falso vencimiento inmediato del OAuth state. La ventana ya era correcta (`Date.now() + 600.000 ms`), pero start ignoraba errores del INSERT y callback confundía fila ausente/error de lookup con expiración; además consumía la fila antes del intercambio con Google. Ahora start exige la fila persistida, registra tiempos y fingerprint seguro, callback distingue inexistente/usado de expirado, registra `differenceMs`, controla errores de integración y elimina el state sólo después de completar el flujo. Requiere redesplegar `google-drive-oauth-start` y `google-drive-oauth-callback`; no requiere migración.
+También el 17 de octubre se auditó y endureció de punta a punta el OAuth real. El 403 de start provenía del INSERT server-side en una tabla sin privilegios DML de `service_role` declarados explícitamente; el error DB era ocultado y el helper HTTP lo clasificaba como 403 sólo por contener “autorización”. La migración incremental `20261017010000_google_drive_oauth_hardening.sql` agrega esos grants, `consumed_at` y una RPC transaccional que persiste la integración y consume el state atómicamente. Start exige la fila persistida y callback valida config/tokens/Vault/Drive, reutiliza la carpeta raíz por ID/appProperties, limpia el secreto nuevo ante rollback y registra diagnósticos seguros. El dry-run remoto propone únicamente esa migración. Requiere aplicarla y redesplegar `google-drive-oauth-start` y `google-drive-oauth-callback`.
 
 ## Implementado
 
@@ -26,16 +26,16 @@ También el 17 de octubre se corrigió el falso vencimiento inmediato del OAuth 
 
 - `pnpm typecheck`: pasa.
 - `pnpm lint`: pasa.
-- `pnpm test`: 103 pruebas en 36 archivos, pasa. Incluye autorización explícita de owner/admin, lifecycle y unidades del OAuth state, además de token público, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
+- `pnpm test`: 116 pruebas en 37 archivos, pasa. Incluye autorización explícita de owner/admin, lifecycle/unidades/config/token exchange del OAuth state, límites Vault/integración y root folder idempotente, además de token público, Drive finalize, routing, copies, resumable retry y sync metadata.
 - Regresión Python completa: 14 scripts Customer/POS/Inventory/Agenda/Events/Photo/Payments/Sprint 13, pasa. SQLite 0015 aplica y el pull de metadata no genera outbox.
 - `pnpm build`: pasa. Warnings no bloqueantes por chunks >500 kB: Web 633.94 kB y Desktop 738.53 kB.
 - `pnpm build:desktop`: pasa; instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Sólo warning informativo del linker.
-- `pnpm exec supabase db push --dry-run`: pasa, no aplica nada y propone exactamente `20261016000000_work_payments.sql` y `20261017000000_photo_file_intake.sql`.
+- `pnpm exec supabase db push --dry-run`: pasa, no aplica nada y propone únicamente `20261017010000_google_drive_oauth_hardening.sql`.
 - `git diff --check`: sin errores; avisos LF→CRLF del checkout Windows.
 
 ## Pendiente operativo y deuda
 
-Las migraciones WorkPayment/Sprint 13 no están aplicadas. Faltan configurar Google Cloud/consent/client, secrets Supabase, desplegar siete Edge Functions y validar OAuth/Drive real con owner/admin/staff y teléfonos reales. Deno no está instalado en este equipo; las funciones se cubrieron con pruebas puras y auditoría estructural, pero su bundle/deploy real continúa pendiente.
+Falta aplicar la migración incremental de hardening, redesplegar start/callback y repetir la conexión OAuth real. Deno no está instalado en este equipo; las funciones se cubrieron con pruebas puras, mocks y auditoría estructural, pero el bundle/deploy real de esta corrección continúa pendiente.
 
 El rate limit implementado es por Job (30 sesiones/minuto y 500 archivos); una política distribuida por IP requeriría gateway externo. La reanudación conserva sesión mientras la pestaña sigue abierta; tras cerrar/recargar, el navegador no puede recuperar el `File` local y debe seleccionar/reintentar ese archivo. Los PhotoJobItem custom sin PhotoService no se ofrecen como destino porque no poseen configuración de workflow. No hay detección automática de archivos en `Editadas`, UI administrativa de rechazo/removal, Photoshop/Lightroom, login/galería/entrega digital de cliente, Event/FrameJob files, WhatsApp, email, IA ni impresión automática.
 
