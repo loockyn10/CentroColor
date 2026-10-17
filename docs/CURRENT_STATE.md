@@ -2,6 +2,8 @@
 
 Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado en código el 16 de octubre de 2026. No se ejecutó Docker, SQL manual, deploy de Edge Functions ni `db push` real.
 
+El 17 de octubre de 2026 se corrigió la autorización administrativa de las Edge Functions de Drive: el helper compartido ahora consulta `business_memberships` con el JWT autenticado y la RLS existente, valida explícitamente `user_id`, `business_id`, `is_active` y rol `owner`/`admin`, y recién después entrega el cliente service-role. Antes consultaba con el cliente service-role e ignoraba el error de PostgREST, convirtiéndolo incorrectamente en una membresía ausente. `staff`, otro Business y ausencia/inactividad continúan devolviendo 403. Requiere redesplegar `photo-file-admin` y `google-drive-oauth-start`.
+
 ## Implementado
 
 - `PhotoService` configura `workflow_route` (`none`, `lab`, `editing`, `other`) y `requires_customer_files`; owner/admin edita y staff consulta.
@@ -22,7 +24,7 @@ Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó imple
 
 - `pnpm typecheck`: pasa.
 - `pnpm lint`: pasa.
-- `pnpm test`: 90 pruebas en 35 archivos, pasa. Incluye token, expiración/revocación, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
+- `pnpm test`: 96 pruebas en 36 archivos, pasa. Incluye autorización explícita de owner/admin y rechazo 403 de staff, otro Business, otro usuario, membresía inactiva o ausente, además de token, expiración/revocación, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
 - Regresión Python completa: 14 scripts Customer/POS/Inventory/Agenda/Events/Photo/Payments/Sprint 13, pasa. SQLite 0015 aplica y el pull de metadata no genera outbox.
 - `pnpm build`: pasa. Warnings no bloqueantes por chunks >500 kB: Web 633.94 kB y Desktop 738.53 kB.
 - `pnpm build:desktop`: pasa; instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Sólo warning informativo del linker.

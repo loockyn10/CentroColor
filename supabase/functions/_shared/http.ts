@@ -17,9 +17,16 @@ export function errorResponse(
   fallback = 'No se pudo completar la operación.',
 ) {
   const message = cause instanceof Error ? cause.message : fallback;
-  const status = /inválido|expiró|revocado|cerrado|autoriz/i.test(message)
-    ? 403
-    : 400;
+  const explicitStatus =
+    typeof cause === 'object' &&
+    cause !== null &&
+    'status' in cause &&
+    typeof cause.status === 'number'
+      ? cause.status
+      : null;
+  const status =
+    explicitStatus ??
+    (/inválido|expiró|revocado|cerrado|autoriz/i.test(message) ? 403 : 400);
   return json({ error: message }, status);
 }
 

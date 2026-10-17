@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.8';
+import { assertBusinessAdmin } from './authorization.ts';
 
 export const serviceClient = () =>
   createClient(
@@ -23,15 +24,15 @@ export async function requireAdmin(request: Request, businessId: string) {
     error,
   } = await client.auth.getUser();
   if (error || !user) throw new Error('Autorización inválida.');
-  const service = serviceClient();
-  const { data: membership } = await service
+  const { data: membership, error: membershipError } = await client
     .from('business_memberships')
-    .select('role')
+    .select('business_id,user_id,role,is_active')
     .eq('business_id', businessId)
     .eq('user_id', user.id)
     .eq('is_active', true)
     .maybeSingle();
-  if (!membership || !['owner', 'admin'].includes(membership.role))
-    throw new Error('Se requiere rol owner o admin.');
-  return { user, service };
+  if (membershipError)
+    throw new Error('No se pudo validar la membresía del Business.');
+  assertBusinessAdmin(user.id, businessId, membership);
+  return { user, service: serviceClient() };
 }

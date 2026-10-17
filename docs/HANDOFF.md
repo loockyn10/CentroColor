@@ -4,6 +4,8 @@
 
 Sprint 13 quedó implementado y verificado localmente el 16/10/2026. No aplicar migraciones ni desplegar funciones sin autorización. El dry-run remoto propone, en orden, `20261016000000_work_payments.sql` y `20261017000000_photo_file_intake.sql`; ninguna fue aplicada por esta tarea.
 
+El 17/10/2026 se corrigió `_shared/supabase.ts`: la membresía administrativa se lee con el cliente autenticado/RLS, los errores de lectura ya no se confunden con ausencia de membresía y una política pura valida usuario, Business, estado y rol. Como el helper se empaqueta dentro de cada función, redesplegar exactamente `photo-file-admin` y `google-drive-oauth-start`; no cambiaron migraciones ni datos.
+
 Los puntos principales son `packages/domain/src/photo.ts`, `packages/features/src/photo.tsx`, `apps/web/src/photo-upload-portal.tsx`, `supabase/migrations/20261017000000_photo_file_intake.sql`, `supabase/functions/` y SQLite `0015_photo_file_intake.sql`. La guía operativa exacta está en `docs/GOOGLE_DRIVE_SETUP.md`.
 
 ## Próxima validación autorizada
