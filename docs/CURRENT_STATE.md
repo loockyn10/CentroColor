@@ -1,5 +1,11 @@
 # Estado actual
 
+## DESIGN-01 — Preview de rediseño UX/UI (17/10/2026, solo diseño)
+
+`apps/design-preview` contiene una preview aislada con datos simulados: portal `/imprimir` → `/imprimir/recibido` → `/pedido/demo` y 11 módulos del panel con identidad nueva (amarillo fotográfico, grafito, crema). **No se tocó `apps/web`, `apps/desktop` ni `packages/*`, ni Supabase/SQLite/funciones/migraciones.** Verificado: `pnpm lint`, `pnpm format:check`, `pnpm typecheck` y `pnpm --filter @centrocolor/design-preview build` pasan; recorrido visual en 390/768/1440/1920 px sin desbordes horizontales. Sin lector de pantalla ni dispositivos reales. Detalle, rutas, paleta y pendientes: `docs/DESIGN_PREVIEW.md`. **DESIGN-02 (17/10/2026)** simplificó la preview: portal con mínimo texto, panel más tranquilo (capa `calm.css`), Trabajos en Lista, Cobros como bandeja y Eventos como tablero; sin tocar producción. El Sprint 14 de abajo sigue siendo el estado de la aplicación real.
+
+---
+
 ## Sprint 14 — Pedidos públicos autoservicio + seguimiento + WhatsApp (17/10/2026)
 
 Implementado en código y verificado localmente. **Nada está aplicado ni desplegado**: falta `db push` de dos migraciones, `functions deploy`, la configuración de Meta y publicar la Web (ver `docs/HANDOFF.md`, `docs/PUBLIC_ORDERS_SETUP.md` y `docs/WHATSAPP_SETUP.md`).

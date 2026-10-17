@@ -21,3 +21,7 @@ Puntos de entrada: pedido público en `apps/web/src/public-order/`, funciones en
 El navegador nunca decide un precio ni autoriza con un UUID; los borradores no llegan a Producción ni a Desktop; el aviso de «listo» es único por trabajo y depende del estado Cloud; el token de WhatsApp sólo vive en Vault. Drive sigue siendo la autoridad binaria (Sprint 13) y Desktop sigue sin binarios.
 
 No se implementaron: editor Polaroid/plantillas/recorte/texto, Gmail (sólo se reserva `future_gmail`), galería, IA, impresión automática, pago online, envíos, promociones, cuentas de clientes, marketing por WhatsApp ni emails automáticos. Deuda técnica y no verificado contra servicios reales: ver `docs/CURRENT_STATE.md`.
+
+## Rama de diseño (DESIGN-01/02)
+
+Existe `apps/design-preview` (ver `docs/DESIGN_PREVIEW.md`): propuesta visual completa con mocks, **no aplicada** a la app. Antes de adoptarla hay que decidir tres cosas de producto/diseño: (1) el pago por transferencia previo a imprimir (hoy el pago es en el local), (2) el logo vectorial, (3) la regla de varilla de marquetería (`faceWidthMm`). Ejecutar con `pnpm --filter @centrocolor/design-preview dev`. DESIGN-02 (simplificación) está resumido en `docs/DESIGN_PREVIEW.md` §15; la capa de estilos del panel es `apps/design-preview/src/styles/calm.css`.

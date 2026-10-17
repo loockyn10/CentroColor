@@ -49,4 +49,6 @@ Las migraciones Cloud y el seed local están en `supabase/`. Consultar `supabase
 
 La puesta en marcha de OAuth, Vault, Edge Functions y el portal de archivos de Sprint 13 está detallada en `docs/GOOGLE_DRIVE_SETUP.md`. Los secretos Google nunca se configuran en `VITE_` ni en Vercel.
 
+DESIGN-01/02 (solo diseño, datos simulados, no toca la app real): `pnpm --filter @centrocolor/design-preview dev` abre la preview en `http://127.0.0.1:5180`; detalle en `docs/DESIGN_PREVIEW.md`.
+
 Sprint 14 (pedidos públicos `/imprimir`, seguimiento `/pedido/:token` y avisos por WhatsApp): puesta en marcha en `docs/PUBLIC_ORDERS_SETUP.md` y `docs/WHATSAPP_SETUP.md`. `pnpm test` ejecuta las migraciones reales en PGlite (PostgreSQL embebido), sin Docker. El token de WhatsApp se guarda sólo en Supabase Vault; nunca en `VITE_`, Vercel, SQLite ni el repositorio.

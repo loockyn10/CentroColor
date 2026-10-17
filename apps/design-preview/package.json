@@ -1,0 +1,23 @@
+{
+  "name": "@centrocolor/design-preview",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DESIGN-01: preview aislada con datos simulados. No usa Supabase, SQLite, auth ni APIs.",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "vite": "^6.0.0"
+  }
+}

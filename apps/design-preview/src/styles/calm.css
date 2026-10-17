@@ -1,0 +1,1110 @@
+/*
+ * DESIGN-02 — capa «panel tranquilo».
+ * Misma identidad (amarillo · grafito · crema · logo), 30–40 % menos ruido.
+ * Todo está acotado a `.app` (el panel): el portal público conserva su carácter.
+ *
+ * Reglas:
+ *  · Amarillo sólido solo en: navegación activa, CTA principal, selección importante, aviso que exige atención.
+ *  · Borde fino y discreto en superficies comunes; borde grafito + sombra dura solo donde hay affordance (CTA, carrito, selección).
+ *  · Sombras duras fuera de los CTA: eliminadas. Fondo de crema plano.
+ *  · Estados secundarios = texto; solo el estado principal es una pastilla.
+ */
+
+.app {
+  --bw: 1.5px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --line: var(--paper-200);
+  --line-strong: var(--paper-300);
+  --sh-soft: none;
+  --sh-hard-sm: none;
+  --sh-hard-lg: var(--sh-lift);
+  background: var(--bg);
+}
+
+/* ───────── Botones ───────── */
+.app .btn {
+  --btn-bd: var(--ink-600);
+  font-weight: 650;
+  box-shadow: none;
+}
+.app .btn:hover {
+  transform: none;
+  box-shadow: none;
+  --btn-bg: var(--paper-100);
+  --btn-bd: var(--ink-900);
+}
+.app .btn:active {
+  transform: translateY(1px);
+}
+.app .btn--primary {
+  --btn-bd: var(--ink-900);
+  box-shadow: 2px 2px 0 var(--ink-900);
+}
+.app .btn--primary:hover {
+  --btn-bg: var(--y-300);
+  transform: translate(-1px, -1px);
+  box-shadow: 3px 3px 0 var(--ink-900);
+}
+.app .btn--primary:active {
+  transform: translate(1px, 1px);
+  box-shadow: 0 0 0 var(--ink-900);
+}
+.app .btn--dark {
+  --btn-bd: var(--ink-900);
+  box-shadow: none;
+}
+.app .btn--dark:hover {
+  --btn-bg: var(--ink-700);
+  box-shadow: none;
+}
+.app .btn--danger {
+  --btn-bd: var(--red-700);
+  box-shadow: none;
+}
+.app .btn--danger:hover {
+  --btn-bg: var(--red-100);
+}
+.app .btn--ghost {
+  --btn-bd: transparent;
+}
+.app .btn--ghost:hover {
+  --btn-bd: transparent;
+}
+.app .btn--lg {
+  box-shadow: 2px 2px 0 var(--ink-900);
+}
+.app .btn[disabled],
+.app .btn[aria-disabled='true'],
+.app .btn[disabled]:hover,
+.app .btn[aria-disabled='true']:hover {
+  --btn-bg: var(--paper-100);
+  --btn-bd: var(--ink-300);
+  box-shadow: none;
+  transform: none;
+}
+
+/* ───────── Badges: pastillas suaves, sin borde ───────── */
+.app .badge {
+  --b-bg: var(--paper-100);
+  --b-fg: var(--ink-700);
+  --b-bd: transparent;
+  border: 0;
+  padding: 0.22em 0.6em 0.22em 0.5em;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+}
+.app .badge--yellow {
+  --b-bg: var(--y-100);
+  --b-fg: var(--ink-900);
+}
+.app .badge--ink {
+  --b-bg: var(--paper-200);
+  --b-fg: var(--ink-900);
+}
+.app .badge--amber {
+  --b-bg: var(--amber-100);
+  --b-fg: var(--amber-700);
+}
+.app .badge--red,
+.app .badge--red-soft {
+  --b-bg: var(--red-100);
+  --b-fg: var(--red-700);
+}
+.app .badge--green {
+  --b-bg: var(--green-100);
+  --b-fg: var(--green-700);
+}
+.app .badge--blue {
+  --b-bg: var(--blue-100);
+  --b-fg: var(--blue-700);
+}
+.app .badge--lg {
+  font-size: 0.74rem;
+}
+.app .badge--dashed {
+  --b-bg: transparent;
+  border: 1px dashed var(--ink-300);
+}
+
+/* ───────── Superficies ───────── */
+.app .card {
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .card--sunken {
+  background: var(--paper-100);
+  border-color: var(--paper-200);
+}
+.app .notice,
+.app .rule-note {
+  background: var(--paper-100);
+  border: 1px solid var(--paper-300);
+  color: var(--ink-700);
+}
+.app .notice svg,
+.app .rule-note svg {
+  color: var(--ink-600);
+}
+.app .section-head h2 {
+  font-size: 1.15rem;
+}
+.app .divider {
+  border-top-style: solid;
+  border-top-width: 1px;
+  border-top-color: var(--line);
+}
+
+/* ───────── Formularios ───────── */
+.app .input,
+.app .select,
+.app .textarea {
+  border: 1.5px solid var(--ink-500);
+  border-radius: var(--r-sm);
+  box-shadow: none;
+}
+.app .input:focus,
+.app .select:focus,
+.app .textarea:focus {
+  border-color: var(--ink-900);
+}
+.app .input-group .prefix {
+  border: 1.5px solid var(--ink-500);
+  border-right: 0;
+  border-radius: var(--r-sm) 0 0 var(--r-sm);
+  background: var(--paper-100);
+}
+.app .input-group .input {
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.app .check input {
+  border-color: var(--ink-600);
+}
+.app .stepper {
+  border-color: var(--ink-600);
+  border-radius: var(--r-sm);
+}
+.app .stepper button {
+  background: var(--paper-100);
+}
+.app .stepper button:hover {
+  background: var(--y-100);
+}
+.app .stepper button:active {
+  background: var(--y-300);
+}
+.app .stepper output {
+  border-inline-color: var(--paper-300);
+  border-inline-width: 1px;
+}
+
+/* Segmentado: la opción activa es una pastilla clara con aro, no un bloque negro */
+.app .seg {
+  background: var(--paper-100);
+  border: 1px solid var(--paper-200);
+}
+.app .seg button {
+  font-weight: 650;
+}
+.app .seg button[aria-pressed='true'],
+.app .seg button[aria-selected='true'] {
+  background: var(--paper-0);
+  color: var(--ink-900);
+  box-shadow: 0 0 0 1.5px var(--ink-900);
+}
+
+/* Filtros: texto + borde fino; el contador es texto, no burbuja amarilla */
+.app .chip {
+  min-height: 38px;
+  padding: 0.2rem 0.8rem;
+  border: 1px solid var(--paper-300);
+  background: transparent;
+  font-weight: 600;
+}
+.app .chip:hover {
+  background: var(--paper-100);
+}
+.app .chip[aria-pressed='true'] {
+  background: var(--ink-900);
+  border-color: var(--ink-900);
+  color: var(--paper-50);
+}
+.app .chip .count {
+  display: inline;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+.app .chip[aria-pressed='true'] .count {
+  color: var(--paper-300);
+}
+
+.app .progress--y > span {
+  box-shadow: none;
+}
+
+/* ───────── Tablas ───────── */
+.app .dt th {
+  border-bottom: 1px solid var(--paper-300);
+}
+.app .dt td {
+  border-bottom: 1px solid var(--line);
+}
+.app .dt tbody tr:hover td {
+  background: var(--y-50);
+}
+
+/* ───────── Hojas (drawer / modal) ───────── */
+.app .sheet {
+  border-width: 1px;
+  border-color: var(--ink-700);
+}
+.app .sheet--modal {
+  box-shadow: var(--sh-lift);
+}
+.app .sheet-head {
+  border-bottom-width: 1px;
+}
+.app .sheet-foot {
+  border-top-width: 1px;
+}
+.app .scrim {
+  background: rgb(17 15 12 / 46%);
+}
+
+/* ───────── Navegación ───────── */
+.app .nav-item[aria-current='page'] {
+  box-shadow: none;
+}
+.app .nav-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  background: var(--y-500);
+  color: var(--ink-900);
+  font-size: 0.68rem;
+  border-width: 2px;
+}
+.app .nav-item[aria-current='page'] .nav-count {
+  background: var(--ink-900);
+  color: var(--y-500);
+}
+/* rojo solo cuando algo ya venció */
+.app .nav-count--alert {
+  background: var(--red-500);
+  color: #fff;
+}
+.app .nav-item[aria-current='page'] .nav-count--alert {
+  background: var(--red-700);
+  color: #fff;
+}
+
+.app .topbar {
+  height: 64px;
+  border-bottom: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .icon-btn {
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-md);
+}
+.app .icon-btn .dot {
+  background: var(--y-500);
+  color: var(--ink-900);
+  border-color: var(--bg);
+}
+.app .m-top {
+  border-bottom: 0;
+}
+.app .m-top .icon-btn {
+  border-color: var(--ink-700);
+}
+.app .m-top .icon-btn .dot {
+  border-color: var(--ink-900);
+}
+.app .tabbar {
+  border-top: 1px solid var(--ink-700);
+}
+.app .tab[aria-current='page']::before {
+  top: 0;
+  background: var(--y-500);
+}
+.app .more-grid a {
+  border: 1px solid var(--paper-300);
+}
+.app .more-grid a[aria-current='page'] {
+  background: var(--y-100);
+  border-color: var(--ink-900);
+}
+
+/* ───────── Contenido ───────── */
+.app .page-head {
+  margin-bottom: 18px;
+}
+.app .page-head h1 {
+  font-size: clamp(1.6rem, 1.2rem + 1.5vw, 2.15rem);
+  margin-top: 0;
+}
+
+/* KPIs: cuadros discretos */
+.app .tile {
+  min-height: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-md);
+  box-shadow: none;
+  gap: 2px;
+}
+.app .tile:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--ink-900);
+}
+.app .tile .k {
+  font-weight: 600;
+  color: var(--ink-600);
+}
+.app .tile .v {
+  font-size: clamp(1.5rem, 1.2rem + 0.9vw, 2rem);
+}
+.app .tile--warn {
+  background: var(--y-50);
+  border-color: var(--y-700);
+}
+.app .tile--alert {
+  box-shadow: none;
+  border-color: var(--red-700);
+}
+
+.app .attn-row {
+  border-bottom: 1px solid var(--line);
+}
+.app .sev {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--paper-100);
+  color: var(--ink-700);
+}
+.app .sev svg {
+  width: 20px;
+  height: 20px;
+}
+.app .sev--high {
+  background: var(--red-100);
+  color: var(--red-700);
+}
+.app .sev--mid {
+  background: var(--y-100);
+  color: var(--ink-900);
+}
+.app .sev--ok {
+  background: var(--green-100);
+  color: var(--green-700);
+}
+.app .mini-list li {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Trabajos: tarjetas y columnas */
+.app .jcard {
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .jcard:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--ink-900);
+}
+.app .jcard::before {
+  width: 4px;
+}
+.app .jcard[data-flag='pay']::before {
+  background: var(--y-500);
+}
+.app .col,
+.app .col[data-s='awaiting_payment'],
+.app .col[data-s='ready'] {
+  background: var(--paper-100);
+  border: 1px solid var(--paper-200);
+  border-radius: var(--r-lg);
+}
+.app .col-head .count {
+  min-width: 0;
+  height: auto;
+  background: none;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+/* Cobros del trabajo */
+.app .pay-block {
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-md);
+}
+.app .pay-cell {
+  background: var(--paper-100);
+}
+.app .pay-cell--due,
+.app .pay-cell--ok {
+  box-shadow: none;
+}
+.app .pay-cell--due {
+  background: var(--amber-100);
+}
+.app .pay-cell--ok {
+  background: var(--paper-100);
+}
+.app .pay-cell--ok .v {
+  color: var(--green-700);
+}
+.app .pay-bar {
+  border-width: 1px;
+  height: 8px;
+}
+.app .pay-bar span {
+  border-right: 0;
+}
+.app .kv > div {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Producción: carriles */
+.app .lane {
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-lg);
+  box-shadow: none;
+}
+.app .lane + .lane {
+  margin-top: 20px;
+}
+.app .lane-head {
+  padding: 10px 16px;
+  background: var(--ink-900);
+}
+.app .lane-head h2 {
+  font-size: 1.15rem;
+  letter-spacing: 0.06em;
+}
+.app .lane-head .ico {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--ink-800);
+  color: var(--y-500);
+}
+.app .lane-head .ico svg {
+  width: 20px;
+  height: 20px;
+}
+.app .lane-stats {
+  gap: 4px 14px;
+  color: #c9c0ab;
+  font-size: var(--fs-sm);
+}
+.app .lane-stats .hot {
+  color: #ff9aa6;
+}
+.app .dt tr[data-locked='true'] td,
+.app .op[data-locked='true'] {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 10px,
+    rgb(24 22 19 / 2.5%) 10px 20px
+  );
+}
+
+/* POS: la columna derecha (carrito) conserva su peso */
+.app .ptile {
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .ptile:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: var(--ink-900);
+  background: var(--y-50);
+}
+.app .ptile:active {
+  transform: translateY(1px);
+}
+.app .ptile .sw {
+  border-width: 1px;
+}
+.app .cart {
+  border: 1.5px solid var(--ink-900);
+  box-shadow: 4px 4px 0 var(--ink-900);
+}
+.app .cart-line {
+  border-bottom: 1px solid var(--line);
+}
+.app .paym button {
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-sm);
+}
+.app .paym button[aria-pressed='true'] {
+  border-color: var(--ink-900);
+}
+.app .pgrid {
+  gap: 8px;
+}
+
+/* Agenda: estados más suaves */
+.app .day-track {
+  border-left-width: 1px;
+}
+.app .appt {
+  background: var(--y-50);
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .appt::before {
+  width: 4px;
+  border-right: 0;
+}
+.app .appt[data-s='completado'] {
+  background: var(--green-100);
+}
+.app .wday {
+  border: 1px solid var(--paper-300);
+}
+.app .wday[data-today='true'] {
+  border: 1.5px solid var(--ink-900);
+  box-shadow: none;
+  background: var(--y-50);
+}
+.app .wchip {
+  background: var(--y-50);
+  border: 1px solid var(--paper-300);
+}
+.app .wchip[data-s='completado'] {
+  background: var(--green-100);
+}
+.app .res-cell {
+  border-width: 1px;
+}
+.app .res-cell[data-b='true'] {
+  background: var(--ink-800);
+}
+
+/* Marquetería */
+.app .opt-card {
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-md);
+}
+.app .opt-card[aria-pressed='true'] {
+  background: var(--y-50);
+  border: 1.5px solid var(--ink-900);
+  box-shadow: none;
+}
+.app .opt-card .sw {
+  border-width: 1px;
+}
+.app .frame-viz {
+  border: 1px solid var(--paper-300);
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 19px,
+      rgb(24 22 19 / 3.5%) 19px 20px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 19px,
+      rgb(24 22 19 / 3.5%) 19px 20px
+    ),
+    var(--paper-100);
+}
+.app .q-table td {
+  border-bottom: 1px solid var(--line);
+}
+
+/* Integraciones */
+.app .int {
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .int[data-s='attention'] {
+  border: 1.5px solid var(--red-700);
+  box-shadow: none;
+}
+.app .int[data-s='disconnected'] {
+  border-style: dashed;
+}
+.app .toggle-row {
+  border-bottom: 1px solid var(--line);
+}
+.app .switch {
+  border-width: 1.5px;
+}
+
+/* Tarjetas de tabla/lista en móvil */
+.app .rcard {
+  border: 1px solid var(--paper-300);
+  box-shadow: none;
+}
+.app .sbar {
+  border-width: 1px;
+}
+
+/* Clientes: la selección se lee sin gritar */
+.app .crow {
+  border: 1px solid var(--paper-200);
+  background: var(--paper-0);
+}
+.app .crow:hover {
+  background: var(--y-50);
+}
+.app .crow[aria-current='true'] {
+  background: var(--y-50);
+  border-color: var(--paper-300);
+  box-shadow: inset 4px 0 0 var(--y-500);
+}
+.app .crow[aria-current='true'] .avatar {
+  background: var(--ink-900);
+  color: var(--y-500);
+}
+
+.app .search-pop {
+  border: 1px solid var(--ink-700);
+  box-shadow: var(--sh-lift);
+}
+
+/* ───────── Texto secundario y estados sin pastilla ───────── */
+.meta {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.meta b,
+.meta strong {
+  color: var(--ink-800);
+  font-weight: 650;
+}
+.meta .sep {
+  margin-inline: 0.4em;
+  color: var(--ink-300);
+}
+.txt-warn {
+  color: var(--amber-700);
+  font-weight: 650;
+}
+.txt-hot {
+  color: var(--red-700);
+  font-weight: 650;
+}
+.txt-ok {
+  color: var(--green-700);
+  font-weight: 650;
+}
+
+/* Línea de estado: «URGENTE · EN PROCESO». Un estado principal, nada más. */
+.state {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 0.5em;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ink-600);
+}
+.state svg {
+  width: 1.2em;
+  height: 1.2em;
+  flex: none;
+}
+.state .st {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.state .st::before {
+  content: '';
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--ink-300);
+}
+.state .st[data-tone='amber']::before {
+  background: var(--amber-700);
+}
+.state .st[data-tone='blue']::before {
+  background: var(--blue-700);
+}
+.state .st[data-tone='yellow']::before {
+  background: var(--y-600);
+}
+.state .st[data-tone='green']::before {
+  background: var(--green-600);
+}
+.state .hot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  color: var(--red-700);
+  font-weight: 500;
+}
+.state .sep {
+  color: var(--ink-300);
+}
+
+/* Lista operacional: una fila = cliente · trabajo · estado · acción */
+.oplist {
+  display: grid;
+}
+.oplist > li {
+  border-bottom: 1px solid var(--line);
+}
+.oplist > li:last-child {
+  border-bottom: 0;
+}
+.oplist-card {
+  background: var(--paper-0);
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.op {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 16px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 16px 12px 20px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: inherit;
+}
+button.op {
+  cursor: pointer;
+}
+.op-open {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+.op:hover {
+  background: var(--y-50);
+}
+.op::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: transparent;
+}
+.op[data-flag='late']::before,
+.op[data-flag='urgent']::before {
+  background: var(--red-500);
+}
+.op[data-flag='pay']::before {
+  background: var(--y-500);
+}
+.op[data-flag='ready']::before {
+  background: var(--green-600);
+}
+.op .who {
+  font-weight: 700;
+  line-height: 1.25;
+}
+.op .what {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.op .go {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.jl-row .go {
+  grid-row: 1 / span 2;
+}
+.jl-row .jl-meta {
+  grid-column: 1;
+  grid-row: 2;
+}
+.op .state {
+  margin-top: 2px;
+}
+
+/* Lista de trabajos: columnas en pantallas anchas */
+.jl-head {
+  display: none;
+}
+@media (min-width: 900px) {
+  .jl-head,
+  .jl-row {
+    grid-template-columns:
+      minmax(0, 2.4fr) minmax(150px, 1.1fr) 120px minmax(110px, 0.9fr)
+      92px;
+  }
+  .jl-head {
+    display: grid;
+    gap: 16px;
+    padding: 10px 16px 10px 20px;
+    border-bottom: 1px solid var(--paper-300);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .jl-row {
+    gap: 16px;
+  }
+  .jl-row .go {
+    grid-column: auto;
+    grid-row: auto;
+    justify-content: flex-end;
+  }
+  .jl-row .jl-meta {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+.jl-row .jl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  align-items: center;
+}
+@media (min-width: 900px) {
+  .jl-row .jl-meta {
+    display: contents;
+  }
+}
+
+/* Bandeja de cobros */
+.tray {
+  display: grid;
+}
+.tray .op {
+  padding-block: 14px;
+}
+.tray .op .who {
+  font-size: 1.05rem;
+}
+.tray .amt {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink-900);
+}
+
+/* Inicio */
+.dash-kpis {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 900px) {
+  .dash-kpis {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+}
+.glance {
+  display: grid;
+}
+.glance a,
+.glance .glance-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  min-height: 44px;
+}
+.glance > :last-child {
+  border-bottom: 0;
+}
+.glance a:hover {
+  background: var(--y-50);
+}
+.glance svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--ink-600);
+}
+.glance .gl {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+.glance .gv {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.glance .gs {
+  display: block;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Eventos: tablero por estado a todo el ancho */
+.ev-board {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+@media (min-width: 720px) {
+  .ev-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1180px) {
+  .ev-board {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+.ev-col {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 10px;
+  background: var(--paper-100);
+  border: 1px solid var(--paper-200);
+  border-radius: var(--r-lg);
+  min-height: 160px;
+}
+.ev-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 4px 4px 2px;
+}
+.ev-col-head h2 {
+  font-size: 1rem;
+}
+.ev-col-head .mono {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.ev-card {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--paper-0);
+  border: 1px solid var(--paper-300);
+  border-radius: var(--r-md);
+}
+.ev-card:hover {
+  border-color: var(--ink-900);
+}
+.ev-card strong {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  line-height: 1.15;
+}
+.ev-card .foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+/* Ficha de cliente */
+.cf-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  padding-block: 4px;
+}
+.cf-stats div {
+  display: grid;
+}
+.cf-stats .k {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.cf-stats .v {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cf-notes {
+  color: var(--ink-600);
+  font-size: var(--fs-sm);
+  padding-left: 12px;
+  border-left: 3px solid var(--paper-300);
+}
+
+/* Interruptores: encendido en grafito con perilla amarilla (el amarillo sólido queda para lo importante) */
+.app .switch[aria-checked='true'] {
+  background: var(--ink-900);
+}
+.app .switch[aria-checked='true']::after {
+  background: var(--y-500);
+}
+
+/* ───────── Responsive ───────── */
+.hide-narrow {
+  display: none !important;
+}
+@media (min-width: 600px) {
+  .hide-narrow {
+    display: inline-flex !important;
+  }
+}
+/* Producción en móvil: el contenido ocupa todo el ancho y la acción baja a su propia línea */
+@media (max-width: 599px) {
+  .lane .op {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .lane .op .go {
+    grid-column: 1;
+    grid-row: 2;
+    justify-content: flex-start;
+  }
+  .lane .op .go:has(> .hide-narrow:only-child) {
+    display: none;
+  }
+  .lane .op:has(.go > .hide-narrow:only-child) {
+    gap: 0;
+  }
+}
+@media (max-width: 699px) {
+  .dt .col-wide {
+    display: none;
+  }
+  .dt td,
+  .dt th {
+    padding-inline: 0.6rem;
+  }
+  .dt .btn {
+    padding-inline: 0.6rem;
+  }
+}
+
+.app .jcard .top .mono {
+  white-space: nowrap;
+}

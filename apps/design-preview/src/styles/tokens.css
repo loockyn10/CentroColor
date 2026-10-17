@@ -1,0 +1,150 @@
+/*
+ * CentroColor — design tokens (DESIGN-01)
+ * Amarillo fotográfico protagonista · grafito para contraste · crema para descanso · rojo del logo puntual.
+ */
+
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  src: url('/fonts/BricolageGrotesque-600-800.woff2') format('woff2');
+  font-weight: 600 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Figtree';
+  src: url('/fonts/Figtree-400-800.woff2') format('woff2');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/DMMono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Mono';
+  src: url('/fonts/DMMono-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Amarillo fotográfico */
+  --y-50: #fff9e0;
+  --y-100: #fff1b8;
+  --y-300: #ffe066;
+  --y-500: #ffc914; /* SOL — el amarillo de marca */
+  --y-600: #f2b100; /* hover / presionado */
+  --y-700: #b88000; /* sólo bordes y detalles, nunca texto pequeño */
+
+  /* Grafito (negro cálido) */
+  --ink-950: #110f0c;
+  --ink-900: #181613;
+  --ink-800: #26231e;
+  --ink-700: #3a362f;
+  --ink-600: #4f4a41;
+  --ink-500: #6a6458; /* texto secundario sobre crema (5,4:1) */
+  --ink-300: #a39b8a;
+
+  /* Crema / papel */
+  --paper-0: #fffdf8; /* tarjetas */
+  --paper-50: #fbf6e9; /* fondo de página */
+  --paper-100: #f4ecd6; /* hundido */
+  --paper-200: #e8ddbd; /* líneas suaves */
+  --paper-300: #d4c598; /* líneas firmes */
+
+  /* Rojo del logo — acento puntual */
+  --red-500: #d7263d;
+  --red-700: #ab1a2d; /* texto rojo sobre crema */
+  --red-100: #fde3e6;
+
+  /* Estados (siempre acompañados de ícono + texto) */
+  --green-700: #17653f;
+  --green-600: #1e7b4f;
+  --green-100: #dcf1e4;
+  --blue-700: #1f4a99;
+  --blue-100: #dde8fb;
+  --amber-700: #8a5a00;
+  --amber-100: #ffeec2;
+
+  /* Semánticos */
+  --bg: var(--paper-50);
+  --surface: var(--paper-0);
+  --surface-sunken: var(--paper-100);
+  --text: var(--ink-900);
+  --text-muted: var(--ink-500);
+  --line: var(--paper-200);
+  --line-strong: var(--paper-300);
+  --brand: var(--y-500);
+  --brand-press: var(--y-600);
+  --focus: var(--ink-900);
+
+  /* Tipografías */
+  --font-display:
+    'Bricolage Grotesque', 'Arial Rounded MT Bold', 'Trebuchet MS', system-ui,
+    sans-serif;
+  --font-ui:
+    'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    sans-serif;
+  --font-mono:
+    'DM Mono', ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+
+  /* Escala tipográfica */
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: clamp(2rem, 1.4rem + 2.4vw, 2.75rem);
+  --fs-hero: clamp(2.9rem, 1.6rem + 7vw, 6.4rem);
+
+  /* Forma */
+  --r-xs: 6px;
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --r-pill: 999px;
+  --bw: 2px;
+
+  /* Elevación: sombras "sticker" duras + sombras suaves de papel */
+  --sh-hard: 3px 3px 0 var(--ink-900);
+  --sh-hard-sm: 2px 2px 0 var(--ink-900);
+  --sh-hard-lg: 6px 6px 0 var(--ink-900);
+  --sh-soft: 0 1px 0 rgb(24 22 19 / 5%), 0 10px 28px -14px rgb(24 22 19 / 30%);
+  --sh-lift: 0 2px 0 rgb(24 22 19 / 6%), 0 18px 40px -16px rgb(24 22 19 / 38%);
+
+  /* Espaciado (4px) */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-5: 1.5rem;
+  --s-6: 2rem;
+  --s-7: 3rem;
+  --s-8: 4.5rem;
+
+  --touch: 48px; /* objetivo táctil mínimo cómodo (WCAG 2.2 pide 24, iOS 44) */
+  --gutter: 16px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* Perforaciones de película (pattern SVG como tokens) */
+  --film-holes-cream: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='24'%3E%3Crect x='6' y='6' width='10' height='12' rx='2.5' fill='%23FBF6E9'/%3E%3C/svg%3E");
+  --film-holes-yellow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='24'%3E%3Crect x='6' y='6' width='10' height='12' rx='2.5' fill='%23FFC914'/%3E%3C/svg%3E");
+  --film-holes-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='22' height='24'%3E%3Crect x='6' y='6' width='10' height='12' rx='2.5' fill='%2326231E'/%3E%3C/svg%3E");
+}
+
+@media (min-width: 768px) {
+  :root {
+    --gutter: 28px;
+  }
+}
+@media (min-width: 1100px) {
+  :root {
+    --gutter: 40px;
+  }
+}
