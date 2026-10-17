@@ -29,6 +29,8 @@ python tests/photo_sqlite.py
 python tests/photo_cloud_sql.py
 python tests/work_payments_sqlite.py
 python tests/work_payments_cloud_sql.py
+python tests/photo_file_intake_sqlite.py
+python tests/photo_file_intake_cloud_sql.py
 pnpm exec supabase db push --dry-run
 ```
 
@@ -41,3 +43,5 @@ Para Web y Desktop, copiar el `.env.example` de cada app a `.env.local` y comple
 Vite incorpora las variables `VITE_` al bundle **durante el build**. En Vercel deben estar asignadas al entorno del deployment que se construye; cambiar sus valores requiere un nuevo build/deploy. Web valida la URL y la clave pública antes de crear el cliente y muestra un error de configuración específico si faltan o son inválidas. La clave `sb_publishable_` es pública y puede estar en el frontend; nunca configurar una `sb_secret_` ni `service_role`.
 
 Las migraciones Cloud y el seed local están en `supabase/`. Consultar `supabase/README.md` para validar con Docker y vincular/aplicar al proyecto remoto sin guardar secretos. El seed no se envía al remoto con `db push` normal.
+
+La puesta en marcha de OAuth, Vault, Edge Functions y el portal de archivos de Sprint 13 está detallada en `docs/GOOGLE_DRIVE_SETUP.md`. Los secretos Google nunca se configuran en `VITE_` ni en Vercel.

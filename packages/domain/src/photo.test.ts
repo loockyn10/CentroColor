@@ -6,6 +6,8 @@ import {
   normalizePhotoJobItemDetails,
   normalizePhotoServiceDetails,
   photoJobTotal,
+  photoCopiesMismatch,
+  sanitizeDriveName,
 } from './photo';
 
 describe('trabajos fotográficos', () => {
@@ -48,6 +50,8 @@ describe('trabajos fotográficos', () => {
         widthMm: 100,
         heightMm: null,
         defaultUnitPriceCents: 0,
+        workflowRoute: 'lab',
+        requiresCustomerFiles: true,
       }),
     ).toThrow('ambas');
   });
@@ -88,6 +92,9 @@ describe('trabajos fotográficos', () => {
       notes: null,
       sourceAppointmentId: null,
       sourceEventId: null,
+      fileIntakeStatus: 'awaiting_files' as const,
+      driveFolderId: null,
+      driveEditedFolderId: null,
       createdBy: 'u',
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '',
@@ -109,5 +116,22 @@ describe('trabajos fotográficos', () => {
         new Date('2026-01-02T00:00:00Z'),
       ),
     ).toBe(false);
+  });
+
+  it('valida copies y sanitiza nombres de carpetas', () => {
+    expect(
+      photoCopiesMismatch({ quantity: 3 }, [
+        { copies: 2, status: 'uploaded' },
+        { copies: 1, status: 'uploaded' },
+        { copies: 9, status: 'failed' },
+      ]),
+    ).toEqual({ copies: 3, expected: 3, mismatch: false });
+    expect(
+      photoCopiesMismatch({ quantity: 4 }, [{ copies: 3, status: 'uploaded' }])
+        .mismatch,
+    ).toBe(true);
+    expect(sanitizeDriveName(' Restauración: Juan/Pérez ')).toBe(
+      'Restauracion Juan Perez',
+    );
   });
 });

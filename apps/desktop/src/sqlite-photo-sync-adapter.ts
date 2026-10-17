@@ -32,6 +32,8 @@ export const decodeLocalPhoto = (t: PhotoSyncType, r: any): any => {
       widthMm: r.width_mm,
       heightMm: r.height_mm,
       defaultUnitPriceCents: r.default_unit_price_cents,
+      workflowRoute: r.workflow_route,
+      requiresCustomerFiles: r.requires_customer_files === 1,
       isActive: r.is_active === 1,
     };
   if (t === 'photo_job')
@@ -45,6 +47,9 @@ export const decodeLocalPhoto = (t: PhotoSyncType, r: any): any => {
       notes: r.notes,
       sourceAppointmentId: r.source_appointment_id,
       sourceEventId: r.source_event_id,
+      fileIntakeStatus: r.file_intake_status,
+      driveFolderId: r.drive_folder_id,
+      driveEditedFolderId: r.drive_edited_folder_id,
       createdBy: r.created_by,
     };
   return {
@@ -135,7 +140,7 @@ export class SQLitePhotoSyncAdapter implements PhotoSyncLocalPort {
       x: any = e;
     if (t === 'photo_service')
       await d.execute(
-        `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,is_active,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET code=excluded.code,name=excluded.name,service_type=excluded.service_type,width_mm=excluded.width_mm,height_mm=excluded.height_mm,default_unit_price_cents=excluded.default_unit_price_cents,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
+        `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,workflow_route,requires_customer_files,is_active,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET code=excluded.code,name=excluded.name,service_type=excluded.service_type,width_mm=excluded.width_mm,height_mm=excluded.height_mm,default_unit_price_cents=excluded.default_unit_price_cents,workflow_route=excluded.workflow_route,requires_customer_files=excluded.requires_customer_files,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
         [
           x.id,
           x.businessId,
@@ -145,6 +150,8 @@ export class SQLitePhotoSyncAdapter implements PhotoSyncLocalPort {
           x.widthMm,
           x.heightMm,
           x.defaultUnitPriceCents,
+          x.workflowRoute,
+          x.requiresCustomerFiles ? 1 : 0,
           x.isActive ? 1 : 0,
           x.createdAt,
           x.updatedAt,
@@ -153,7 +160,7 @@ export class SQLitePhotoSyncAdapter implements PhotoSyncLocalPort {
       );
     else if (t === 'photo_job')
       await d.execute(
-        `INSERT INTO photo_jobs(id,business_id,branch_id,customer_id,status,priority,promised_at,notes,source_appointment_id,source_event_id,created_by,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET customer_id=excluded.customer_id,status=excluded.status,priority=excluded.priority,promised_at=excluded.promised_at,notes=excluded.notes,source_appointment_id=excluded.source_appointment_id,source_event_id=excluded.source_event_id,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
+        `INSERT INTO photo_jobs(id,business_id,branch_id,customer_id,status,priority,promised_at,notes,source_appointment_id,source_event_id,file_intake_status,drive_folder_id,drive_edited_folder_id,created_by,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET customer_id=excluded.customer_id,status=excluded.status,priority=excluded.priority,promised_at=excluded.promised_at,notes=excluded.notes,source_appointment_id=excluded.source_appointment_id,source_event_id=excluded.source_event_id,file_intake_status=excluded.file_intake_status,drive_folder_id=excluded.drive_folder_id,drive_edited_folder_id=excluded.drive_edited_folder_id,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
         [
           x.id,
           x.businessId,
@@ -165,6 +172,9 @@ export class SQLitePhotoSyncAdapter implements PhotoSyncLocalPort {
           x.notes,
           x.sourceAppointmentId,
           x.sourceEventId,
+          x.fileIntakeStatus,
+          x.driveFolderId,
+          x.driveEditedFolderId,
           x.createdBy,
           x.createdAt,
           x.updatedAt,

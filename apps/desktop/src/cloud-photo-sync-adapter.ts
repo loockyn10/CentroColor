@@ -25,6 +25,8 @@ const payload = (t: PhotoSyncType, x: any) =>
         width_mm: x.widthMm,
         height_mm: x.heightMm,
         default_unit_price_cents: x.defaultUnitPriceCents,
+        workflow_route: x.workflowRoute,
+        requires_customer_files: x.requiresCustomerFiles,
         is_active: x.isActive,
         created_at: x.createdAt,
       }
@@ -40,6 +42,9 @@ const payload = (t: PhotoSyncType, x: any) =>
           notes: x.notes,
           source_appointment_id: x.sourceAppointmentId,
           source_event_id: x.sourceEventId,
+          file_intake_status: x.fileIntakeStatus,
+          drive_folder_id: x.driveFolderId,
+          drive_edited_folder_id: x.driveEditedFolderId,
           created_by: x.createdBy,
           created_at: x.createdAt,
         }
@@ -74,6 +79,8 @@ const decode = (t: PhotoSyncType, r: any): any => {
         widthMm: r.width_mm,
         heightMm: r.height_mm,
         defaultUnitPriceCents: r.default_unit_price_cents,
+        workflowRoute: r.workflow_route,
+        requiresCustomerFiles: r.requires_customer_files,
         isActive: r.is_active,
       }
     : t === 'photo_job'
@@ -87,6 +94,9 @@ const decode = (t: PhotoSyncType, r: any): any => {
           notes: r.notes,
           sourceAppointmentId: r.source_appointment_id,
           sourceEventId: r.source_event_id,
+          fileIntakeStatus: r.file_intake_status,
+          driveFolderId: r.drive_folder_id,
+          driveEditedFolderId: r.drive_edited_folder_id,
           createdBy: r.created_by,
         }
       : {

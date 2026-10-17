@@ -120,3 +120,19 @@ Appointment != Event != PhotoJob != FrameJob. Product != PhotoService. No existe
 El total no se duplica en WorkPayment. Event deriva servicios+reservas activas; FrameJob toma `frame_quotes.total_cents` de su presupuesto aceptado; PhotoJob deriva items activos. El bruto cobrado suma deposit/payment posted; `refunded_cents` suma refund posted; `paid_cents = bruto - refunds`; `balance_cents = total - paid`. Una anulación excluye el movimiento del cálculo sin eliminarlo.
 
 Cloud no concede INSERT/UPDATE/DELETE directo. `post_work_payment` bloquea la fuente, vuelve a calcular neto/saldo y escribe atómicamente; `void_work_payment` restringe a owner/admin y evita que la anulación deje neto negativo o sobrepago. RLS SELECT exige membership activo. SQLite refleja las mismas invariantes contra su copia local y Cloud conserva autoridad final al sincronizar. Sale/SaleItem no referencia WorkPayment.
+
+## Recepción de archivos — Sprint 13
+
+`PhotoService` agrega `workflow_route` (`none`, `lab`, `editing`, `other`) y `requires_customer_files`. La ruta es configuración explícita y no se deduce de `service_type`.
+
+`PhotoJob` agrega `file_intake_status` (`not_required`, `not_requested`, `awaiting_files`, `receiving`, `submitted`), separado de su estado productivo, más `drive_folder_id` y `drive_edited_folder_id`. Así un Job puede continuar `received` mientras espera archivos.
+
+`GoogleDriveIntegration` tiene PK `business_id`, email nullable, `root_folder_id`, `refresh_token_secret_id`, actor/fecha de conexión, desconexión nullable, estado y timestamps. La tabla no contiene el refresh token; el UUID referencia lógicamente un secreto cifrado en Vault.
+
+`PhotoJobUploadLink` contiene UUID, Business, PhotoJob, `token_hash`, actor, expiración/revocación/submission y creación. El token real sólo existe en la URL generada y no puede recuperarse; regenerar revoca links activos.
+
+`PhotoJobFile` contiene UUID, Business, PhotoJob, PhotoJobItem nullable, Drive file/folder ID, nombres original/almacenado, MIME, bytes, copies, workflow route, estado (`pending`, `uploading`, `uploaded`, `failed`, `removed`) y timestamps. No existe columna binaria. FK compuestas y un trigger garantizan que Item pertenezca al mismo Job/Business. Desktop replica esta tabla sólo por pull incremental.
+
+`PhotoJobDriveFolder` es metadata server-only con clave `(business_id, photo_job_id, folder_key)` y Drive ID. Hace idempotentes los retries aunque el usuario renombre carpetas. `GoogleOAuthState` es server-only, hasheado y expira en diez minutos.
+
+Los binarios y las URLs resumable no participan del sync SQLite. SQLite 0015 sólo guarda metadata e IDs operativos; `photo_file_sync_cursor` pagina por `(updated_at,id)` y los pulls no generan outbox.

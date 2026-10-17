@@ -11,6 +11,24 @@ export const photoServiceTypes = [
   'other',
 ] as const;
 export type PhotoServiceType = (typeof photoServiceTypes)[number];
+export const photoWorkflowRoutes = ['none', 'lab', 'editing', 'other'] as const;
+export type PhotoWorkflowRoute = (typeof photoWorkflowRoutes)[number];
+export const photoFileIntakeStatuses = [
+  'not_required',
+  'not_requested',
+  'awaiting_files',
+  'receiving',
+  'submitted',
+] as const;
+export type PhotoFileIntakeStatus = (typeof photoFileIntakeStatuses)[number];
+export const photoJobFileStatuses = [
+  'pending',
+  'uploading',
+  'uploaded',
+  'failed',
+  'removed',
+] as const;
+export type PhotoJobFileStatus = (typeof photoJobFileStatuses)[number];
 
 export const photoJobStatuses = [
   'received',
@@ -32,6 +50,8 @@ export interface PhotoService {
   widthMm: number | null;
   heightMm: number | null;
   defaultUnitPriceCents: number;
+  workflowRoute: PhotoWorkflowRoute;
+  requiresCustomerFiles: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -48,6 +68,9 @@ export interface PhotoJob {
   notes: string | null;
   sourceAppointmentId: string | null;
   sourceEventId: string | null;
+  fileIntakeStatus: PhotoFileIntakeStatus;
+  driveFolderId: string | null;
+  driveEditedFolderId: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -66,6 +89,25 @@ export interface PhotoJobItem {
   widthMm: number | null;
   heightMm: number | null;
   isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PhotoJobFile {
+  id: string;
+  businessId: string;
+  photoJobId: string;
+  photoJobItemId: string | null;
+  driveFileId: string;
+  driveFolderId: string;
+  originalFilename: string;
+  storedFilename: string;
+  mimeType: string | null;
+  sizeBytes: number;
+  copies: number;
+  workflowRoute: PhotoWorkflowRoute;
+  status: PhotoJobFileStatus;
+  uploadedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,10 +154,14 @@ export function normalizePhotoServiceDetails(
     | 'widthMm'
     | 'heightMm'
     | 'defaultUnitPriceCents'
+    | 'workflowRoute'
+    | 'requiresCustomerFiles'
   >,
 ) {
   if (!(photoServiceTypes as readonly string[]).includes(value.serviceType))
     throw new Error('Tipo de servicio fotográfico inválido.');
+  if (!(photoWorkflowRoutes as readonly string[]).includes(value.workflowRoute))
+    throw new Error('Ruta de producción fotográfica inválida.');
   const widthMm = optionalMillimeters(value.widthMm);
   const heightMm = optionalMillimeters(value.heightMm);
   if ((widthMm === null) !== (heightMm === null))
@@ -127,7 +173,41 @@ export function normalizePhotoServiceDetails(
     widthMm,
     heightMm,
     defaultUnitPriceCents: requireCents(value.defaultUnitPriceCents),
+    workflowRoute: value.workflowRoute,
+    requiresCustomerFiles: value.requiresCustomerFiles,
   };
+}
+
+export function requirePhotoCopies(value: number) {
+  if (!Number.isInteger(value) || value <= 0)
+    throw new Error('Las copias deben ser un entero mayor que cero.');
+  return value;
+}
+
+export function photoCopiesMismatch(
+  item: Pick<PhotoJobItem, 'quantity'>,
+  files: Array<Pick<PhotoJobFile, 'copies' | 'status'>>,
+) {
+  const copies = files
+    .filter((file) => file.status === 'uploaded')
+    .reduce((sum, file) => sum + requirePhotoCopies(file.copies), 0);
+  return {
+    copies,
+    expected: item.quantity,
+    mismatch: copies !== item.quantity,
+  };
+}
+
+export function sanitizeDriveName(value: string) {
+  const cleaned = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // eslint-disable-next-line no-control-regex -- Drive names must reject ASCII controls.
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[. ]+|[. ]+$/g, '');
+  return (cleaned || 'Sin nombre').slice(0, 120);
 }
 export function isPhotoServiceSelectable(
   service: Pick<PhotoService, 'isActive'>,

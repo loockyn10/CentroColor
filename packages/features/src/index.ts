@@ -23,6 +23,7 @@ export {
   PhotoServicesPage,
   NewPhotoJobPage,
   PhotoJobsPage,
+  PhotoProductionPage,
   PhotoJobsDashboard,
 } from './photo';
 export {

@@ -1,38 +1,38 @@
 # Estado actual
 
-Sprint 12 — Señas, pagos y saldos de trabajos quedó implementado en código el 16 de octubre de 2026. Event, FrameJob y PhotoJob comparten `WorkPayment`; Web opera mediante Supabase/RPC y Desktop persiste en SQLite, funciona offline y sincroniza después de sus fuentes. No se modificó Sale/POS y no se ejecutó ningún push real ni SQL manual.
+Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado en código el 16 de octubre de 2026. No se ejecutó Docker, SQL manual, deploy de Edge Functions ni `db push` real.
 
-El dry-run remoto se completó correctamente el 16/10/2026. El proyecto vinculado reconoce las migraciones anteriores y reporta únicamente `20261016000000_work_payments.sql` pendiente. El comando fue sólo `db push --dry-run`; la migración de pagos no fue aplicada.
+## Implementado
 
-## Sprint 12 implementado
+- `PhotoService` configura `workflow_route` (`none`, `lab`, `editing`, `other`) y `requires_customer_files`; owner/admin edita y staff consulta.
+- `PhotoJob.file_intake_status` es independiente del estado productivo. Los estados son `not_required`, `not_requested`, `awaiting_files`, `receiving` y `submitted`.
+- Google Drive es autoridad binaria. Supabase y SQLite guardan sólo metadata/IDs; no existe copia en Storage, PostgreSQL ni SQLite.
+- `GoogleDriveIntegration` es por Business. OAuth server-side solicita `drive.file` y acceso offline; Client Secret/access token/refresh token no llegan al cliente. El refresh token se referencia por UUID y vive en Supabase Vault.
+- La ruta pública `/enviar/:token` queda fuera de Auth administrativa. El token usa 32 bytes aleatorios, URL-safe, SHA-256 en base, expiración configurable, revocación y scope de un solo PhotoJob.
+- El portal muestra sólo negocio, primer nombre, código y destinos opacos por PhotoJobItem. Permite selección múltiple, copies, progreso por archivo, retry/resume individual mientras la pestaña conserva la sesión, resumen y advertencia no bloqueante de copies.
+- El browser sube chunks directamente a una URL resumable de Drive. La capability queda sólo en memoria. Edge valida token/item/Business/integración/formato/MIME/tamaño, crea metadata pending, abre sesión y pasa a uploading.
+- Finalize vuelve a consultar Drive y valida ID consultado, parent, nombre y tamaño antes de `uploaded`; es idempotente. Submit rechaza pendientes, actualiza `PEDIDO.txt`, marca Job `submitted` y cierra el link; repetirlo no duplica.
+- Carpetas deterministas por ID/appProperties: `CentroColor/Trabajos/YYYY/Mes/CC-XXXXXXXX - Cliente/{Para imprimir|Para editar|Otros}/Servicio` y `Editadas` para edición. Renombrar carpetas no rompe identidad.
+- PhotoJob muestra estado, link, regeneración/revocación, resumen por item y accesos Drive. Configuración Web gestiona conectar/reconectar/abrir/desconectar Google Drive.
+- Producción separa Laboratorio y Edición con submitted, Job activo, urgencia/atraso/fecha y accesos a Drive/Job.
+- Desktop sincroniza nuevos campos y hace pull incremental de PhotoJobFile. No crea outbox de archivos ni cachea binarios; abrir Drive requiere Internet.
+- Migraciones nuevas: SQLite `0015_photo_file_intake.sql` y Cloud `20261017000000_photo_file_intake.sql`. Siete Edge Functions y helpers compartidos implementan OAuth, administración, contexto, sesión, finalize y submit.
 
-- `WorkPayment` usa UUID estable, Business, Branch, Customer, tipo de fuente y tres FK reales nullable con exactamente una presente para Event/FrameJob/PhotoJob. Dinero se guarda en centavos enteros.
-- Tipos `deposit`, `payment` y `refund`; medios `cash`, `transfer`, `debit_card`, `credit_card`, `mercado_pago`, `other`; estados `posted`/`voided`.
-- El ledger es append-only. No existe DELETE ni edición silenciosa de importe/fuente/medio/fecha. Owner/admin anula con actor, instante y motivo obligatorio; staff puede cobrar y consultar, pero no anular.
-- Event deriva total de servicios+reservas activas; FrameJob usa el total snapshot de su presupuesto; PhotoJob deriva items activos. Pagado neto = señas+pagos posted−refunds posted; anulados no cuentan; saldo = total−neto.
-- SQLite y Cloud bloquean sobrepago y refund superior al neto pagado. Cloud usa RPC transaccional y advisory lock por fuente, por lo que dos clientes concurrentes no consumen el mismo saldo.
-- Desktop guarda altas/anulaciones en `work_payment_sync_outbox`, hace pull incremental por `(updated_at,id)`, reintenta por UUID y evita loops con `sync_origin='remote'`. Un rechazo financiero Cloud queda en conflicto, se conserva localmente y deja de afectar el saldo operativo; owner/admin puede resolverlo anulándolo sin borrar historial.
-- Event, FrameJob y PhotoJob muestran cuenta, total/pagado/saldo, historial y acciones de cobro/refund. Saldo cero muestra PAGADO. Las fuentes canceladas con neto recibido muestran advertencia y no generan devolución automática.
-- Customer muestra fuentes con saldo, total/pagado/saldo, estado, pagos recientes y saldo total positivo de fuentes no canceladas.
-- Dashboard muestra a owner/admin saldo pendiente agregado y cantidad de trabajos; staff conserva acceso al saldo del trabajo que opera.
-- Migraciones incrementales: SQLite `0014_work_payments.sql` y Supabase `20261016000000_work_payments.sql`. La tabla Cloud sólo concede SELECT directo; altas/anulaciones pasan por RPC autenticadas. No hay `service_role` cliente.
+## Verificación
 
-## Verificación de esta sesión
-
-- `pnpm typecheck`: pasa en los seis paquetes/apps compilables.
+- `pnpm typecheck`: pasa.
 - `pnpm lint`: pasa.
-- `pnpm test`: 79 pruebas en 30 archivos, pasa. Incluye cálculo financiero y orquestador de sync WorkPayment.
-- Regresión Python completa: Customer Sync, POS, POS Sync/FK Cloud, Inventory, Appointments SQLite/Cloud, Events SQLite/Cloud, Photo SQLite/Cloud y WorkPayment SQLite/Cloud, pasa.
-- `pnpm build`: pasa. Warnings no bloqueantes por chunks mayores a 500 kB: Web 616.65 kB; Desktop 727.34 kB.
-- `pnpm format:check`: pasa.
-- `pnpm build:desktop`: pasa tras permitir la descarga oficial de NSIS; genera `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Rust informa sólo el warning del linker al crear la import library.
-- `git diff --check`: sin errores; sólo avisos LF→CRLF del checkout Windows.
-- `pnpm exec supabase db push --dry-run`: pasa y propone únicamente `20261016000000_work_payments.sql`; no aplica nada.
+- `pnpm test`: 90 pruebas en 35 archivos, pasa. Incluye token, expiración/revocación, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
+- Regresión Python completa: 14 scripts Customer/POS/Inventory/Agenda/Events/Photo/Payments/Sprint 13, pasa. SQLite 0015 aplica y el pull de metadata no genera outbox.
+- `pnpm build`: pasa. Warnings no bloqueantes por chunks >500 kB: Web 633.94 kB y Desktop 738.53 kB.
+- `pnpm build:desktop`: pasa; instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Sólo warning informativo del linker.
+- `pnpm exec supabase db push --dry-run`: pasa, no aplica nada y propone exactamente `20261016000000_work_payments.sql` y `20261017000000_photo_file_intake.sql`.
+- `git diff --check`: sin errores; avisos LF→CRLF del checkout Windows.
 
-## Límites y deuda
+## Pendiente operativo y deuda
 
-La migración Cloud de pagos no fue aplicada ni probada contra escrituras PostgreSQL reales. Falta validar con owner/admin/staff, dos sesiones concurrentes y un Desktop realmente desconectado que el segundo cobro del último saldo queda en conflicto y se resuelve por anulación. El chequeo Cloud automatizado actual inspecciona estructura SQL; no sustituye una ejecución de la migración.
+Las migraciones WorkPayment/Sprint 13 no están aplicadas. Faltan configurar Google Cloud/consent/client, secrets Supabase, desplegar siete Edge Functions y validar OAuth/Drive real con owner/admin/staff y teléfonos reales. Deno no está instalado en este equipo; las funciones se cubrieron con pruebas puras y auditoría estructural, pero su bundle/deploy real continúa pendiente.
 
-La ficha de la fuente muestra conflictos financieros, pero no existe un centro global de resolución de conflictos WorkPayment. Las consultas Customer/Dashboard componen cuentas fuente por fuente; a alto volumen convendrá una vista/RPC agregada. Los listados priorizan no ensanchar tablas y muestran el estado financiero en el detalle. Cambiar a la baja los items/servicios de una fuente ya cobrada puede producir total menor al neto recibido; falta una regla de negocio explícita para bloquear o resolver esa edición. FrameJob sin Customer no puede recibir pagos hasta asociarlo a uno.
+El rate limit implementado es por Job (30 sesiones/minuto y 500 archivos); una política distribuida por IP requeriría gateway externo. La reanudación conserva sesión mientras la pestaña sigue abierta; tras cerrar/recargar, el navegador no puede recuperar el `File` local y debe seleccionar/reintentar ese archivo. Los PhotoJobItem custom sin PhotoService no se ofrecen como destino porque no poseen configuración de workflow. No hay detección automática de archivos en `Editadas`, UI administrativa de rechazo/removal, Photoshop/Lightroom, login/galería/entrega digital de cliente, Event/FrameJob files, WhatsApp, email, IA ni impresión automática.
 
-Siguen fuera de alcance AFIP/ARCA, factura, caja diaria, contabilidad, conciliación bancaria, proveedores/compras, integración POS/Sale, cuotas/intereses, cuenta corriente manual, WhatsApp, portal cliente y archivos/Google Drive.
+Ver `docs/GOOGLE_DRIVE_SETUP.md` para la puesta en marcha exacta.

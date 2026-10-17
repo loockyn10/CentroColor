@@ -7,6 +7,7 @@ import {
   syncEventEntities,
   syncFramingEntities,
   syncPhotoEntities,
+  syncPhotoFiles,
   syncStockMovements,
   syncWorkPayments,
   type BusinessContext,
@@ -35,6 +36,7 @@ import {
   PhotoServicesPage,
   NewPhotoJobPage,
   PhotoJobsPage,
+  PhotoProductionPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -88,6 +90,10 @@ import { SQLiteFramingRepository } from './sqlite-framing-repository';
 import { SQLitePhotoRepository } from './sqlite-photo-repository';
 import { SQLitePhotoSyncAdapter } from './sqlite-photo-sync-adapter';
 import { CloudPhotoSyncAdapter } from './cloud-photo-sync-adapter';
+import {
+  CloudPhotoFileSyncAdapter,
+  SQLitePhotoFileSyncAdapter,
+} from './photo-file-sync-adapters';
 import { SQLiteWorkPaymentRepository } from './sqlite-work-payment-repository';
 import { SQLiteWorkPaymentSyncAdapter } from './sqlite-work-payment-sync-adapter';
 import { CloudWorkPaymentSyncAdapter } from './cloud-work-payment-sync-adapter';
@@ -107,12 +113,14 @@ const framingRepository = new SQLiteFramingRepository();
 const framingSyncLocal = new SQLiteFramingSyncAdapter();
 const photoRepository = new SQLitePhotoRepository();
 const photoSyncLocal = new SQLitePhotoSyncAdapter();
+const photoFileSyncLocal = new SQLitePhotoFileSyncAdapter();
 const workPaymentRepository = new SQLiteWorkPaymentRepository();
 const workPaymentSyncLocal = new SQLiteWorkPaymentSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
 function App() {
+  const [openPhotoJobId, setOpenPhotoJobId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState('home');
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
@@ -279,6 +287,11 @@ function App() {
           photoSyncLocal,
           cloudPhoto,
         );
+      await syncPhotoFiles(
+        target.businessId,
+        photoFileSyncLocal,
+        new CloudPhotoFileSyncAdapter(),
+      );
       await syncWorkPayments(
         target.businessId,
         workPaymentSyncLocal,
@@ -1051,10 +1064,20 @@ function App() {
           <PhotoJobsPage
             repository={photoRepository}
             paymentRepository={workPaymentRepository}
+            initialJobId={openPhotoJobId}
             refreshToken={dataRefresh}
             onMutation={() => {
               setDataRefresh((x) => x + 1);
               if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'photo-production' ? (
+          <PhotoProductionPage
+            repository={photoRepository}
+            refreshToken={dataRefresh}
+            onOpenJob={(id) => {
+              setOpenPhotoJobId(id);
+              setActiveId('photo-jobs');
             }}
           />
         ) : activeId === 'photo-services' ? (

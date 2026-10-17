@@ -9,17 +9,22 @@ import {
   type PhotoJobBundle,
   type PhotoJobSummary,
   type PhotoRepository,
+  type PhotoFileIntakeAdminRepository,
+  type UploadLinkView,
   type WorkPaymentRepository,
 } from '@centrocolor/application';
 import {
   isPhotoJobOverdue,
+  comparePhotoProductionQueue,
   normalizePhotoServiceDetails,
   photoServiceTypes,
+  photoWorkflowRoutes,
   type Customer,
   type PhotoJobStatus,
   type PhotoJobPriority,
   type PhotoService,
   type PhotoServiceType,
+  type PhotoWorkflowRoute,
 } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
@@ -47,6 +52,19 @@ const typeLabel: Record<string, string> = {
   album: 'Álbum',
   other: 'Otro',
 };
+const routeLabel: Record<PhotoWorkflowRoute, string> = {
+  none: 'Sin archivos',
+  lab: 'Laboratorio',
+  editing: 'Edición',
+  other: 'Otros',
+};
+const intakeLabel = {
+  not_required: 'No requiere archivos',
+  not_requested: 'Link no generado',
+  awaiting_files: 'Esperando archivos',
+  receiving: 'Recibiendo archivos',
+  submitted: 'Archivos recibidos',
+} as const;
 
 export function PhotoServicesPage({
   repository,
@@ -67,7 +85,9 @@ export function PhotoServicesPage({
     [type, setType] = useState<PhotoServiceType>('print'),
     [width, setWidth] = useState(''),
     [height, setHeight] = useState(''),
-    [price, setPrice] = useState('0');
+    [price, setPrice] = useState('0'),
+    [workflowRoute, setWorkflowRoute] = useState<PhotoWorkflowRoute>('none'),
+    [requiresFiles, setRequiresFiles] = useState(false);
   const load = () =>
     repository
       .listServices(c.businessId, true)
@@ -84,6 +104,8 @@ export function PhotoServicesPage({
     setWidth(x.widthMm === null ? '' : String(x.widthMm / 10));
     setHeight(x.heightMm === null ? '' : String(x.heightMm / 10));
     setPrice(String(x.defaultUnitPriceCents / 100));
+    setWorkflowRoute(x.workflowRoute);
+    setRequiresFiles(x.requiresCustomerFiles);
   }
   function clear() {
     setEditing(null);
@@ -93,6 +115,8 @@ export function PhotoServicesPage({
     setWidth('');
     setHeight('');
     setPrice('0');
+    setWorkflowRoute('none');
+    setRequiresFiles(false);
   }
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -110,6 +134,8 @@ export function PhotoServicesPage({
         defaultUnitPriceCents: Math.round(
           Number(price.replace(',', '.')) * 100,
         ),
+        workflowRoute,
+        requiresCustomerFiles: requiresFiles,
       });
       if (editing)
         await repository.updateService(c.businessId, editing.id, details);
@@ -190,6 +216,29 @@ export function PhotoServicesPage({
                 onChange={(e) => setPrice(e.target.value)}
               />
             </label>
+            <label>
+              Flujo operativo
+              <select
+                value={workflowRoute}
+                onChange={(e) =>
+                  setWorkflowRoute(e.target.value as PhotoWorkflowRoute)
+                }
+              >
+                {photoWorkflowRoutes.map((x) => (
+                  <option key={x} value={x}>
+                    {routeLabel[x]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="photo-checkbox">
+              <input
+                type="checkbox"
+                checked={requiresFiles}
+                onChange={(e) => setRequiresFiles(e.target.checked)}
+              />
+              Requiere archivos del cliente
+            </label>
             <div>
               <button className="customer-primary" type="submit">
                 {editing ? 'Guardar cambios' : 'Crear servicio'}
@@ -219,6 +268,12 @@ export function PhotoServicesPage({
               {x.widthMm ? ` · ${x.widthMm / 10} × ${x.heightMm! / 10} cm` : ''}
             </span>
             <b>{money(x.defaultUnitPriceCents)}</b>
+            <span>
+              {routeLabel[x.workflowRoute]} ·{' '}
+              {x.requiresCustomerFiles
+                ? 'recibe archivos'
+                : 'sin carga del cliente'}
+            </span>
             <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
             {canEdit && (
               <div>
@@ -352,6 +407,13 @@ export function NewPhotoJobPage({
         promisedAt: promised ? new Date(promised).toISOString() : null,
         notes: notes || null,
         createdBy: c.userId,
+        fileIntakeStatus: lines.some(
+          (line) =>
+            services.find((service) => service.id === line.serviceId)
+              ?.requiresCustomerFiles,
+        )
+          ? 'not_requested'
+          : 'not_required',
         items: lines.map((x) => ({
           photoServiceId: x.serviceId,
           serviceNameSnapshot: x.name,
@@ -585,15 +647,26 @@ export function NewPhotoJobPage({
 export function PhotoJobsPage({
   repository,
   paymentRepository,
+  fileIntakeRepository,
   onMutation,
   refreshToken,
+  initialJobId,
 }: {
   repository: PhotoRepository;
   paymentRepository: WorkPaymentRepository;
+  fileIntakeRepository?: PhotoFileIntakeAdminRepository;
   onMutation?: () => void;
   refreshToken?: number;
+  initialJobId?: string | null;
 }) {
   const c = useBusinessContext();
+  const openDriveFolder = (folderId: string) =>
+    fileIntakeRepository?.openDriveFolder(folderId) ??
+    window.open(
+      `https://drive.google.com/drive/folders/${encodeURIComponent(folderId)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
   const [rows, setRows] = useState<PhotoJobSummary[]>([]),
     [selected, setSelected] = useState<PhotoJobBundle | null>(null),
     [editPromised, setEditPromised] = useState(''),
@@ -601,7 +674,8 @@ export function PhotoJobsPage({
     [editNotes, setEditNotes] = useState(''),
     [filter, setFilter] = useState('active'),
     [query, setQuery] = useState(''),
-    [message, setMessage] = useState<string | null>(null);
+    [message, setMessage] = useState<string | null>(null),
+    [uploadLink, setUploadLink] = useState<UploadLinkView | null>(null);
   const load = () => {
     const statuses =
       filter === 'active'
@@ -628,6 +702,11 @@ export function PhotoJobsPage({
     try {
       const bundle = await repository.getJob(c.businessId, id);
       setSelected(bundle);
+      setUploadLink(
+        fileIntakeRepository && c.role !== 'staff'
+          ? await fileIntakeRepository.getUploadLink(id)
+          : null,
+      );
       setEditPromised(
         bundle?.job.promisedAt
           ? new Date(
@@ -640,6 +719,32 @@ export function PhotoJobsPage({
       );
       setEditPriority(bundle?.job.priority ?? 'normal');
       setEditNotes(bundle?.job.notes ?? '');
+    } catch (e) {
+      setMessage(errorText(e));
+    }
+  }
+  useEffect(() => {
+    if (initialJobId) void open(initialJobId);
+  }, [initialJobId]);
+  async function createLink() {
+    if (!selected || !fileIntakeRepository) return;
+    try {
+      const link = await fileIntakeRepository.createUploadLink(selected.job.id);
+      setUploadLink(link);
+      setSelected(await repository.getJob(c.businessId, selected.job.id));
+      if (link.url) await navigator.clipboard.writeText(link.url);
+      setMessage(link.url ? 'Link generado y copiado.' : 'Link generado.');
+      load();
+    } catch (e) {
+      setMessage(errorText(e));
+    }
+  }
+  async function revokeLink() {
+    if (!selected || !fileIntakeRepository) return;
+    try {
+      await fileIntakeRepository.revokeUploadLink(selected.job.id);
+      setUploadLink(await fileIntakeRepository.getUploadLink(selected.job.id));
+      setMessage('Link revocado.');
     } catch (e) {
       setMessage(errorText(e));
     }
@@ -789,6 +894,8 @@ export function PhotoJobsPage({
               </dd>
               <dt>Estado</dt>
               <dd>{statusLabel[selected.job.status]}</dd>
+              <dt>Archivos</dt>
+              <dd>{intakeLabel[selected.job.fileIntakeStatus]}</dd>
             </dl>
             {!['delivered', 'cancelled'].includes(selected.job.status) && (
               <div className="photo-detail-edit">
@@ -883,6 +990,93 @@ export function PhotoJobsPage({
                   )}
                 </div>
               ))}
+            <section className="photo-files">
+              <h3>ARCHIVOS</h3>
+              {selected.items
+                .filter((x) => x.isActive)
+                .map((item) => {
+                  const files = (selected.files ?? []).filter(
+                    (file) =>
+                      file.photoJobItemId === item.id &&
+                      file.status === 'uploaded',
+                  );
+                  if (!files.length) return null;
+                  const copies = files.reduce(
+                    (sum, file) => sum + file.copies,
+                    0,
+                  );
+                  return (
+                    <div key={item.id}>
+                      <strong>{item.serviceNameSnapshot}</strong>
+                      <span>
+                        {files.length} archivos
+                        {files.some((x) => x.workflowRoute === 'lab')
+                          ? ` / ${copies} copias`
+                          : ''}
+                      </span>
+                    </div>
+                  );
+                })}
+              {!(selected.files ?? []).some((x) => x.status === 'uploaded') && (
+                <p>Todavía no hay archivos recibidos.</p>
+              )}
+              {fileIntakeRepository &&
+                c.role !== 'staff' &&
+                selected.job.fileIntakeStatus !== 'not_required' && (
+                  <div className="photo-actions">
+                    {uploadLink?.url && (
+                      <button
+                        onClick={() =>
+                          void navigator.clipboard.writeText(uploadLink.url!)
+                        }
+                      >
+                        Copiar link
+                      </button>
+                    )}
+                    <button onClick={() => void createLink()}>
+                      {uploadLink ? 'Regenerar' : 'Generar link'}
+                    </button>
+                    {uploadLink && !uploadLink.revokedAt && (
+                      <button
+                        className="danger-action"
+                        onClick={() => void revokeLink()}
+                      >
+                        Revocar
+                      </button>
+                    )}
+                  </div>
+                )}
+              {uploadLink &&
+                !uploadLink.url &&
+                !uploadLink.revokedAt &&
+                !uploadLink.submittedAt && (
+                  <small>
+                    Por seguridad el token no se puede volver a leer. Regeneralo
+                    para obtener un link nuevo.
+                  </small>
+                )}
+              {selected.job.driveFolderId && (
+                <button
+                  onClick={() => openDriveFolder(selected.job.driveFolderId!)}
+                >
+                  Abrir carpeta en Drive
+                </button>
+              )}
+              {selected.job.driveEditedFolderId && (
+                <button
+                  onClick={() =>
+                    openDriveFolder(selected.job.driveEditedFolderId!)
+                  }
+                >
+                  Abrir Editadas
+                </button>
+              )}
+              {!fileIntakeRepository &&
+                selected.job.fileIntakeStatus !== 'not_required' &&
+                !selected.job.driveFolderId && (
+                  <small>Google Drive requiere conexión.</small>
+                )}
+            </section>
             <h3>
               TOTAL{' '}
               {money(
@@ -992,5 +1186,120 @@ export function PhotoJobsDashboard({
         </small>
       ))}
     </Card>
+  );
+}
+
+type ProductionRow = {
+  bundle: PhotoJobBundle;
+  item: PhotoJobBundle['items'][number];
+  route: 'lab' | 'editing';
+  files: NonNullable<PhotoJobBundle['files']>;
+};
+export function PhotoProductionPage({
+  repository,
+  fileIntakeRepository,
+  refreshToken,
+  onOpenJob,
+}: {
+  repository: PhotoRepository;
+  fileIntakeRepository?: PhotoFileIntakeAdminRepository;
+  refreshToken?: number;
+  onOpenJob?: (jobId: string) => void;
+}) {
+  const c = useBusinessContext();
+  const [rows, setRows] = useState<ProductionRow[]>([]);
+  const [message, setMessage] = useState<string | null>(null);
+  useEffect(() => {
+    void repository
+      .listJobs(c.businessId, c.branchId!, {
+        statuses: ['received', 'in_progress', 'ready'],
+        limit: 300,
+      })
+      .then(
+        async (jobs) =>
+          (
+            await Promise.all(
+              jobs
+                .filter((x) => x.job.fileIntakeStatus === 'submitted')
+                .map((x) => repository.getJob(c.businessId, x.job.id)),
+            )
+          ).filter(Boolean) as PhotoJobBundle[],
+      )
+      .then((bundles) => {
+        const next: ProductionRow[] = [];
+        for (const bundle of bundles)
+          for (const item of bundle.items.filter((x) => x.isActive)) {
+            const files = (bundle.files ?? []).filter(
+              (x) => x.photoJobItemId === item.id && x.status === 'uploaded',
+            );
+            const route = files[0]?.workflowRoute;
+            if ((route === 'lab' || route === 'editing') && files.length)
+              next.push({ bundle, item, route, files });
+          }
+        next.sort((a, b) =>
+          comparePhotoProductionQueue(a.bundle.job, b.bundle.job),
+        );
+        setRows(next);
+      })
+      .catch((x) => setMessage(errorText(x)));
+  }, [repository, c.businessId, c.branchId, refreshToken]);
+  const openFolder = (id: string) =>
+    fileIntakeRepository?.openDriveFolder(id) ??
+    window.open(
+      `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`,
+      '_blank',
+      'noopener,noreferrer',
+    );
+  const queue = (route: 'lab' | 'editing') =>
+    rows.filter((x) => x.route === route);
+  return (
+    <>
+      <PageHeader
+        eyebrow="FOTOGRAFÍA"
+        title="Producción"
+        description="Archivos enviados y listos para laboratorio o edición."
+      />
+      {message && <p className="appointment-error">{message}</p>}
+      {(['lab', 'editing'] as const).map((route) => (
+        <section className="production-queue" key={route}>
+          <h2>{route === 'lab' ? 'LABORATORIO' : 'EDICIÓN'}</h2>
+          {queue(route).map((row) => (
+            <Card
+              key={`${row.bundle.job.id}:${row.item.id}`}
+              className="production-row"
+            >
+              <div>
+                {row.bundle.job.priority === 'urgent' && (
+                  <b className="photo-urgent">URGENTE</b>
+                )}{' '}
+                {isPhotoJobOverdue(row.bundle.job) && (
+                  <b className="photo-overdue">ATRASADO</b>
+                )}
+                <strong>{row.bundle.customerName}</strong>
+                <span>{row.item.serviceNameSnapshot}</span>
+              </div>
+              <span>
+                {row.files.length} archivos ·{' '}
+                {row.files.reduce((s, x) => s + x.copies, 0)} copias
+              </span>
+              <span>
+                {row.bundle.job.promisedAt
+                  ? new Date(row.bundle.job.promisedAt).toLocaleString('es-AR')
+                  : 'Sin fecha prometida'}
+              </span>
+              <button onClick={() => openFolder(row.files[0].driveFolderId)}>
+                {route === 'editing' ? 'Abrir originales' : 'Abrir Drive'}
+              </button>
+              {onOpenJob && (
+                <button onClick={() => onOpenJob(row.bundle.job.id)}>
+                  Abrir Job
+                </button>
+              )}
+            </Card>
+          ))}
+          {!queue(route).length && <Card>No hay trabajos en esta cola.</Card>}
+        </section>
+      ))}
+    </>
   );
 }

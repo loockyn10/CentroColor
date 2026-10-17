@@ -13,6 +13,7 @@ export const navigation: NavigationItem[] = [
   { id: 'sales', label: 'Ventas' },
   { id: 'new-photo-job', label: 'Nuevo trabajo', section: 'FOTOGRAFÍA' },
   { id: 'photo-jobs', label: 'Trabajos' },
+  { id: 'photo-production', label: 'Producción' },
   { id: 'photo-services', label: 'Servicios fotográficos' },
   { id: 'calendar', label: 'Calendario', section: 'AGENDA' },
   { id: 'appointments', label: 'Turnos' },

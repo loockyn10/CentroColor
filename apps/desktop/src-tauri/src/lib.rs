@@ -373,6 +373,7 @@ pub fn run() {
         Migration { version: 12, description: "create_framing_sync", sql: include_str!("../migrations/0012_framing_sync.sql"), kind: MigrationKind::Up },
         Migration { version: 13, description: "create_photo_jobs", sql: include_str!("../migrations/0013_photo_jobs.sql"), kind: MigrationKind::Up },
         Migration { version: 14, description: "create_work_payments", sql: include_str!("../migrations/0014_work_payments.sql"), kind: MigrationKind::Up },
+        Migration { version: 15, description: "create_photo_file_intake", sql: include_str!("../migrations/0015_photo_file_intake.sql"), kind: MigrationKind::Up },
     ];
 
     tauri::Builder::default()

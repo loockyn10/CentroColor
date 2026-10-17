@@ -80,6 +80,9 @@ export type {
 } from './payment';
 export {
   photoServiceTypes,
+  photoWorkflowRoutes,
+  photoFileIntakeStatuses,
+  photoJobFileStatuses,
   photoJobStatuses,
   photoJobPriorities,
   requirePhotoQuantity,
@@ -91,10 +94,17 @@ export {
   normalizePhotoJobItemDetails,
   isPhotoJobOverdue,
   comparePhotoProductionQueue,
+  requirePhotoCopies,
+  photoCopiesMismatch,
+  sanitizeDriveName,
 } from './photo';
 export type {
   PhotoService,
   PhotoServiceType,
+  PhotoWorkflowRoute,
+  PhotoFileIntakeStatus,
+  PhotoJobFileStatus,
+  PhotoJobFile,
   PhotoJob,
   PhotoJobStatus,
   PhotoJobPriority,

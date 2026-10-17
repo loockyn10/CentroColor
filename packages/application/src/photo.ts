@@ -8,6 +8,7 @@ import {
   type PhotoJobItem,
   type PhotoJobPriority,
   type PhotoJobStatus,
+  type PhotoJobFile,
   type PhotoService,
 } from '@centrocolor/domain';
 
@@ -21,6 +22,7 @@ export interface PhotoJobSummary {
 export interface PhotoJobBundle {
   job: PhotoJob;
   items: PhotoJobItem[];
+  files: PhotoJobFile[];
   customerName: string;
   customerPhone: string | null;
 }
@@ -47,6 +49,8 @@ export interface PhotoRepository {
       | 'widthMm'
       | 'heightMm'
       | 'defaultUnitPriceCents'
+      | 'workflowRoute'
+      | 'requiresCustomerFiles'
     >,
   ): Promise<PhotoService>;
   setServiceActive(
@@ -67,6 +71,36 @@ export interface PhotoRepository {
     id: string,
     status: PhotoJobStatus,
   ): Promise<PhotoJob>;
+  setFileIntakeStatus?(
+    businessId: string,
+    id: string,
+    status: PhotoJob['fileIntakeStatus'],
+  ): Promise<PhotoJob>;
+}
+
+export interface GoogleDriveIntegrationView {
+  status: 'connected' | 'disconnected' | 'error' | 'reconnect_required';
+  googleAccountEmail: string | null;
+  rootFolderId: string | null;
+  connectedAt: string | null;
+}
+
+export interface UploadLinkView {
+  id: string;
+  url: string | null;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  submittedAt: string | null;
+}
+
+export interface PhotoFileIntakeAdminRepository {
+  getDriveIntegration(businessId: string): Promise<GoogleDriveIntegrationView>;
+  startDriveConnection(businessId: string): Promise<string>;
+  disconnectDrive(businessId: string): Promise<void>;
+  createUploadLink(photoJobId: string): Promise<UploadLinkView>;
+  getUploadLink(photoJobId: string): Promise<UploadLinkView | null>;
+  revokeUploadLink(photoJobId: string): Promise<void>;
+  openDriveFolder(folderId: string): void;
 }
 
 export function createPhotoService(
@@ -80,6 +114,8 @@ export function createPhotoService(
     | 'widthMm'
     | 'heightMm'
     | 'defaultUnitPriceCents'
+    | 'workflowRoute'
+    | 'requiresCustomerFiles'
   >,
   now = new Date().toISOString(),
 ) {
@@ -103,6 +139,7 @@ export function buildPhotoJob(
     notes: string | null;
     sourceAppointmentId?: string | null;
     sourceEventId?: string | null;
+    fileIntakeStatus?: PhotoJob['fileIntakeStatus'];
     createdBy: string;
     items: Array<
       Pick<
@@ -135,6 +172,9 @@ export function buildPhotoJob(
     businessId: input.businessId,
     branchId: input.branchId,
     ...normalizedJob,
+    fileIntakeStatus: input.fileIntakeStatus ?? 'not_requested',
+    driveFolderId: null,
+    driveEditedFolderId: null,
     createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,

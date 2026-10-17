@@ -8,6 +8,7 @@ import type {
   PhotoJob,
   PhotoJobItem,
   PhotoJobStatus,
+  PhotoJobFile,
   PhotoService,
 } from '@centrocolor/domain';
 const db = () => Database.load('sqlite:centrocolor.db');
@@ -20,6 +21,8 @@ const service = (x: any): PhotoService => ({
   widthMm: x.width_mm,
   heightMm: x.height_mm,
   defaultUnitPriceCents: x.default_unit_price_cents,
+  workflowRoute: x.workflow_route,
+  requiresCustomerFiles: x.requires_customer_files === 1,
   isActive: x.is_active === 1,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
@@ -35,7 +38,28 @@ const job = (x: any): PhotoJob => ({
   notes: x.notes,
   sourceAppointmentId: x.source_appointment_id,
   sourceEventId: x.source_event_id,
+  fileIntakeStatus: x.file_intake_status,
+  driveFolderId: x.drive_folder_id,
+  driveEditedFolderId: x.drive_edited_folder_id,
   createdBy: x.created_by,
+  createdAt: x.created_at,
+  updatedAt: x.updated_at,
+});
+const file = (x: any): PhotoJobFile => ({
+  id: x.id,
+  businessId: x.business_id,
+  photoJobId: x.photo_job_id,
+  photoJobItemId: x.photo_job_item_id,
+  driveFileId: x.drive_file_id,
+  driveFolderId: x.drive_folder_id,
+  originalFilename: x.original_filename,
+  storedFilename: x.stored_filename,
+  mimeType: x.mime_type,
+  sizeBytes: x.size_bytes,
+  copies: x.copies,
+  workflowRoute: x.workflow_route,
+  status: x.status,
+  uploadedAt: x.uploaded_at,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
 });
@@ -71,7 +95,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
     await (
       await db()
     ).execute(
-      `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO photo_services(id,business_id,code,name,service_type,width_mm,height_mm,default_unit_price_cents,workflow_route,requires_customer_files,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         x.id,
         x.businessId,
@@ -81,6 +105,8 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.widthMm,
         x.heightMm,
         x.defaultUnitPriceCents,
+        x.workflowRoute,
+        x.requiresCustomerFiles ? 1 : 0,
         x.isActive ? 1 : 0,
         x.createdAt,
         x.updatedAt,
@@ -92,7 +118,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
     await (
       await db()
     ).execute(
-      `UPDATE photo_services SET code=?,name=?,service_type=?,width_mm=?,height_mm=?,default_unit_price_cents=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
+      `UPDATE photo_services SET code=?,name=?,service_type=?,width_mm=?,height_mm=?,default_unit_price_cents=?,workflow_route=?,requires_customer_files=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
       [
         x.code,
         x.name,
@@ -100,6 +126,8 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.widthMm,
         x.heightMm,
         x.defaultUnitPriceCents,
+        x.workflowRoute,
+        x.requiresCustomerFiles ? 1 : 0,
         new Date().toISOString(),
         b,
         id,
@@ -161,9 +189,14 @@ export class SQLitePhotoRepository implements PhotoRepository {
       `SELECT * FROM photo_job_items WHERE business_id=? AND photo_job_id=? ORDER BY created_at,id`,
       [b, id],
     );
+    const files = await d.select<any[]>(
+      `SELECT * FROM photo_job_files WHERE business_id=? AND photo_job_id=? ORDER BY created_at,id`,
+      [b, id],
+    );
     return {
       job: job(rows[0]),
       items: items.map(item),
+      files: files.map(file),
       customerName: rows[0].customer_name,
       customerPhone: rows[0].customer_phone,
     };
@@ -171,7 +204,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
   async saveJob(x: PhotoJob, items: PhotoJobItem[]) {
     const d = await db();
     await d.execute(
-      `INSERT INTO photo_jobs(id,business_id,branch_id,customer_id,status,priority,promised_at,notes,source_appointment_id,source_event_id,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO photo_jobs(id,business_id,branch_id,customer_id,status,priority,promised_at,notes,source_appointment_id,source_event_id,file_intake_status,drive_folder_id,drive_edited_folder_id,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         x.id,
         x.businessId,
@@ -183,6 +216,9 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.notes,
         x.sourceAppointmentId,
         x.sourceEventId,
+        x.fileIntakeStatus,
+        x.driveFolderId,
+        x.driveEditedFolderId,
         x.createdBy,
         x.createdAt,
         x.updatedAt,
@@ -214,7 +250,7 @@ export class SQLitePhotoRepository implements PhotoRepository {
     const d = await db();
     const now = new Date().toISOString();
     await d.execute(
-      `UPDATE photo_jobs SET customer_id=?,status=?,priority=?,promised_at=?,notes=?,source_appointment_id=?,source_event_id=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
+      `UPDATE photo_jobs SET customer_id=?,status=?,priority=?,promised_at=?,notes=?,source_appointment_id=?,source_event_id=?,file_intake_status=?,drive_folder_id=?,drive_edited_folder_id=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
       [
         x.customerId,
         x.status,
@@ -223,6 +259,9 @@ export class SQLitePhotoRepository implements PhotoRepository {
         x.notes,
         x.sourceAppointmentId,
         x.sourceEventId,
+        x.fileIntakeStatus,
+        x.driveFolderId,
+        x.driveEditedFolderId,
         now,
         x.businessId,
         x.id,
@@ -262,5 +301,22 @@ export class SQLitePhotoRepository implements PhotoRepository {
     );
     if (!r[0]) throw new Error('No se encontró el trabajo.');
     return job(r[0]);
+  }
+  async setFileIntakeStatus(
+    b: string,
+    id: string,
+    status: PhotoJob['fileIntakeStatus'],
+  ) {
+    const d = await db();
+    await d.execute(
+      `UPDATE photo_jobs SET file_intake_status=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?`,
+      [status, new Date().toISOString(), b, id],
+    );
+    const rows = await d.select<any[]>(
+      `SELECT * FROM photo_jobs WHERE business_id=? AND id=?`,
+      [b, id],
+    );
+    if (!rows[0]) throw new Error('No se encontró el trabajo.');
+    return job(rows[0]);
   }
 }

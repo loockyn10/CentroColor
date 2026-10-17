@@ -1709,6 +1709,152 @@ button {
   display: block;
   margin-top: 0.5rem;
 }
+.photo-checkbox {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  min-height: 2.6rem;
+}
+.photo-checkbox input {
+  min-height: auto;
+}
+.photo-files {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 0.7rem;
+  background: #f4f7f4;
+}
+.photo-files > div:not(.photo-actions) {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #dfe5df;
+}
+.production-queue {
+  display: grid;
+  gap: 0.7rem;
+  margin: 1.25rem 0;
+}
+.production-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.5fr) 1fr 1fr auto auto;
+  align-items: center;
+  gap: 0.8rem;
+}
+.production-row > div {
+  display: grid;
+  gap: 0.25rem;
+}
+.drive-settings {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 42rem;
+}
+.drive-settings > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.upload-portal {
+  min-height: 100vh;
+  padding: clamp(1rem, 4vw, 3rem);
+  background: #f3f5f1;
+  color: #193027;
+}
+.upload-portal > section {
+  width: min(46rem, 100%);
+  margin: 0 auto;
+}
+.upload-portal header,
+.upload-destination,
+.upload-summary,
+.upload-success {
+  padding: 1.2rem;
+  margin-bottom: 1rem;
+  border: 1px solid #dbe2da;
+  border-radius: 1rem;
+  background: #fff;
+}
+.upload-portal header span {
+  color: #2f7258;
+  font-weight: 800;
+}
+.upload-portal h1,
+.upload-portal h2 {
+  margin: 0.35rem 0;
+}
+.upload-picker,
+.upload-actions button {
+  display: inline-flex;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: #245f49;
+  color: #fff;
+  font-weight: 750;
+  cursor: pointer;
+}
+.upload-picker input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.upload-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid #e5e9e4;
+}
+.upload-row > div,
+.upload-row label {
+  display: grid;
+  gap: 0.25rem;
+}
+.upload-row strong {
+  overflow-wrap: anywhere;
+}
+.upload-row input {
+  width: 5rem;
+  padding: 0.5rem;
+}
+.upload-row progress {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+.upload-actions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 0.7rem;
+  padding: 0.8rem 0;
+  background: #f3f5f1;
+}
+.upload-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.upload-finish {
+  background: #173e31 !important;
+}
+.upload-error {
+  margin: 1rem 0;
+  padding: 0.9rem;
+  border-radius: 0.7rem;
+  background: #fde8e5;
+  color: #842c27;
+}
+.upload-success {
+  margin-top: 15vh;
+  text-align: center;
+}
 
 @media (max-width: 760px) {
   .agenda-toolbar,
@@ -1797,6 +1943,15 @@ button {
   }
   .photo-add > * {
     flex: 1 1 100%;
+  }
+  .production-row,
+  .upload-row,
+  .upload-actions {
+    grid-template-columns: 1fr;
+  }
+  .upload-picker,
+  .upload-actions button {
+    width: 100%;
   }
 }
 .work-account {

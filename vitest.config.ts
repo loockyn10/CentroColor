@@ -6,6 +6,7 @@ export default defineConfig({
       'packages/**/*.test.ts',
       'apps/web/src/**/*.test.ts',
       'apps/desktop/src/**/*.test.ts',
+      'supabase/functions/_shared/**/*.test.ts',
     ],
   },
 });

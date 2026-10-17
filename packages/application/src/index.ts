@@ -141,8 +141,17 @@ export type {
   PhotoJobSummary,
   PhotoJobBundle,
   PhotoJobListQuery,
+  PhotoFileIntakeAdminRepository,
+  GoogleDriveIntegrationView,
+  UploadLinkView,
 } from './photo';
 export { syncPhotoEntities } from './photo-sync';
+export { syncPhotoFiles } from './photo-file-sync';
+export type {
+  PhotoFileCursor,
+  PhotoFileSyncLocalPort,
+  PhotoFileSyncCloudPort,
+} from './photo-file-sync';
 export type {
   PhotoSyncType,
   PhotoSyncEntity,

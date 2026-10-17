@@ -25,6 +25,7 @@ import {
   PhotoServicesPage,
   NewPhotoJobPage,
   PhotoJobsPage,
+  PhotoProductionPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -41,6 +42,9 @@ import { SupabaseEventRepository } from './supabase-event-repository';
 import { SupabaseFramingRepository } from './supabase-framing-repository';
 import { SupabasePhotoRepository } from './supabase-photo-repository';
 import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repository';
+import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
+import { PhotoUploadPortal } from './photo-upload-portal';
+import { DriveSettingsPage } from './drive-settings';
 
 function PosSection({
   section,
@@ -90,7 +94,12 @@ function CustomerSection({
 }
 
 function App() {
-  const [activeId, setActiveId] = useState('home');
+  const [activeId, setActiveId] = useState(() =>
+    new URLSearchParams(window.location.search).has('googleDrive')
+      ? 'settings'
+      : 'home',
+  );
+  const [openPhotoJobId, setOpenPhotoJobId] = useState<string | null>(null);
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,6 +113,9 @@ function App() {
   const [photoRepository] = useState(() => new SupabasePhotoRepository());
   const [paymentRepository] = useState(
     () => new SupabaseWorkPaymentRepository(),
+  );
+  const [fileIntakeRepository] = useState(
+    () => new SupabasePhotoFileIntakeAdminRepository(),
   );
 
   useEffect(() => {
@@ -289,6 +301,17 @@ function App() {
           <PhotoJobsPage
             repository={photoRepository}
             paymentRepository={paymentRepository}
+            fileIntakeRepository={fileIntakeRepository}
+            initialJobId={openPhotoJobId}
+          />
+        ) : activeId === 'photo-production' ? (
+          <PhotoProductionPage
+            repository={photoRepository}
+            fileIntakeRepository={fileIntakeRepository}
+            onOpenJob={(id) => {
+              setOpenPhotoJobId(id);
+              setActiveId('photo-jobs');
+            }}
           />
         ) : activeId === 'photo-services' ? (
           <PhotoServicesPage repository={photoRepository} />
@@ -302,6 +325,11 @@ function App() {
           <PosSection section="sales" />
         ) : activeId === 'stock' ? (
           <PosSection section="stock" />
+        ) : activeId === 'settings' ? (
+          <DriveSettingsPage
+            context={context}
+            repository={fileIntakeRepository}
+          />
         ) : (
           <PlaceholderPage title={title} />
         )}
@@ -310,8 +338,13 @@ function App() {
   );
 }
 
+const portalMatch = window.location.pathname.match(/^\/enviar\/([^/]+)\/?$/);
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {portalMatch ? (
+      <PhotoUploadPortal token={decodeURIComponent(portalMatch[1])} />
+    ) : (
+      <App />
+    )}
   </StrictMode>,
 );

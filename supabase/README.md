@@ -26,3 +26,7 @@ do update set role = 'owner', is_active = true, updated_at = now();
 El trigger crea `profiles` al crear usuarios nuevos; la migración rellena perfiles de usuarios anteriores. Si la consulta no inserta ninguna fila, verificar primero la existencia del negocio. El cliente no puede escribir memberships ni asignarse a otro negocio. Para otros usuarios, repetir el alta administrativa con un rol inicial permitido.
 
 Web guarda el token de sesión en `localStorage` del origen mediante el SDK de Supabase para restaurarlo tras recargar. Desktop mantiene el token únicamente en memoria (`persistSession: false`); solo su contexto autorizado se copia a SQLite. En una reconexión Desktop, volver a iniciar sesión para permitir la sincronización Customer y POS. RLS no protege SQLite.
+
+## Sprint 13 — Google Drive
+
+`migrations/20261017000000_photo_file_intake.sql` agrega integración Drive/Vault, links públicos hasheados y metadata de archivos sin binarios. Las siete Edge Functions viven en `functions/`. La configuración exacta y los comandos de secrets/deploy están en `../docs/GOOGLE_DRIVE_SETUP.md`. El dry-run y el deploy remoto no requieren Docker.
