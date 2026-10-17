@@ -6,6 +6,8 @@ Sprint 13 quedó implementado y verificado localmente el 16/10/2026. No aplicar 
 
 El 17/10/2026 se corrigió `_shared/supabase.ts`: la membresía administrativa se lee con el cliente autenticado/RLS, los errores de lectura ya no se confunden con ausencia de membresía y una política pura valida usuario, Business, estado y rol. Como el helper se empaqueta dentro de cada función, redesplegar exactamente `photo-file-admin` y `google-drive-oauth-start`; no cambiaron migraciones ni datos.
 
+Ese mismo día se corrigió el lifecycle del OAuth state. El TTL siempre fue 600.000 ms; el mensaje inmediato provenía de ignorar el resultado de persistencia/lookup y tratar cualquier fila ausente como expirada. Start ahora confirma el INSERT y callback conserva el state hasta que tokens, Vault, carpeta e integración terminan correctamente. Hay logs seguros con fingerprint truncado y tiempos, sin secretos. Redesplegar `google-drive-oauth-start` y `google-drive-oauth-callback`; no hay migración nueva.
+
 Los puntos principales son `packages/domain/src/photo.ts`, `packages/features/src/photo.tsx`, `apps/web/src/photo-upload-portal.tsx`, `supabase/migrations/20261017000000_photo_file_intake.sql`, `supabase/functions/` y SQLite `0015_photo_file_intake.sql`. La guía operativa exacta está en `docs/GOOGLE_DRIVE_SETUP.md`.
 
 ## Próxima validación autorizada

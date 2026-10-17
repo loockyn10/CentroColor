@@ -1,4 +1,8 @@
 import { createFolder, driveFile } from '../_shared/google-drive.ts';
+import {
+  inspectGoogleOAuthState,
+  requireValidGoogleOAuthState,
+} from '../_shared/google-oauth.ts';
 import { sha256 } from '../_shared/token.ts';
 import { serviceClient } from '../_shared/supabase.ts';
 
@@ -11,14 +15,27 @@ Deno.serve(async (request) => {
   try {
     if (!code || !state) throw new Error('Google no devolvió autorización.');
     const hash = await sha256(state);
-    const { data: pending } = await service
+    const { data: pending, error: stateError } = await service
       .from('google_oauth_states')
       .select('*')
       .eq('state_hash', hash)
       .maybeSingle();
-    if (!pending || Date.parse(pending.expires_at) <= Date.now())
-      throw new Error('La autorización OAuth expiró.');
-    await service.from('google_oauth_states').delete().eq('state_hash', hash);
+    const nowMs = Date.now();
+    const inspection = inspectGoogleOAuthState(pending, nowMs);
+    console.info('google_drive_oauth_callback_state', {
+      stateFingerprint: hash.slice(0, 12),
+      stateFound: inspection.stateFound,
+      createdAt: inspection.createdAt,
+      expiresAt: inspection.expiresAt,
+      now: inspection.now,
+      differenceMs: inspection.differenceMs,
+      expiredResult: inspection.expiredResult,
+      usedOrRevoked: !inspection.stateFound,
+      lookupErrorCode: stateError?.code ?? null,
+    });
+    if (stateError)
+      throw new Error('No se pudo validar la autorización OAuth.');
+    requireValidGoogleOAuthState(pending, nowMs);
     const form = new URLSearchParams({
       code,
       client_id: Deno.env.get('GOOGLE_DRIVE_CLIENT_ID')!,
@@ -67,17 +84,21 @@ Deno.serve(async (request) => {
     );
     if (vaultError || !secretId)
       throw new Error('No se pudo guardar el acceso de Google en Vault.');
-    await service.from('google_drive_integrations').upsert({
-      business_id: pending.business_id,
-      google_account_email: about?.user?.emailAddress ?? null,
-      root_folder_id: root.id,
-      refresh_token_secret_id: secretId,
-      connected_by: pending.user_id,
-      connected_at: new Date().toISOString(),
-      disconnected_at: null,
-      status: 'connected',
-      updated_at: new Date().toISOString(),
-    });
+    const { error: integrationError } = await service
+      .from('google_drive_integrations')
+      .upsert({
+        business_id: pending.business_id,
+        google_account_email: about?.user?.emailAddress ?? null,
+        root_folder_id: root.id,
+        refresh_token_secret_id: secretId,
+        connected_by: pending.user_id,
+        connected_at: new Date().toISOString(),
+        disconnected_at: null,
+        status: 'connected',
+        updated_at: new Date().toISOString(),
+      });
+    if (integrationError)
+      throw new Error('No se pudo guardar la integración de Google Drive.');
     if (
       previous?.refresh_token_secret_id &&
       previous.refresh_token_secret_id !== secretId
@@ -85,6 +106,17 @@ Deno.serve(async (request) => {
       await service.rpc('cc_delete_google_refresh_token', {
         p_secret_id: previous.refresh_token_secret_id,
       });
+    const { error: consumeError } = await service
+      .from('google_oauth_states')
+      .delete()
+      .eq('state_hash', hash);
+    if (consumeError) {
+      console.error('google_drive_oauth_callback_state_consume_failed', {
+        stateFingerprint: hash.slice(0, 12),
+        errorCode: consumeError.code,
+      });
+      throw new Error('No se pudo cerrar la autorización OAuth.');
+    }
     return Response.redirect(
       `${pending.return_url}?googleDrive=connected`,
       302,

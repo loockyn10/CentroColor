@@ -4,6 +4,8 @@ Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó imple
 
 El 17 de octubre de 2026 se corrigió la autorización administrativa de las Edge Functions de Drive: el helper compartido ahora consulta `business_memberships` con el JWT autenticado y la RLS existente, valida explícitamente `user_id`, `business_id`, `is_active` y rol `owner`/`admin`, y recién después entrega el cliente service-role. Antes consultaba con el cliente service-role e ignoraba el error de PostgREST, convirtiéndolo incorrectamente en una membresía ausente. `staff`, otro Business y ausencia/inactividad continúan devolviendo 403. Requiere redesplegar `photo-file-admin` y `google-drive-oauth-start`.
 
+También el 17 de octubre se corrigió el falso vencimiento inmediato del OAuth state. La ventana ya era correcta (`Date.now() + 600.000 ms`), pero start ignoraba errores del INSERT y callback confundía fila ausente/error de lookup con expiración; además consumía la fila antes del intercambio con Google. Ahora start exige la fila persistida, registra tiempos y fingerprint seguro, callback distingue inexistente/usado de expirado, registra `differenceMs`, controla errores de integración y elimina el state sólo después de completar el flujo. Requiere redesplegar `google-drive-oauth-start` y `google-drive-oauth-callback`; no requiere migración.
+
 ## Implementado
 
 - `PhotoService` configura `workflow_route` (`none`, `lab`, `editing`, `other`) y `requires_customer_files`; owner/admin edita y staff consulta.
@@ -24,7 +26,7 @@ El 17 de octubre de 2026 se corrigió la autorización administrativa de las Edg
 
 - `pnpm typecheck`: pasa.
 - `pnpm lint`: pasa.
-- `pnpm test`: 96 pruebas en 36 archivos, pasa. Incluye autorización explícita de owner/admin y rechazo 403 de staff, otro Business, otro usuario, membresía inactiva o ausente, además de token, expiración/revocación, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
+- `pnpm test`: 103 pruebas en 36 archivos, pasa. Incluye autorización explícita de owner/admin, lifecycle y unidades del OAuth state, además de token público, Drive finalize, OAuth refresh mock, carpetas, routing, copies, resumable retry y sync metadata.
 - Regresión Python completa: 14 scripts Customer/POS/Inventory/Agenda/Events/Photo/Payments/Sprint 13, pasa. SQLite 0015 aplica y el pull de metadata no genera outbox.
 - `pnpm build`: pasa. Warnings no bloqueantes por chunks >500 kB: Web 633.94 kB y Desktop 738.53 kB.
 - `pnpm build:desktop`: pasa; instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Sólo warning informativo del linker.
