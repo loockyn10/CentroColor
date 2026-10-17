@@ -136,3 +136,9 @@ Cloud no concede INSERT/UPDATE/DELETE directo. `post_work_payment` bloquea la fu
 `PhotoJobDriveFolder` es metadata server-only con clave `(business_id, photo_job_id, folder_key)` y Drive ID. Hace idempotentes los retries aunque el usuario renombre carpetas. `GoogleOAuthState` es server-only, hasheado y expira en diez minutos.
 
 Los binarios y las URLs resumable no participan del sync SQLite. SQLite 0015 sólo guarda metadata e IDs operativos; `photo_file_sync_cursor` pagina por `(updated_at,id)` y los pulls no generan outbox.
+
+### Privilegios y columnas server-owned (estabilización)
+
+`service_role` tiene SELECT sobre `businesses`, `customers`, `photo_services`, `photo_job_items` y `photo_jobs`; UPDATE sólo de `file_intake_status`, `drive_folder_id` y `drive_edited_folder_id` en `photo_jobs`; y SELECT/INSERT/UPDATE (sin DELETE) sobre `photo_job_upload_links`, `photo_job_files` y `photo_job_drive_folders`, además de lo otorgado antes para `google_oauth_states` y `google_drive_integrations`. `anon` no tiene acceso; `authenticated` sólo lee los links (owner/admin), los archivos y la integración (owner/admin).
+
+Las tres columnas de intake de `photo_jobs` son escritas por Edge Functions: un trigger conserva su valor anterior en UPDATE hechos con rol `authenticated`/`anon` (INSERT y `service_role` sin cambios). La migración `20261017020000_photo_file_intake_stabilization.sql` también reemplaza `photo_guard_immutable_identity` con ramas por tabla; la versión anterior hacía fallar todo UPDATE de PhotoJob, PhotoJobItem y PhotoService.

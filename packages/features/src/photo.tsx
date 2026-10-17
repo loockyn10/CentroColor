@@ -732,8 +732,19 @@ export function PhotoJobsPage({
       const link = await fileIntakeRepository.createUploadLink(selected.job.id);
       setUploadLink(link);
       setSelected(await repository.getJob(c.businessId, selected.job.id));
-      if (link.url) await navigator.clipboard.writeText(link.url);
-      setMessage(link.url ? 'Link generado y copiado.' : 'Link generado.');
+      // Copying is a convenience: browsers may refuse it after async work, and that
+      // must not hide that the link was created. The URL is also shown on screen.
+      const copied = link.url
+        ? await navigator.clipboard.writeText(link.url).then(
+            () => true,
+            () => false,
+          )
+        : false;
+      setMessage(
+        copied
+          ? 'Link generado y copiado.'
+          : 'Link generado. Copialo desde aquí abajo.',
+      );
       load();
     } catch (e) {
       setMessage(errorText(e));
@@ -1027,7 +1038,15 @@ export function PhotoJobsPage({
                     {uploadLink?.url && (
                       <button
                         onClick={() =>
-                          void navigator.clipboard.writeText(uploadLink.url!)
+                          void navigator.clipboard
+                            .writeText(uploadLink.url!)
+                            .then(
+                              () => setMessage('Link copiado.'),
+                              () =>
+                                setMessage(
+                                  'No se pudo copiar automáticamente. Seleccioná el link y copialo.',
+                                ),
+                            )
                         }
                       >
                         Copiar link
@@ -1046,6 +1065,15 @@ export function PhotoJobsPage({
                     )}
                   </div>
                 )}
+              {uploadLink?.url && (
+                <input
+                  className="upload-link-url"
+                  readOnly
+                  aria-label="Link del cliente"
+                  value={uploadLink.url}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              )}
               {uploadLink &&
                 !uploadLink.url &&
                 !uploadLink.revokedAt &&

@@ -1,10 +1,10 @@
-import { serviceClient } from './supabase.ts';
+import { ApiError } from './http.ts';
+import type { PhotoIntakeStore, UploadLinkRow } from './store.ts';
 import { sha256Hex, uploadLinkError } from './upload-policy.ts';
 
-export async function sha256(value: string) {
-  return await sha256Hex(value);
-}
+export const sha256 = sha256Hex;
 
+/** 32 random bytes by default, base64url without padding (43 characters). */
 export function randomToken(bytes = 32) {
   const value = crypto.getRandomValues(new Uint8Array(bytes));
   return btoa(String.fromCharCode(...value))
@@ -13,26 +13,36 @@ export function randomToken(bytes = 32) {
     .replaceAll('=', '');
 }
 
-export async function destinationId(linkId: string, itemId: string) {
-  const secret = Deno.env.get('PHOTO_UPLOAD_SIGNING_SECRET');
-  if (!secret) throw new Error('Falta PHOTO_UPLOAD_SIGNING_SECRET.');
-  return (await sha256(`${secret}:${linkId}:${itemId}`)).slice(0, 32);
+export async function destinationId(
+  signingSecret: string,
+  linkId: string,
+  itemId: string,
+) {
+  return (await sha256Hex(`${signingSecret}:${linkId}:${itemId}`)).slice(0, 32);
 }
 
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
+
+/**
+ * The public token is a capability: it resolves (via its SHA-256) to exactly one
+ * upload link, which is bound to one Business and one PhotoJob. Nothing else the
+ * caller sends is trusted for authorization.
+ */
 export async function validateUploadToken(
-  token: string,
-  allowSubmitted = false,
-) {
-  if (!token || token.length < 32) throw new Error('Link inválido.');
-  const service = serviceClient();
-  const hash = await sha256(token);
-  const { data: link, error } = await service
-    .from('photo_job_upload_links')
-    .select('*')
-    .eq('token_hash', hash)
-    .maybeSingle();
-  if (error || !link) throw new Error('Link inválido.');
-  const linkError = uploadLinkError(link, Date.now(), allowSubmitted);
-  if (linkError) throw new Error(linkError);
-  return { service, link };
+  store: PhotoIntakeStore,
+  token: unknown,
+  options: { allowSubmitted?: boolean; now?: number } = {},
+): Promise<{ link: UploadLinkRow }> {
+  if (typeof token !== 'string' || !TOKEN_PATTERN.test(token))
+    throw new ApiError('Link inválido.', 404, 'link_invalid');
+  const link = await store.getLinkByHash(await sha256Hex(token));
+  if (!link) throw new ApiError('Link inválido.', 404, 'link_invalid');
+  const problem = uploadLinkError(
+    link,
+    options.now ?? Date.now(),
+    options.allowSubmitted ?? false,
+  );
+  if (problem)
+    throw new ApiError(problem.message, problem.status, problem.code);
+  return { link };
 }

@@ -1,4 +1,10 @@
-import { corsHeaders, body, errorResponse, json } from '../_shared/http.ts';
+import {
+  ApiError,
+  body,
+  errorResponse,
+  json,
+  preflight,
+} from '../_shared/http.ts';
 import { oauthRequestId, safeDatabaseError } from '../_shared/diagnostics.ts';
 import {
   GOOGLE_DRIVE_SCOPE,
@@ -10,12 +16,15 @@ import {
 import { requireAdmin } from '../_shared/supabase.ts';
 import { randomToken, sha256 } from '../_shared/token.ts';
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 Deno.serve(async (request) => {
   const requestId = oauthRequestId();
-  if (request.method === 'OPTIONS')
-    return new Response('ok', { headers: corsHeaders });
+  if (request.method === 'OPTIONS') return preflight();
   try {
     const { businessId } = await body<{ businessId: string }>(request);
+    if (typeof businessId !== 'string' || !UUID.test(businessId))
+      throw new ApiError('Falta el negocio.', 400, 'invalid_business');
     console.info('google_drive_oauth_start_received', {
       requestId,
       authPresent: request.headers.has('Authorization'),
@@ -78,13 +87,15 @@ Deno.serve(async (request) => {
       url: `https://accounts.google.com/o/oauth2/v2/auth?${query}`,
     });
   } catch (cause) {
-    if (cause instanceof Response) return cause;
     console.error('google_drive_oauth_start_failed', {
       requestId,
       errorCode:
         cause instanceof GoogleOAuthError ? cause.code : 'unexpected_error',
       message: cause instanceof Error ? cause.message : 'Unknown error',
     });
-    return errorResponse(cause);
+    return errorResponse(cause, {
+      requestId,
+      context: 'google_drive_oauth_start',
+    });
   }
 });

@@ -9,18 +9,18 @@ describe('seguridad del portal público', () => {
   });
   it('rechaza links revocados, expirados y enviados', () => {
     const base = { revoked_at: null, expires_at: null, submitted_at: null };
-    expect(uploadLinkError({ ...base, revoked_at: '2026-01-01' })).toContain(
-      'revocado',
-    );
+    expect(
+      uploadLinkError({ ...base, revoked_at: '2026-01-01' })?.message,
+    ).toContain('revocado');
     expect(
       uploadLinkError(
         { ...base, expires_at: '2026-01-01' },
         Date.parse('2026-01-02'),
-      ),
+      )?.message,
     ).toContain('expiró');
-    expect(uploadLinkError({ ...base, submitted_at: '2026-01-01' })).toContain(
-      'finalizado',
-    );
+    expect(
+      uploadLinkError({ ...base, submitted_at: '2026-01-01' })?.message,
+    ).toContain('finalizado');
     expect(uploadLinkError(base)).toBeNull();
   });
   it('finalize exige parent y tamaño reales de Drive', () => {

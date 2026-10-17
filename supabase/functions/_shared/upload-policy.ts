@@ -14,18 +14,52 @@ export async function sha256Hex(value: string) {
   ).join('');
 }
 
+export type LinkProblem = { message: string; status: number; code: string };
+
 export function uploadLinkError(
   link: UploadLinkState,
   now = Date.now(),
   allowSubmitted = false,
-) {
-  if (link.revoked_at) return 'Este link fue revocado.';
+): LinkProblem | null {
+  if (link.revoked_at)
+    return {
+      message: 'Este link fue revocado.',
+      status: 410,
+      code: 'link_revoked',
+    };
   if (link.expires_at && Date.parse(link.expires_at) <= now)
-    return 'Este link expiró.';
+    return { message: 'Este link expiró.', status: 410, code: 'link_expired' };
   if (link.submitted_at && !allowSubmitted)
-    return 'Este envío ya fue finalizado.';
+    return {
+      message: 'Este envío ya fue finalizado.',
+      status: 409,
+      code: 'link_submitted',
+    };
   return null;
 }
+
+export const ALLOWED_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'heic',
+  'heif',
+  'tif',
+  'tiff',
+  'dng',
+  'cr2',
+  'cr3',
+  'nef',
+  'arw',
+  'orf',
+  'rw2',
+  'raf',
+]);
+
+export const MAX_FILES_PER_JOB = 500;
+/** Sequential uploads of many small photos are legitimate; this only stops runaway clients. */
+export const MAX_SESSIONS_PER_MINUTE = 120;
+export const MAX_COPIES = 9999;
 
 export function driveFileError(
   remote: {

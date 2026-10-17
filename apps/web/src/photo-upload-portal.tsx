@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import {
+  call,
+  contextBody,
+  finalizeBody,
+  resumableOffset,
+  sessionBody,
+  submitBody,
+  uploadChunks,
+  type UploadContext as Context,
+  type UploadSession,
+} from './photo-upload-client';
 
-type Destination = {
-  destinationId: string;
-  name: string;
-  quantity: number;
-  widthMm: number | null;
-  heightMm: number | null;
-  workflowRoute: 'lab' | 'editing' | 'other';
-};
-type Context = {
-  businessName: string;
-  customerName: string;
-  orderCode: string;
-  destinations: Destination[];
-  expiresAt: string | null;
-};
 type Upload = {
   id: string;
   destinationId: string;
@@ -29,62 +25,9 @@ type Upload = {
 };
 
 const errorText = (x: unknown) =>
-  x instanceof Error ? x.message : 'No se pudo completar la operación.';
-
-async function call(name: string, body: unknown) {
-  const base = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '');
-  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const response = await fetch(`${base}/functions/v1/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: key ?? '',
-      Authorization: `Bearer ${key ?? ''}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.error)
-    throw new Error(payload.error ?? 'No se pudo contactar a CentroColor.');
-  return payload;
-}
-
-export async function resumableOffset(url: string, size: number) {
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Range': `bytes */${size}` },
-  });
-  if (response.ok) return size;
-  if (response.status !== 308) throw new Error('La sesión de carga venció.');
-  const range = response.headers.get('Range');
-  return range ? Number(range.split('-')[1]) + 1 : 0;
-}
-
-export async function uploadChunks(
-  file: File,
-  url: string,
-  chunkSize: number,
-  onProgress: (value: number) => void,
-  start = 0,
-) {
-  let offset = start;
-  while (offset < file.size) {
-    const end = Math.min(offset + chunkSize, file.size);
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': file.type || 'application/octet-stream',
-        'Content-Range': `bytes ${offset}-${end - 1}/${file.size}`,
-      },
-      body: file.slice(offset, end),
-    });
-    if (response.status !== 308 && !response.ok)
-      throw new Error(`La carga se interrumpió (${response.status}).`);
-    const range = response.headers.get('Range');
-    offset = range ? Number(range.split('-')[1]) + 1 : end;
-    onProgress(Math.round((offset * 100) / file.size));
-  }
-}
+  x instanceof Error && x.message
+    ? x.message
+    : 'No se pudo completar la operación.';
 
 export function PhotoUploadPortal({ token }: { token: string }) {
   const [context, setContext] = useState<Context | null>(null);
@@ -93,7 +36,7 @@ export function PhotoUploadPortal({ token }: { token: string }) {
   const [fatal, setFatal] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   useEffect(() => {
-    call('photo-upload-context', { token })
+    call<Context>('photo-upload-context', contextBody(token))
       .then(setContext)
       .catch((x) => setFatal(errorText(x)));
   }, [token]);
@@ -144,25 +87,26 @@ export function PhotoUploadPortal({ token }: { token: string }) {
               (progress) => patch(row.id, { progress }),
               offset,
             );
-          await call('photo-upload-finalize', {
-            token,
-            uploadId: row.uploadId,
-          });
+          await call(
+            'photo-upload-finalize',
+            finalizeBody(token, row.uploadId),
+          );
           patch(row.id, { status: 'uploaded', progress: 100 });
           return;
         } catch {
           patch(row.id, { uploadUrl: undefined, chunkSize: undefined });
         }
       }
-      const session = await call('photo-upload-session', {
-        token,
-        destinationId: row.destinationId,
-        filename: row.file.name,
-        mimeType: row.file.type,
-        sizeBytes: row.file.size,
-        copies: row.copies,
-        previousUploadId: row.uploadId,
-      });
+      const session = await call<UploadSession>(
+        'photo-upload-session',
+        sessionBody(
+          token,
+          row.destinationId,
+          row.file,
+          row.copies,
+          row.uploadId,
+        ),
+      );
       patch(row.id, {
         uploadId: session.uploadId,
         uploadUrl: session.uploadUrl,
@@ -174,10 +118,10 @@ export function PhotoUploadPortal({ token }: { token: string }) {
         session.chunkSize,
         (progress) => patch(row.id, { progress }),
       );
-      await call('photo-upload-finalize', {
-        token,
-        uploadId: session.uploadId,
-      });
+      await call(
+        'photo-upload-finalize',
+        finalizeBody(token, session.uploadId),
+      );
       patch(row.id, {
         status: 'uploaded',
         progress: 100,
@@ -198,7 +142,10 @@ export function PhotoUploadPortal({ token }: { token: string }) {
     if (!window.confirm('¿Confirmás que terminaste de enviar tus fotos?'))
       return;
     try {
-      const result = await call('photo-upload-submit', { token });
+      const result = await call<{ warnings?: string[] }>(
+        'photo-upload-submit',
+        submitBody(token),
+      );
       setSubmitted(true);
       if (result.warnings?.length) setMessage(result.warnings.join(' '));
     } catch (x) {

@@ -1,10 +1,15 @@
 # Estado actual
 
-Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado en código el 16 de octubre de 2026. Según la validación runtime informada el 17 de octubre, las migraciones Sprint 12/13 y las Edge Functions ya están desplegadas; esta tarea no ejecutó `db push` real ni deploy.
+Sprint 13 — Portal de clientes + Google Drive + flujo de archivos quedó implementado el 16 de octubre de 2026 y se **auditó y estabilizó el 17 de octubre** sin agregar funcionalidades. Las migraciones Sprint 12/13 y `20261017010000_google_drive_oauth_hardening.sql` ya están aplicadas; OAuth funciona (owner conecta, carpeta `CentroColor` creada). La corrección descrita aquí está **verificada en código y contra la base real (sólo lectura y transacciones revertidas) pero todavía no aplicada ni desplegada**: falta `db push` de `20261017020000_photo_file_intake_stabilization.sql`, redesplegar cinco funciones y publicar la Web (ver `docs/HANDOFF.md`).
 
-El 17 de octubre de 2026 se corrigió la autorización administrativa de las Edge Functions de Drive: el helper compartido ahora consulta `business_memberships` con el JWT autenticado y la RLS existente, valida explícitamente `user_id`, `business_id`, `is_active` y rol `owner`/`admin`, y recién después entrega el cliente service-role. Antes consultaba con el cliente service-role e ignoraba el error de PostgREST, convirtiéndolo incorrectamente en una membresía ausente. `staff`, otro Business y ausencia/inactividad continúan devolviendo 403. Requiere redesplegar `photo-file-admin` y `google-drive-oauth-start`.
+## Causa raíz de “Edge Function returned a non-2xx status code” al generar el link
 
-También el 17 de octubre se auditó y endureció de punta a punta el OAuth real. El 403 de start provenía del INSERT server-side en una tabla sin privilegios DML de `service_role` declarados explícitamente; el error DB era ocultado y el helper HTTP lo clasificaba como 403 sólo por contener “autorización”. La migración incremental `20261017010000_google_drive_oauth_hardening.sql` agrega esos grants, `consumed_at` y una RPC transaccional que persiste la integración y consume el state atómicamente. Start exige la fila persistida y callback valida config/tokens/Vault/Drive, reutiliza la carpeta raíz por ID/appProperties, limpia el secreto nuevo ante rollback y registra diagnósticos seguros. El dry-run remoto propone únicamente esa migración. Requiere aplicarla y redesplegar `google-drive-oauth-start` y `google-drive-oauth-callback`.
+Dos defectos independientes, ambos reproducidos contra el proyecto vinculado:
+
+1. `service_role` no tenía DML sobre ninguna tabla nueva (sólo REFERENCES/TRIGGER/TRUNCATE): leer `photo_jobs` devolvía vacío (“No se encontró el trabajo”) y el INSERT del link fallaba con 42501. El error de base se convertía en un mensaje genérico 400 y la UI sólo mostraba “non-2xx”.
+2. Latente desde Sprint 11: el trigger compartido `photo_guard_immutable_identity` hacía fallar con 42703 **todo UPDATE** de PhotoJob/PhotoJobItem/PhotoService. Aun con los grants, `create_link` (estado `awaiting_files`), la sesión (`receiving`) y el submit habrían fallado después.
+
+Además, el estado de intake podía ser pisado por un push de Web/Desktop con datos viejos; ahora es de servidor. Otros hallazgos corregidos: errores de lectura ignorados en todas las funciones, `appProperties` de Drive con `original_filename` (> 124 bytes con nombres largos), sesión resumable sin `Origin` (el PUT del navegador podía fallar por CORS), rate limit de 30 sesiones/minuto que cortaba cargas secuenciales de ~30+ fotos, intentos `failed` consumiendo el cupo de 500, finalize que respondía ok sin cambiar nada, `reconnect_required` ante cualquier fallo de refresh (incluida mala configuración), link anterior revocado antes de insertar el nuevo, copiar al portapapeles que ocultaba un link ya creado y mensajes del portal sin detalle de red.
 
 ## Implementado
 
@@ -22,21 +27,25 @@ También el 17 de octubre se auditó y endureció de punta a punta el OAuth real
 - Desktop sincroniza nuevos campos y hace pull incremental de PhotoJobFile. No crea outbox de archivos ni cachea binarios; abrir Drive requiere Internet.
 - Migraciones nuevas: SQLite `0015_photo_file_intake.sql` y Cloud `20261017000000_photo_file_intake.sql`. Siete Edge Functions y helpers compartidos implementan OAuth, administración, contexto, sesión, finalize y submit.
 
-## Verificación
+## Verificación (17/10/2026)
 
-- `pnpm typecheck`: pasa.
-- `pnpm lint`: pasa.
-- `pnpm test`: 116 pruebas en 37 archivos, pasa. Incluye autorización explícita de owner/admin, lifecycle/unidades/config/token exchange del OAuth state, límites Vault/integración y root folder idempotente, además de token público, Drive finalize, routing, copies, resumable retry y sync metadata.
-- Regresión Python completa: 14 scripts Customer/POS/Inventory/Agenda/Events/Photo/Payments/Sprint 13, pasa. SQLite 0015 aplica y el pull de metadata no genera outbox.
-- `pnpm build`: pasa. Warnings no bloqueantes por chunks >500 kB: Web 633.94 kB y Desktop 738.53 kB.
-- `pnpm build:desktop`: pasa; instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`. Sólo warning informativo del linker.
-- `pnpm exec supabase db push --dry-run`: pasa, no aplica nada y propone únicamente `20261017010000_google_drive_oauth_hardening.sql`.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm build` y `pnpm build:desktop`: pasan (instalador `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`; warnings de chunks >500 kB sin cambios).
+- `pnpm test`: 264 pruebas en 45 archivos, pasan (antes 116). Nuevas: handlers admin y portal con store/Drive de prueba, gateway Drive contra un Drive emulado (jerarquía, idempotencia, errores), config, `errorResponse`, helper Web de errores, reintentos de chunks y dos contratos entre capas: `service-grants.contract.test.ts` (tablas/RPC del código vs GRANT de migraciones; falla 8 veces sin la migración nueva) y `stack.e2e.test.ts` (UI/portal reales → handlers reales).
+- Edge Functions: chequeo de tipos con `tsc` y stubs de Deno (Deno no está instalado, no se hizo bundle real).
+- Python: 17 scripts pasan, incluido `photo_file_intake_stabilization_sql.py`.
+- `pnpm exec supabase db push --dry-run`: propone únicamente `20261017020000_photo_file_intake_stabilization.sql`. No se aplicó.
+- Base real (revertido con ROLLBACK, sin datos persistidos): sin la migración, el flujo link→archivo→submit falla en `link_insert` con 42501; con ella todos los pasos pasan (incluido UPDATE de PhotoJob por `service_role` y por un miembro autenticado, que conserva las columnas de intake).
+- Secrets presentes: `GOOGLE_DRIVE_CLIENT_ID/SECRET/REDIRECT_URI`, `PUBLIC_WEB_URL`, `WEB_APP_URL`, `PHOTO_UPLOAD_SIGNING_SECRET`, `PHOTO_UPLOAD_LINK_DAYS`, `PHOTO_UPLOAD_MAX_BYTES`. Por digest, `WEB_APP_URL`/`PUBLIC_WEB_URL` (sin barra final), `REDIRECT_URI` y `LINK_DAYS=14` coinciden con lo documentado; el digest de `PHOTO_UPLOAD_MAX_BYTES` **no** coincide con `2147483648`. Ahora se valida en runtime y el error nombra la variable; si es inválida, reconfigurarla (ver GOOGLE_DRIVE_SETUP).
 - `git diff --check`: sin errores; avisos LF→CRLF del checkout Windows.
 
 ## Pendiente operativo y deuda
 
-Falta aplicar la migración incremental de hardening, redesplegar start/callback y repetir la conexión OAuth real. Deno no está instalado en este equipo; las funciones se cubrieron con pruebas puras, mocks y auditoría estructural, pero el bundle/deploy real de esta corrección continúa pendiente.
-
-El rate limit implementado es por Job (30 sesiones/minuto y 500 archivos); una política distribuida por IP requeriría gateway externo. La reanudación conserva sesión mientras la pestaña sigue abierta; tras cerrar/recargar, el navegador no puede recuperar el `File` local y debe seleccionar/reintentar ese archivo. Los PhotoJobItem custom sin PhotoService no se ofrecen como destino porque no poseen configuración de workflow. No hay detección automática de archivos en `Editadas`, UI administrativa de rechazo/removal, Photoshop/Lightroom, login/galería/entrega digital de cliente, Event/FrameJob files, WhatsApp, email, IA ni impresión automática.
+- Aplicar la migración, redesplegar `photo-file-admin` y las cuatro `photo-upload-*`, publicar la Web y hacer la prueba manual única de `docs/HANDOFF.md`.
+- No verificado en navegador real: CORS del PUT resumable de Google (se reenvía `Origin` al abrir la sesión; `scripts/smoke-photo-intake.mjs --upload` lo comprueba) y si Google expone `Range` en los 308 (el cliente tolera que no).
+- Deno no está instalado: sin bundle/deploy local de las funciones. Las pruebas usan dobles de store y de Drive; la capa `store-supabase.ts` sólo está cubierta por el contrato de grants y por las sondas revertidas.
+- Carreras conocidas y aceptadas: dos pestañas del mismo link creando la misma carpeta a la vez pueden duplicar una carpeta en Drive (el mapa conserva una); un archivo cuya carga se reintentó tras completarse en Drive queda huérfano en la carpeta; una carpeta del mapa enviada a la papelera de Drive no se detecta hasta el próximo error.
+- Refresh de access token en cada request de sesión/finalize (sin caché por isolate) y rate limit sólo por Job; una política por IP requeriría gateway externo.
+- La reanudación conserva sesión mientras la pestaña sigue abierta; tras recargar hay que reseleccionar el archivo. Los PhotoJobItem custom sin PhotoService no se ofrecen como destino.
+- Fuera de alcance: detección automática en `Editadas`, UI de rechazo/removal, Photoshop/Lightroom, login/galería/entrega digital, Event/FrameJob files, WhatsApp, email, IA, impresión automática.
 
 Ver `docs/GOOGLE_DRIVE_SETUP.md` para la puesta en marcha exacta.

@@ -2039,3 +2039,15 @@ button {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.upload-link-url {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d8d4cc);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+}

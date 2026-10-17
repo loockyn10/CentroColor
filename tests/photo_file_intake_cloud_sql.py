@@ -2,7 +2,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SQL = (ROOT / "supabase" / "migrations" / "20261017000000_photo_file_intake.sql").read_text(encoding="utf-8").lower()
-FUNCTIONS = "\n".join(path.read_text(encoding="utf-8").lower() for path in (ROOT / "supabase" / "functions").rglob("*.ts"))
+FUNCTIONS = "\n".join(
+    path.read_text(encoding="utf-8").lower()
+    for path in (ROOT / "supabase" / "functions").rglob("*.ts")
+    if not path.name.endswith(".test.ts")  # deployable code only
+)
 
 
 def require(source: str, value: str) -> None:

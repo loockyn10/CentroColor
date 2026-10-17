@@ -286,4 +286,29 @@ describe('Google OAuth refresh', () => {
       }),
     ).rejects.toThrow('refresh token');
   });
+  it('invalid_grant se distingue de otros rechazos para poder pedir reconexión', async () => {
+    const config = { clientId: 'c', clientSecret: 's', refreshToken: 'r' };
+    const reply = (error: string, status: number) =>
+      vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify({ error }), { status }));
+    await expect(
+      refreshGoogleAccessToken(reply('invalid_grant', 400), config),
+    ).rejects.toMatchObject({
+      code: 'google_refresh_invalid_grant',
+      status: 409,
+    });
+    await expect(
+      refreshGoogleAccessToken(reply('invalid_client', 401), config),
+    ).rejects.toMatchObject({
+      code: 'google_refresh_invalid_client',
+      status: 502,
+    });
+    await expect(
+      refreshGoogleAccessToken(
+        vi.fn().mockRejectedValue(new TypeError('network')),
+        config,
+      ),
+    ).rejects.toMatchObject({ code: 'google_unreachable', status: 503 });
+  });
 });

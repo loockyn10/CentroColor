@@ -251,26 +251,49 @@ export async function exchangeGoogleAuthorizationCode(
   };
 }
 
+export const GOOGLE_REFRESH_REVOKED_CODE = 'google_refresh_invalid_grant';
+
+/**
+ * Only `invalid_grant` means the stored refresh token is no longer usable (revoked,
+ * expired or the user removed access). Every other failure (bad client credentials,
+ * network, Google outage) must NOT flip the integration to reconnect_required.
+ */
 export async function refreshGoogleAccessToken(
   fetcher: typeof fetch,
   config: { clientId: string; clientSecret: string; refreshToken: string },
 ) {
-  const response = await fetcher('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      refresh_token: config.refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!response.ok)
+  let response: Response;
+  try {
+    response = await fetcher('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+  } catch {
+    throw new GoogleOAuthError(
+      'No se pudo contactar a Google. Reintentá en unos minutos.',
+      'google_unreachable',
+      503,
+    );
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (payload.error === 'invalid_grant')
+      throw new GoogleOAuthError(
+        'Google Drive revocó el acceso; volvé a conectar la integración.',
+        GOOGLE_REFRESH_REVOKED_CODE,
+        409,
+      );
     throw new GoogleOAuthError(
       'Google rechazó el refresh token.',
-      'google_refresh_rejected',
+      `google_refresh_${String(payload.error ?? response.status)}`,
       502,
     );
-  const payload = await response.json();
+  }
   if (!payload.access_token)
     throw new GoogleOAuthError(
       'Google no devolvió access token.',
