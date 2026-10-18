@@ -10,6 +10,7 @@ import { AppShell } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { useNavAttention } from './attention';
 import { GlobalSearch } from './search';
+import { GlobalScannerProvider } from './global-scanner';
 
 /**
  * Shell del panel para Web y Desktop: navegación por módulos, buscador global, contadores de
@@ -78,7 +79,13 @@ export function PanelShell({
         />
       )}
     >
-      {children}
+      <GlobalScannerProvider
+        productRepository={productRepository}
+        activePage={activeId}
+        onNavigate={onNavigate}
+      >
+        {children}
+      </GlobalScannerProvider>
     </AppShell>
   );
 }

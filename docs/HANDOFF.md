@@ -16,6 +16,10 @@ Puntos de entrada: pedido público en `apps/web/src/public-order/`, funciones en
 6. WhatsApp (opcional, no bloquea los pedidos): seguir `docs/WHATSAPP_SETUP.md` (app Meta, número, token permanente, plantilla `pedido_listo` de utilidad, secrets, secretos de Vault para `pg_net`, webhook) y probar con un número verificado: Listo → aviso → reintento → reenvío. Probar también Desktop: marcar Listo sin conexión, sincronizar y ver que sale un solo aviso.
 7. Definir la política de abandono (retención) y, si se desea, programar `cc_public_order_mark_abandoned`.
 
+## Escáner global
+
+Detector, coordinador y proveedor en `packages/features/src/scan-*.ts` y `global-scanner.tsx` (detalle en `docs/CURRENT_STATE.md`). Falta probarlo con un lector físico en Web y en la ventana Tauri.
+
 ## Garantías y límites
 
 El navegador nunca decide un precio ni autoriza con un UUID; los borradores no llegan a Producción ni a Desktop; el aviso de «listo» es único por trabajo y depende del estado Cloud; el token de WhatsApp sólo vive en Vault. Drive sigue siendo la autoridad binaria (Sprint 13) y Desktop sigue sin binarios.

@@ -26,6 +26,7 @@ import {
 } from '@centrocolor/domain';
 import { Card, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { useScanCoordinator, useScanState } from './global-scanner';
 
 const emptyDetails: ProductDetails = {
   name: '',
@@ -231,6 +232,8 @@ export function ProductsPage({
   refreshToken?: number;
 }) {
   const { businessId, role } = useBusinessContext();
+  const scanner = useScanCoordinator();
+  const { alta } = useScanState();
   const [query, setQuery] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -266,6 +269,19 @@ export function ProductsPage({
     };
   }, [repository, businessId, query, refresh, refreshToken]);
 
+  useEffect(() => {
+    // Código desconocido escaneado en cualquier módulo: se abre el alta con el barcode capturado.
+    if (alta) {
+      setSelected(null);
+      setMode('new');
+    }
+  }, [alta]);
+
+  function cancelForm() {
+    setMode('list');
+    scanner?.cancelAlta();
+  }
+
   async function save(details: ProductDetails) {
     setBusy(true);
     try {
@@ -284,6 +300,7 @@ export function ProductsPage({
       setRefresh((value) => value + 1);
       onMutation?.();
       setError(null);
+      if (alta && mode === 'new') scanner?.finishAlta(saved);
     } finally {
       setBusy(false);
     }
@@ -489,15 +506,19 @@ export function ProductsPage({
             {mode === 'new' ? 'Nuevo producto' : `Editar ${selected?.name}`}
           </h2>
           <ProductForm
-            key={selected?.id ?? 'new'}
-            initial={selected ?? emptyDetails}
+            key={selected?.id ?? `new-${alta?.barcode ?? ''}`}
+            initial={
+              selected ??
+              (alta ? { ...emptyDetails, barcode: alta.barcode } : emptyDetails)
+            }
+            lockedBarcode={mode === 'new' && alta !== null}
             categories={categories}
             submitLabel={
               mode === 'new' ? 'Guardar producto' : 'Guardar cambios'
             }
             busy={busy}
             onSubmit={save}
-            onCancel={() => setMode('list')}
+            onCancel={cancelForm}
             autofocus
             canManageStock={role === 'owner' || role === 'admin'}
           />
@@ -559,6 +580,8 @@ export function NewSalePage({
   const [error, setError] = useState<string | null>(null);
   const scanner = useRef<HTMLInputElement>(null);
   const scanning = useRef(false);
+  const globalScanner = useScanCoordinator();
+  const { cartQueue } = useScanState();
 
   function focusScanner() {
     window.requestAnimationFrame(() => scanner.current?.focus());
@@ -569,6 +592,16 @@ export function NewSalePage({
   useEffect(() => {
     focusScanner();
   }, []);
+  useEffect(() => {
+    // Escaneos globales (otro módulo o alta recién guardada): misma regla de carrito que `add`.
+    const scanned = globalScanner?.takeCartProducts() ?? [];
+    if (!scanned.length) return;
+    setLines((current) =>
+      scanned.reduce((cart, product) => addToCart(cart, product), current),
+    );
+    setError(null);
+    setNotice(null);
+  }, [globalScanner, cartQueue]);
   useEffect(() => {
     if (!context.branchId) return;
     const ids = [

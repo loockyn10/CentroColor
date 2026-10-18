@@ -1,5 +1,15 @@
 # Estado actual
 
+## Escáner global de códigos de barras (18/10/2026)
+
+Un lector HID (keyboard wedge) funciona desde **cualquier módulo del panel autenticado** (Web y Desktop): el código conocido abre el POS con +1 en el ticket; el desconocido abre Productos → Nuevo producto con el barcode ya cargado (campo bloqueado) y, al guardar, vuelve al POS con el producto nuevo (1 unidad). Sin cambios de esquema, RLS, sync, stock ni ventas.
+
+- **Código**: `packages/features/src/scan-detector.ts` (ráfaga rápida ≤ 50 ms entre teclas, ≥ 4 caracteres, terminada en Enter/CR/LF/CRLF; un segundo terminador dentro de 50 ms se descarta), `scan-coordinator.ts` (resolución con el mismo `scanBarcode` del POS sobre el `ProductRepository` real, cola serializada, alta pendiente) y `global-scanner.tsx` (listener `keydown` en captura montado sólo por `PanelShell`, por eso las rutas públicas no lo incluyen; Desktop usa SQLite sin Supabase). El POS sigue siendo dueño del carrito (`sessionStorage`) y retira la cola con `addToCart`.
+- **Política conservadora**: con un diálogo `aria-modal` abierto, un alta de escáner en curso o el foco en un campo de formulario con texto, el escaneo se descarta con un aviso y no se pierde trabajo. Los dos primeros caracteres de la ráfaga llegan al campo antes de reconocerla; se restituye el valor previo.
+- **Casos tal como los trata el POS** (sin regla nueva): inactivo → aviso; sin precio o stock negativo → se agrega igual (advertencia de stock al cobrar); el barcode es único por negocio (no hay duplicados ni variantes). El alta manual por texto dentro del POS conserva su modal propio.
+- **Verificado**: typecheck, lint, 529 pruebas (22 nuevas en `scan-detector.test.ts`, `scan-coordinator.test.ts` y `public-routes.test.ts`), build, format:check, build:desktop y `git diff --check`. **No verificado**: lector físico, pruebas manuales en navegador/Tauri (requieren Supabase/datos reales) ni el detector contra eventos DOM reales (las pruebas cubren la lógica pura, no jsdom).
+- **Deuda**: lectores sin sufijo Enter no se reconocen; el foco en un campo vacío no bloquea, por lo que un formulario a medio completar sin foco puede perderse al navegar (igual que usar el menú).
+
 ## UX/UI — DESIGN-02 adoptado en la aplicación real (17/10/2026)
 
 Pasada integral de UX/UI sobre Web/PWA y Desktop: el sistema visual aprobado en `apps/design-preview` ya es el de producción. **No cambió ninguna función de negocio ni backend** (Supabase, RLS, Edge Functions, sync, migraciones, Drive, WhatsApp, pagos, intake, ciclo de PhotoJob). La única corrección de dominio autorizada fue la fórmula de marquetería (abajo). La preview sigue como referencia histórica.
