@@ -5,7 +5,7 @@ import type {
   WhatsAppIntegrationView,
   WhatsAppTestResult,
 } from '@centrocolor/application';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Card, StateLine } from '@centrocolor/ui';
 
 const stateLabel: Record<WhatsAppIntegrationView['status'], string> = {
   not_configured: 'Sin configurar',
@@ -104,38 +104,40 @@ export function WhatsAppSettingsPage({
     });
   };
 
-  const header = (
-    <PageHeader
-      eyebrow="CONFIGURACIÓN · INTEGRACIONES"
-      title="WhatsApp"
-      description="Avisos automáticos cuando un pedido web queda listo para retirar."
-    />
-  );
   if (!admin)
     return (
-      <>
-        {header}
-        <Card>
-          <p>
-            Tu rol puede operar trabajos, pero sólo owner/admin puede configurar
-            WhatsApp.
-          </p>
-        </Card>
-      </>
+      <Card className="integration">
+        <header className="integration-head">
+          <h2>WhatsApp</h2>
+        </header>
+        <p className="muted">
+          Tu rol puede operar trabajos, pero sólo owner/admin puede configurar
+          WhatsApp.
+        </p>
+      </Card>
     );
   const configured = integration && integration.status !== 'not_configured';
   return (
     <>
-      {header}
-      {message && <p className="appointment-error">{message}</p>}
-      <Card className="whatsapp-settings">
+      <Card className="integration whatsapp-settings">
+        <header className="integration-head">
+          <h2>WhatsApp</h2>
+          <StateLine
+            parts={[
+              {
+                text: integration ? stateLabel[integration.status] : '…',
+                tone:
+                  integration?.status === 'configured'
+                    ? 'ok'
+                    : integration?.status === 'error'
+                      ? 'alert'
+                      : undefined,
+              },
+            ]}
+          />
+        </header>
+        {message && <p className="appointment-error">{message}</p>}
         <dl>
-          <dt>Estado</dt>
-          <dd>
-            <strong>
-              {integration ? stateLabel[integration.status] : '…'}
-            </strong>
-          </dd>
           <dt>Número configurado</dt>
           <dd>
             {integration?.displayPhoneNumber ??

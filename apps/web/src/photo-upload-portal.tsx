@@ -1,3 +1,4 @@
+import { PublicShell } from './public-order/shell';
 import { useEffect, useMemo, useState } from 'react';
 import {
   call,
@@ -154,31 +155,37 @@ export function PhotoUploadPortal({ token }: { token: string }) {
   }
   if (fatal)
     return (
-      <main className="upload-portal">
-        <section>
-          <h1>CentroColor</h1>
-          <div className="upload-error">{fatal}</div>
-        </section>
-      </main>
+      <PublicShell orderLink={false}>
+        <div className="upload-portal">
+          <section>
+            <h1>CentroColor</h1>
+            <div className="upload-error">{fatal}</div>
+          </section>
+        </div>
+      </PublicShell>
     );
   if (!context)
     return (
-      <main className="upload-portal">
-        <section>
-          <h1>CentroColor</h1>
-          <p>Cargando pedido…</p>
-        </section>
-      </main>
+      <PublicShell orderLink={false}>
+        <div className="upload-portal">
+          <section>
+            <h1>CentroColor</h1>
+            <p>Cargando pedido…</p>
+          </section>
+        </div>
+      </PublicShell>
     );
   if (submitted)
     return (
-      <main className="upload-portal">
-        <section className="upload-success">
-          <h1>¡Listo!</h1>
-          <p>CentroColor recibió tus archivos.</p>
-          {message && <small>{message}</small>}
-        </section>
-      </main>
+      <PublicShell orderLink={false}>
+        <div className="upload-portal">
+          <section className="upload-success">
+            <h1>¡Listo!</h1>
+            <p>CentroColor recibió tus archivos.</p>
+            {message && <small>{message}</small>}
+          </section>
+        </div>
+      </PublicShell>
     );
   const busy = uploads.some((x) => x.status === 'uploading');
   const canFinish =
@@ -186,122 +193,124 @@ export function PhotoUploadPortal({ token }: { token: string }) {
     !busy &&
     !uploads.some((x) => x.status === 'waiting');
   return (
-    <main className="upload-portal">
-      <section>
-        <header>
-          <span>{context.businessName}</span>
-          <h1>Hola, {context.customerName}</h1>
-          <p>
-            Subí las fotos de tu pedido {context.orderCode}. Elegí el servicio
-            correcto para cada archivo.
-          </p>
-        </header>
-        {context.destinations.map((destination) => (
-          <article
-            className="upload-destination"
-            key={destination.destinationId}
-          >
-            <h2>{destination.name}</h2>
+    <PublicShell orderLink={false}>
+      <div className="upload-portal">
+        <section>
+          <header>
+            <span>{context.businessName}</span>
+            <h1>Hola, {context.customerName}</h1>
             <p>
-              {destination.quantity}{' '}
-              {destination.quantity === 1 ? 'unidad' : 'unidades'}
+              Subí las fotos de tu pedido {context.orderCode}. Elegí el servicio
+              correcto para cada archivo.
             </p>
-            <label className="upload-picker">
-              Seleccionar fotos
-              <input
-                type="file"
-                multiple
-                accept="image/*,.heic,.heif,.tif,.tiff,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2,.raf"
-                onChange={(e) =>
-                  choose(destination.destinationId, e.target.files)
-                }
-              />
-            </label>
-            {uploads
-              .filter((x) => x.destinationId === destination.destinationId)
-              .map((row) => (
-                <div className="upload-row" key={row.id}>
-                  <div>
-                    <strong>{row.file.name}</strong>
-                    <small>
-                      {(row.file.size / 1024 / 1024).toFixed(1)} MB ·{' '}
-                      {row.status === 'uploaded'
-                        ? '✓ recibido'
-                        : row.status === 'failed'
-                          ? row.error
-                          : row.status === 'uploading'
-                            ? `${row.progress}%`
-                            : 'esperando'}
-                    </small>
+          </header>
+          {context.destinations.map((destination) => (
+            <article
+              className="upload-destination"
+              key={destination.destinationId}
+            >
+              <h2>{destination.name}</h2>
+              <p>
+                {destination.quantity}{' '}
+                {destination.quantity === 1 ? 'unidad' : 'unidades'}
+              </p>
+              <label className="upload-picker">
+                Seleccionar fotos
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,.heic,.heif,.tif,.tiff,.dng,.cr2,.cr3,.nef,.arw,.orf,.rw2,.raf"
+                  onChange={(e) =>
+                    choose(destination.destinationId, e.target.files)
+                  }
+                />
+              </label>
+              {uploads
+                .filter((x) => x.destinationId === destination.destinationId)
+                .map((row) => (
+                  <div className="upload-row" key={row.id}>
+                    <div>
+                      <strong>{row.file.name}</strong>
+                      <small>
+                        {(row.file.size / 1024 / 1024).toFixed(1)} MB ·{' '}
+                        {row.status === 'uploaded'
+                          ? '✓ recibido'
+                          : row.status === 'failed'
+                            ? row.error
+                            : row.status === 'uploading'
+                              ? `${row.progress}%`
+                              : 'esperando'}
+                      </small>
+                    </div>
+                    {destination.workflowRoute === 'lab' && (
+                      <label>
+                        Copias
+                        <input
+                          type="number"
+                          min="1"
+                          max="9999"
+                          value={row.copies}
+                          disabled={
+                            row.status === 'uploading' ||
+                            row.status === 'uploaded'
+                          }
+                          onChange={(e) =>
+                            patch(row.id, {
+                              copies: Math.max(1, Number(e.target.value)),
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                    {row.status === 'failed' && (
+                      <button onClick={() => void send(row)}>Reintentar</button>
+                    )}
+                    {row.status === 'uploading' && (
+                      <progress max="100" value={row.progress} />
+                    )}
                   </div>
-                  {destination.workflowRoute === 'lab' && (
-                    <label>
-                      Copias
-                      <input
-                        type="number"
-                        min="1"
-                        max="9999"
-                        value={row.copies}
-                        disabled={
-                          row.status === 'uploading' ||
-                          row.status === 'uploaded'
-                        }
-                        onChange={(e) =>
-                          patch(row.id, {
-                            copies: Math.max(1, Number(e.target.value)),
-                          })
-                        }
-                      />
-                    </label>
-                  )}
-                  {row.status === 'failed' && (
-                    <button onClick={() => void send(row)}>Reintentar</button>
-                  )}
-                  {row.status === 'uploading' && (
-                    <progress max="100" value={row.progress} />
-                  )}
-                </div>
-              ))}
-          </article>
-        ))}
-        {!!uploads.length && (
-          <section className="upload-summary">
-            <h2>Resumen</h2>
-            {summary
-              .filter((x) => x.files)
-              .map((x) => (
-                <p key={x.destinationId}>
-                  <strong>{x.name}</strong>: {x.files} archivos
-                  {x.workflowRoute === 'lab' ? ` · ${x.copies} copias` : ''}
-                  {x.workflowRoute === 'lab' && x.copies !== x.quantity
-                    ? ` · Revisá: el pedido indica ${x.quantity}`
-                    : ''}
-                </p>
-              ))}
-          </section>
-        )}
-        {message && <div className="upload-error">{message}</div>}
-        <div className="upload-actions">
-          <button
-            disabled={
-              busy ||
-              !uploads.some(
-                (x) => x.status === 'waiting' || x.status === 'failed',
-              )
-            }
-            onClick={() => void sendAll()}
-          >
-            Subir archivos
-          </button>
-          <button
-            className="upload-finish"
-            disabled={!canFinish}
-            onClick={() => void finish()}
-          >
-            Terminé de enviar mis fotos
-          </button>
-        </div>
-      </section>
-    </main>
+                ))}
+            </article>
+          ))}
+          {!!uploads.length && (
+            <section className="upload-summary">
+              <h2>Resumen</h2>
+              {summary
+                .filter((x) => x.files)
+                .map((x) => (
+                  <p key={x.destinationId}>
+                    <strong>{x.name}</strong>: {x.files} archivos
+                    {x.workflowRoute === 'lab' ? ` · ${x.copies} copias` : ''}
+                    {x.workflowRoute === 'lab' && x.copies !== x.quantity
+                      ? ` · Revisá: el pedido indica ${x.quantity}`
+                      : ''}
+                  </p>
+                ))}
+            </section>
+          )}
+          {message && <div className="upload-error">{message}</div>}
+          <div className="upload-actions">
+            <button
+              disabled={
+                busy ||
+                !uploads.some(
+                  (x) => x.status === 'waiting' || x.status === 'failed',
+                )
+              }
+              onClick={() => void sendAll()}
+            >
+              Subir archivos
+            </button>
+            <button
+              className="upload-finish"
+              disabled={!canFinish}
+              onClick={() => void finish()}
+            >
+              Terminé de enviar mis fotos
+            </button>
+          </div>
+        </section>
+      </div>
+    </PublicShell>
   );
 }

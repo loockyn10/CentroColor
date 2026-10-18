@@ -4,7 +4,7 @@ import type {
   GoogleDriveIntegrationView,
   PhotoFileIntakeAdminRepository,
 } from '@centrocolor/application';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Card, StateLine } from '@centrocolor/ui';
 
 export function DriveSettingsPage({
   context,
@@ -62,67 +62,70 @@ export function DriveSettingsPage({
   }
   if (context.role === 'staff')
     return (
-      <>
-        <PageHeader
-          eyebrow="CONFIGURACIÓN · INTEGRACIONES"
-          title="Google Drive"
-          description="Almacenamiento principal de los archivos enviados por clientes."
-        />
-        <Card>
-          <p>
-            Tu rol puede operar trabajos, pero sólo owner/admin puede
-            administrar Google Drive.
-          </p>
-        </Card>
-      </>
+      <Card className="integration">
+        <header className="integration-head">
+          <h2>Google Drive</h2>
+        </header>
+        <p className="muted">
+          Tu rol puede operar trabajos, pero sólo owner/admin puede administrar
+          Google Drive.
+        </p>
+      </Card>
     );
   const connected = integration?.status === 'connected';
+  const needsAttention =
+    integration?.status === 'reconnect_required' ||
+    integration?.status === 'error';
   return (
-    <>
-      <PageHeader
-        eyebrow="CONFIGURACIÓN · INTEGRACIONES"
-        title="Google Drive"
-        description="Almacenamiento principal de los archivos enviados por clientes."
-      />
+    <Card className="integration drive-settings">
+      <header className="integration-head">
+        <h2>Google Drive</h2>
+        <StateLine
+          parts={[
+            connected
+              ? { text: 'Conectado', tone: 'ok' }
+              : needsAttention
+                ? { text: 'Requiere atención', tone: 'alert' }
+                : { text: 'No conectado' },
+          ]}
+        />
+      </header>
       {message && <p className="appointment-error">{message}</p>}
-      <Card className="drive-settings">
-        {connected ? (
-          <>
-            <strong>
-              Conectado como {integration.googleAccountEmail ?? 'cuenta Google'}
-            </strong>
-            <span>Carpeta raíz CentroColor vinculada por ID.</span>
-            <div>
-              <button
-                onClick={() =>
-                  repository.openDriveFolder(integration.rootFolderId!)
-                }
-              >
-                Abrir Drive
-              </button>
-              <button
-                className="danger-action"
-                onClick={() => void disconnect()}
-              >
-                Desconectar
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <strong>
-              {integration?.status === 'reconnect_required' ||
-              integration?.status === 'error'
-                ? 'Google Drive requiere reconexión'
-                : 'Google Drive no está conectado'}
-            </strong>
-            <p>Conectá Google Drive para recibir fotos de clientes.</p>
-            <button className="customer-primary" onClick={() => void connect()}>
-              Conectar Google Drive
+      {connected ? (
+        <>
+          <p>
+            Conectado como{' '}
+            <strong>{integration.googleAccountEmail ?? 'cuenta Google'}</strong>
+          </p>
+          <div className="photo-actions">
+            <button
+              onClick={() =>
+                repository.openDriveFolder(integration.rootFolderId!)
+              }
+            >
+              Abrir Drive
             </button>
-          </>
-        )}
-      </Card>
-    </>
+            <button className="danger-action" onClick={() => void disconnect()}>
+              Desconectar
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted">
+            {needsAttention
+              ? 'Reconectá Google Drive para seguir recibiendo fotos de clientes.'
+              : 'Conectá Google Drive para recibir fotos de clientes.'}
+          </p>
+          <div className="photo-actions">
+            <button className="customer-primary" onClick={() => void connect()}>
+              {needsAttention
+                ? 'Reconectar Google Drive'
+                : 'Conectar Google Drive'}
+            </button>
+          </div>
+        </>
+      )}
+    </Card>
   );
 }

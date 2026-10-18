@@ -9,7 +9,7 @@ import type {
   ProductCategory,
   StockMovement,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Card, EmptyState, Icon, Metric, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 function errorMessage(error: unknown) {
@@ -58,6 +58,9 @@ export function StockPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [view, setView] = useState<'all' | 'out' | 'tracked' | 'untracked'>(
+    'all',
+  );
 
   useEffect(() => {
     if (!branchId) return;
@@ -168,78 +171,148 @@ export function StockPage({
       <p role="alert">Se requiere una sucursal activa para consultar stock.</p>
     );
   let running = selected ? (balances[selected.id] ?? 0) : 0;
+  const tracked = products.filter((p) => p.tracksInventory);
+  const outOfStock = tracked.filter((p) => (balances[p.id] ?? 0) <= 0);
+  const negative = tracked.filter((p) => (balances[p.id] ?? 0) < 0);
+  const shown = products.filter((p) =>
+    view === 'out'
+      ? p.tracksInventory && (balances[p.id] ?? 0) <= 0
+      : view === 'tracked'
+        ? p.tracksInventory
+        : view === 'untracked'
+          ? !p.tracksInventory
+          : true,
+  );
   return (
     <>
-      <PageHeader
-        eyebrow="CATÁLOGO"
-        title="Stock"
-        description="Inventario de la sucursal actual. Las ventas pueden dejar stock negativo."
-      />
+      <PageHeader title="Stock" />
       {error && (
         <p className="customer-error" role="alert">
           {error}
         </p>
       )}
-      <div className="customer-toolbar">
-        <label>
-          Buscar producto
+      <section className="kpis" aria-label="Resumen de stock">
+        <Metric label="Productos" value={products.length} />
+        <Metric label="Con control de stock" value={tracked.length} />
+        <Metric
+          label="Sin stock"
+          value={outOfStock.length}
+          tone={outOfStock.length ? 'warn' : undefined}
+        />
+        <Metric
+          label="Negativos"
+          value={negative.length}
+          hint="Una venta puede dejar stock negativo"
+          tone={negative.length ? 'alert' : undefined}
+        />
+      </section>
+      <div className="jobs-toolbar">
+        <div className="search-field">
+          <Icon name="search" />
           <input
             type="search"
+            aria-label="Buscar producto"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Nombre o código de barras"
           />
-        </label>
-      </div>
-      <Card className="pos-list-card">
-        <div className="stock-head">
-          <span>Producto</span>
-          <span>Categoría</span>
-          <span>Control</span>
-          <span>Stock actual</span>
-          <span>Acciones</span>
         </div>
-        {products.length === 0 && (
-          <p className="pos-empty">No hay productos para mostrar.</p>
-        )}
-        {products.map((product) => (
-          <div className="stock-row" key={product.id}>
-            <strong>
-              {product.name}
-              <small>{product.barcode ?? ''}</small>
-            </strong>
-            <span>
-              {categories.find((item) => item.id === product.categoryId)
-                ?.name ?? '—'}
-            </span>
-            <span>
-              {product.tracksInventory ? 'Controlado' : 'No controlado'}
-            </span>
-            <strong
-              className={
-                product.tracksInventory && (balances[product.id] ?? 0) < 0
-                  ? 'stock-negative'
-                  : ''
-              }
+        <div className="chips" role="group" aria-label="Filtrar stock">
+          {(
+            [
+              ['all', 'Todos'],
+              ['out', 'Sin stock'],
+              ['tracked', 'Controlados'],
+              ['untracked', 'Sin control'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className="chip"
+              aria-pressed={view === value}
+              onClick={() => setView(value)}
             >
-              {product.tracksInventory ? (balances[product.id] ?? 0) : '—'}
-            </strong>
-            {canManage && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(product);
-                  setMode(null);
-                  setMovements([]);
-                }}
-              >
-                Ver movimientos
-              </button>
-            )}
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <Card className="card--flush">
+        {shown.length === 0 ? (
+          <EmptyState icon="box" title="No hay productos para mostrar" />
+        ) : (
+          <div className="rows">
+            <div className="stock-head" aria-hidden="true">
+              <span>Producto</span>
+              <span>Categoría</span>
+              <span>Control</span>
+              <span>Stock actual</span>
+              <span>Acciones</span>
+            </div>
+            {shown.map((product) => {
+              const quantity = balances[product.id] ?? 0;
+              const state = !product.tracksInventory
+                ? null
+                : quantity < 0
+                  ? 'Negativo'
+                  : quantity === 0
+                    ? 'Sin stock'
+                    : null;
+              return (
+                <div className="stock-row" key={product.id}>
+                  <strong>
+                    {product.name}
+                    <small>{product.barcode ?? ''}</small>
+                  </strong>
+                  <span className="meta">
+                    {categories.find((item) => item.id === product.categoryId)
+                      ?.name ?? '—'}
+                  </span>
+                  <span className="meta">
+                    {product.tracksInventory ? 'Controlado' : 'Sin control'}
+                  </span>
+                  <span className="stock-qty">
+                    <strong
+                      className={
+                        product.tracksInventory && quantity < 0
+                          ? 'stock-negative'
+                          : ''
+                      }
+                    >
+                      {product.tracksInventory ? quantity : '—'}
+                    </strong>
+                    {state && (
+                      <span
+                        className={
+                          state === 'Negativo' ? 'txt-alert' : 'txt-warn'
+                        }
+                      >
+                        {state}
+                      </span>
+                    )}
+                  </span>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelected(product);
+                        setMode(null);
+                        setMovements([]);
+                      }}
+                    >
+                      Ver movimientos
+                    </button>
+                  ) : (
+                    <span />
+                  )}
+                </div>
+              );
+            })}
           </div>
-        ))}
+        )}
         {products.length === 100 && (
-          <p className="pos-empty">
+          <p className="pad meta">
             Se muestran 100 productos. Usá la búsqueda para encontrar otros.
           </p>
         )}

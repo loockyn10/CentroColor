@@ -28,7 +28,14 @@ import {
   type Resource,
   type ResourceReservation,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Icon,
+  PageHeader,
+  Segmented,
+} from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 
@@ -935,6 +942,7 @@ export function EventsPage({
 }) {
   const context = useBusinessContext();
   const [mode, setMode] = useState<'events' | 'types'>('events');
+  const [layout, setLayout] = useState<'board' | 'list'>('board');
   const [filter, setFilter] = useState<'upcoming' | EventStatus>('upcoming');
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<EventSummary[]>([]);
@@ -980,53 +988,117 @@ export function EventsPage({
     setRefresh((x) => x + 1);
     onMutation?.();
   }
+  const boardStatuses: EventStatus[] = ['inquiry', 'quoted', 'reserved'];
+  const asBoard = filter === 'upcoming' && layout === 'board';
+  const card = (x: EventSummary) => (
+    <button
+      type="button"
+      className="oprow event-row"
+      key={x.id}
+      onClick={() => setEditor(x.id)}
+    >
+      <time className="event-date">
+        <strong>
+          {new Date(x.startsAt).toLocaleDateString('es-AR', {
+            day: '2-digit',
+            month: 'short',
+          })}
+        </strong>
+        <span className="meta">{time(x.startsAt)}</span>
+      </time>
+      <span className="what">
+        <strong>{x.title}</strong>
+        <span className="meta block">
+          {x.customerName}
+          {x.eventTypeName ? ` · ${x.eventTypeName}` : ''}
+        </span>
+      </span>
+      <span className="meta">{x.venueName || '—'}</span>
+      <span className="when">
+        <strong className="num">{money(x.totalCents)}</strong>
+        <span className="meta">
+          {x.resourceNames.join(' + ') || 'Sin recursos'}
+        </span>
+      </span>
+      {!asBoard && (
+        <span className="state-line">
+          <span className={x.status === 'reserved' ? 'tone-ok' : undefined}>
+            {statusLabels[x.status]}
+          </span>
+        </span>
+      )}
+    </button>
+  );
   return (
     <>
       <PageHeader
-        eyebrow="AGENDA"
         title="Eventos"
-        description="Eventos extensos, servicios contratados y equipamiento reservado."
-      />
-      <div className="agenda-toolbar">
-        <div className="segmented">
-          <button
-            className={mode === 'events' ? 'active' : ''}
-            onClick={() => setMode('events')}
-          >
-            Eventos
-          </button>
-          <button
-            className={mode === 'types' ? 'active' : ''}
-            onClick={() => setMode('types')}
-          >
-            Tipos
-          </button>
-        </div>
-        {mode === 'events' && (
-          <>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Cliente, título o lugar"
-            />
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as typeof filter)}
-            >
-              <option value="upcoming">Próximos</option>
-              {eventStatuses.map((x) => (
-                <option key={x} value={x}>
-                  {statusLabels[x]}
-                </option>
-              ))}
-            </select>
-            <button
-              className="customer-primary"
+        actions={
+          mode === 'events' ? (
+            <Button
+              variant="primary"
+              icon="plus"
               onClick={() => setEditor(true)}
             >
-              + Crear evento
-            </button>
+              Crear evento
+            </Button>
+          ) : undefined
+        }
+      />
+      <div className="events-toolbar">
+        <Segmented
+          label="Sección"
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'events', label: 'Eventos' },
+            { value: 'types', label: 'Tipos' },
+          ]}
+        />
+        {mode === 'events' && (
+          <>
+            <div className="search-field">
+              <Icon name="search" />
+              <input
+                type="search"
+                aria-label="Buscar eventos"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Cliente, título o lugar"
+              />
+            </div>
+            <div className="chips" role="group" aria-label="Filtrar eventos">
+              <button
+                type="button"
+                className="chip"
+                aria-pressed={filter === 'upcoming'}
+                onClick={() => setFilter('upcoming')}
+              >
+                Próximos
+              </button>
+              {eventStatuses.map((x) => (
+                <button
+                  key={x}
+                  type="button"
+                  className="chip"
+                  aria-pressed={filter === x}
+                  onClick={() => setFilter(x)}
+                >
+                  {statusLabels[x]}
+                </button>
+              ))}
+            </div>
+            {filter === 'upcoming' && (
+              <Segmented
+                label="Vista"
+                value={layout}
+                onChange={setLayout}
+                options={[
+                  { value: 'board', label: 'Tablero' },
+                  { value: 'list', label: 'Lista' },
+                ]}
+              />
+            )}
           </>
         )}
       </div>
@@ -1037,41 +1109,34 @@ export function EventsPage({
       )}
       {mode === 'types' ? (
         <EventTypesManager repository={repository} onMutation={onMutation} />
-      ) : (
-        <Card className="event-list">
-          {rows.length === 0 ? (
-            <p>No hay eventos para este filtro.</p>
-          ) : (
-            rows.map((x) => (
-              <button
-                className="event-list-row"
-                key={x.id}
-                onClick={() => setEditor(x.id)}
+      ) : asBoard ? (
+        <div className="board board--events">
+          {boardStatuses.map((status) => {
+            const column = rows.filter((x) => x.status === status);
+            return (
+              <section
+                className="board-col"
+                key={status}
+                aria-label={statusLabels[status]}
               >
-                <time>
-                  <strong>
-                    {new Date(x.startsAt).toLocaleDateString('es-AR', {
-                      day: '2-digit',
-                      month: 'short',
-                    })}
-                  </strong>
-                  <span>{time(x.startsAt)}</span>
-                </time>
-                <span>
-                  <strong>{x.title}</strong>
-                  <small>
-                    {x.customerName}
-                    {x.eventTypeName ? ` · ${x.eventTypeName}` : ''}
-                  </small>
-                </span>
-                <span>{x.venueName || '—'}</span>
-                <span className={`event-status status-${x.status}`}>
-                  {statusLabels[x.status]}
-                </span>
-                <strong>{money(x.totalCents)}</strong>
-                <small>{x.resourceNames.join(' + ') || 'Sin recursos'}</small>
-              </button>
-            ))
+                <header>
+                  <h2>{statusLabels[status]}</h2>
+                  <span className="meta">{column.length}</span>
+                </header>
+                {column.map(card)}
+                {column.length === 0 && (
+                  <p className="meta pad">Sin eventos.</p>
+                )}
+              </section>
+            );
+          })}
+        </div>
+      ) : (
+        <Card className="card--flush">
+          {rows.length === 0 ? (
+            <EmptyState icon="star" title="No hay eventos para este filtro" />
+          ) : (
+            <div className="rows">{rows.map(card)}</div>
           )}
         </Card>
       )}
@@ -1142,11 +1207,7 @@ export function ResourcesPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="CATÁLOGO"
-        title="Recursos"
-        description="Un registro por unidad física reservable; no son productos ni stock."
-      />
+      <PageHeader title="Recursos" />
       {error && (
         <p role="alert" className="appointment-error">
           {error}
@@ -1269,34 +1330,31 @@ export function ResourceCalendarPage({
     to.toISOString(),
     refreshToken,
   ]);
+  const days = Array.from({ length: view === 'day' ? 1 : 7 }, (_, i) =>
+    addDays(from, i),
+  );
+  const overlaps = (x: ResourceReservationSummary, day: Date) =>
+    new Date(x.startsAt) < addDays(day, 1) && new Date(x.endsAt) > day;
   return (
     <>
-      <PageHeader
-        eyebrow="EVENTOS"
-        title="Disponibilidad de recursos"
-        description="Reservas confirmadas en vista Día o Semana."
-      />
+      <PageHeader title="Disponibilidad de recursos" />
       <div className="agenda-toolbar">
-        <div className="segmented">
-          <button
-            className={view === 'day' ? 'active' : ''}
-            onClick={() => setView('day')}
-          >
-            Día
-          </button>
-          <button
-            className={view === 'week' ? 'active' : ''}
-            onClick={() => setView('week')}
-          >
-            Semana
-          </button>
-        </div>
-        <button
+        <Segmented
+          label="Vista"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'day', label: 'Día' },
+            { value: 'week', label: 'Semana' },
+          ]}
+        />
+        <Button
+          icon="chevL"
           onClick={() => setDate(addDays(date, view === 'day' ? -1 : -7))}
         >
-          ← Anterior
-        </button>
-        <button onClick={() => setDate(startOfDay(new Date()))}>Hoy</button>
+          Anterior
+        </Button>
+        <Button onClick={() => setDate(startOfDay(new Date()))}>Hoy</Button>
         <input
           aria-label="Fecha de disponibilidad"
           type="date"
@@ -1308,101 +1366,72 @@ export function ResourceCalendarPage({
             if (year && month && day) setDate(new Date(year, month - 1, day));
           }}
         />
-        <button onClick={() => setDate(addDays(date, view === 'day' ? 1 : 7))}>
-          Siguiente →
-        </button>
+        <Button
+          iconAfter="chevR"
+          onClick={() => setDate(addDays(date, view === 'day' ? 1 : 7))}
+        >
+          Siguiente
+        </Button>
       </div>
       {error && <p role="alert">{error}</p>}
-      <div className="resource-calendar">
-        {resources.map((resource) => (
-          <Card key={resource.id}>
-            <h2>
-              {resource.name}
-              {!resource.isActive && <small> · Inactivo</small>}
-            </h2>
-            {rows.filter((x) => x.resourceId === resource.id).length === 0 ? (
-              <p>Disponible en el período.</p>
-            ) : (
-              rows
-                .filter((x) => x.resourceId === resource.id)
-                .map((x) => (
-                  <div className="resource-booking" key={x.id}>
-                    <strong>{x.eventTitle}</strong>
-                    <span>
-                      {new Date(x.startsAt).toLocaleDateString('es-AR')} ·{' '}
-                      {time(x.startsAt)} → {time(x.endsAt)}
-                    </span>
-                    <small>{x.customerName}</small>
-                  </div>
-                ))
-            )}
-          </Card>
-        ))}
-      </div>
+      <Card className="card--flush">
+        {resources.length === 0 ? (
+          <EmptyState icon="star" title="Todavía no hay recursos" />
+        ) : (
+          <div className="matrix-scroll">
+            <table className="matrix">
+              <thead>
+                <tr>
+                  <th scope="col">Recurso</th>
+                  {days.map((day) => (
+                    <th scope="col" key={day.toISOString()}>
+                      {day.toLocaleDateString('es-AR', {
+                        weekday: 'short',
+                        day: '2-digit',
+                        month: '2-digit',
+                      })}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {resources.map((resource) => (
+                  <tr key={resource.id}>
+                    <th scope="row">
+                      {resource.name}
+                      {!resource.isActive && (
+                        <span className="meta block">Inactivo</span>
+                      )}
+                    </th>
+                    {days.map((day) => {
+                      const booked = rows.filter(
+                        (x) => x.resourceId === resource.id && overlaps(x, day),
+                      );
+                      return (
+                        <td key={day.toISOString()}>
+                          {booked.length === 0 ? (
+                            <span className="meta">Libre</span>
+                          ) : (
+                            booked.map((x) => (
+                              <div className="resource-booking" key={x.id}>
+                                <strong>{x.eventTitle}</strong>
+                                <span>
+                                  {time(x.startsAt)} → {time(x.endsAt)}
+                                </span>
+                                <small>{x.customerName}</small>
+                              </div>
+                            ))
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
-  );
-}
-
-export function UpcomingEvents({
-  repository,
-  refreshToken,
-}: {
-  repository: EventRepository;
-  refreshToken?: number;
-}) {
-  const context = useBusinessContext();
-  const [rows, setRows] = useState<EventSummary[]>([]);
-  const [count, setCount] = useState(0);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    const from = new Date().toISOString();
-    void Promise.all([
-      repository.countUpcomingEvents(
-        context.businessId,
-        context.branchId!,
-        from,
-      ),
-      repository.listEvents({
-        businessId: context.businessId,
-        branchId: context.branchId!,
-        from,
-        statuses: ['reserved'],
-        limit: 3,
-      }),
-    ])
-      .then(([total, events]) => {
-        setCount(total);
-        setRows(events);
-        setFailed(false);
-      })
-      .catch(() => setFailed(true));
-  }, [repository, context.businessId, context.branchId, refreshToken]);
-  return (
-    <Card className="metric-card upcoming-events">
-      <h2>Próximos eventos</h2>
-      {failed ? (
-        <p>No se pudieron cargar.</p>
-      ) : (
-        <>
-          <div className="metric-value">{count}</div>
-          {rows.map((x) => (
-            <p key={x.id}>
-              <strong>
-                {new Date(x.startsAt).toLocaleDateString('es-AR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                })}
-              </strong>{' '}
-              {x.title}
-              <small>
-                {[...x.serviceNames, ...x.resourceNames]
-                  .slice(0, 3)
-                  .join(' + ')}
-              </small>
-            </p>
-          ))}
-        </>
-      )}
-    </Card>
   );
 }

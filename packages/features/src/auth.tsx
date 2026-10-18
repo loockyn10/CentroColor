@@ -6,7 +6,7 @@ import {
   type PropsWithChildren,
 } from 'react';
 import type { BusinessContext } from '@centrocolor/application';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Button, Card, Logo, PageHeader } from '@centrocolor/ui';
 
 const Context = createContext<BusinessContext | null>(null);
 
@@ -45,15 +45,14 @@ export function LoginPage({
   return (
     <div className="auth-page">
       <div className="auth-brand">
-        <span className="brand-mark">C</span>
-        <strong>CentroColor</strong>
+        <Logo size={64} decorative />
+        <span>
+          <strong>CentroColor</strong>
+          <small>Laboratorio fotográfico</small>
+        </span>
       </div>
       <Card className="auth-card">
-        <PageHeader
-          eyebrow="ACCESO"
-          title="Iniciar sesión"
-          description="Ingresá con tu cuenta de CentroColor."
-        />
+        <PageHeader title="Iniciar sesión" />
         <form onSubmit={submit} className="auth-form">
           <label>
             Correo electrónico
@@ -112,12 +111,19 @@ export function AuthStatePage({
 }) {
   return (
     <div className="auth-page">
+      <div className="auth-brand">
+        <Logo size={64} decorative />
+        <span>
+          <strong>CentroColor</strong>
+        </span>
+      </div>
       <Card className="auth-card">
-        <PageHeader eyebrow="CENTROCOLOR" title={title} description={message} />
+        <PageHeader title={title} />
+        <p>{message}</p>
         {onLogout && (
-          <button className="auth-submit" onClick={onLogout}>
+          <Button variant="primary" block onClick={onLogout}>
             Cerrar sesión
-          </button>
+          </Button>
         )}
       </Card>
     </div>

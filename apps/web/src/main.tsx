@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { BusinessContext } from '@centrocolor/application';
-import { AppShell, navigation } from '@centrocolor/ui';
+import { navigation, PageHeader } from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -12,6 +12,8 @@ import {
   HomePage,
   LoginPage,
   PlaceholderPage,
+  CobrosPage,
+  PanelShell,
   ProductsPage,
   NewSalePage,
   SalesPage,
@@ -43,26 +45,25 @@ import { SupabaseFramingRepository } from './supabase-framing-repository';
 import { SupabasePhotoRepository } from './supabase-photo-repository';
 import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repository';
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
-import { PhotoUploadPortal } from './photo-upload-portal';
 import { DriveSettingsPage } from './drive-settings';
+import { publicRoute } from './public-routes';
 import { WhatsAppSettingsPage } from './whatsapp-settings';
 import {
   SupabasePhotoJobNotificationRepository,
   SupabaseWhatsAppAdminRepository,
 } from './whatsapp-admin';
-import { PrintOrderPortal } from './public-order/print-order-portal';
-import { OrderTracking } from './public-order/order-tracking';
 
 function PosSection({
   section,
+  productRepository,
+  saleRepository,
+  inventoryRepository,
 }: {
   section: 'products' | 'new-sale' | 'sales' | 'stock';
+  productRepository: SupabaseProductRepository;
+  saleRepository: SupabaseSaleRepository;
+  inventoryRepository: SupabaseInventoryRepository;
 }) {
-  const [productRepository] = useState(() => new SupabaseProductRepository());
-  const [saleRepository] = useState(() => new SupabaseSaleRepository());
-  const [inventoryRepository] = useState(
-    () => new SupabaseInventoryRepository(),
-  );
   if (section === 'products')
     return <ProductsPage repository={productRepository} storage="cloud" />;
   if (section === 'new-sale')
@@ -85,21 +86,6 @@ function PosSection({
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
-function CustomerSection({
-  paymentRepository,
-}: {
-  paymentRepository: SupabaseWorkPaymentRepository;
-}) {
-  const [repository] = useState(() => new SupabaseCustomerRepository());
-  return (
-    <CustomersPage
-      repository={repository}
-      paymentRepository={paymentRepository}
-      storage="cloud"
-    />
-  );
-}
-
 function App() {
   const [activeId, setActiveId] = useState(() =>
     new URLSearchParams(window.location.search).has('googleDrive')
@@ -107,6 +93,8 @@ function App() {
       : 'home',
   );
   const [openPhotoJobId, setOpenPhotoJobId] = useState<string | null>(null);
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+  const [newJobCustomerId, setNewJobCustomerId] = useState<string | null>(null);
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
   const [busy, setBusy] = useState(false);
@@ -114,6 +102,11 @@ function App() {
   const [customerRepository] = useState(() => new SupabaseCustomerRepository());
   const [appointmentRepository] = useState(
     () => new SupabaseAppointmentRepository(),
+  );
+  const [productRepository] = useState(() => new SupabaseProductRepository());
+  const [saleRepository] = useState(() => new SupabaseSaleRepository());
+  const [inventoryRepository] = useState(
+    () => new SupabaseInventoryRepository(),
   );
   const [eventRepository] = useState(() => new SupabaseEventRepository());
   const [framingRepository] = useState(() => new SupabaseFramingRepository());
@@ -259,11 +252,21 @@ function App() {
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';
   return (
     <BusinessContextProvider context={context}>
-      <AppShell
+      <PanelShell
         activeId={activeId}
-        onNavigate={setActiveId}
+        onNavigate={navigateTo}
         platform="Web"
         onLogout={() => void logout()}
+        customerRepository={customerRepository}
+        photoRepository={photoRepository}
+        paymentRepository={paymentRepository}
+        productRepository={productRepository}
+        inventoryRepository={inventoryRepository}
+        onOpenCustomer={(id) => {
+          setOpenCustomerId(id);
+          setActiveId('customers');
+        }}
+        onOpenJob={openJob}
       >
         {activeId === 'home' ? (
           <HomePage
@@ -271,6 +274,12 @@ function App() {
             eventRepository={eventRepository}
             photoRepository={photoRepository}
             paymentRepository={paymentRepository}
+            saleRepository={saleRepository}
+            framingRepository={framingRepository}
+            productRepository={productRepository}
+            inventoryRepository={inventoryRepository}
+            onNavigate={navigateTo}
+            onOpenJob={openJob}
           />
         ) : activeId === 'calendar' ? (
           <CalendarPage
@@ -309,6 +318,7 @@ function App() {
           <NewPhotoJobPage
             repository={photoRepository}
             customerRepository={customerRepository}
+            initialCustomerId={newJobCustomerId}
           />
         ) : activeId === 'photo-jobs' ? (
           <PhotoJobsPage
@@ -322,55 +332,70 @@ function App() {
           <PhotoProductionPage
             repository={photoRepository}
             fileIntakeRepository={fileIntakeRepository}
-            onOpenJob={(id) => {
-              setOpenPhotoJobId(id);
-              setActiveId('photo-jobs');
-            }}
+            notificationRepository={notificationRepository}
+            onOpenJob={openJob}
           />
         ) : activeId === 'photo-services' ? (
           <PhotoServicesPage repository={photoRepository} />
         ) : activeId === 'customers' ? (
-          <CustomerSection paymentRepository={paymentRepository} />
-        ) : activeId === 'products' ? (
-          <PosSection section="products" />
-        ) : activeId === 'new-sale' ? (
-          <PosSection section="new-sale" />
-        ) : activeId === 'sales' ? (
-          <PosSection section="sales" />
-        ) : activeId === 'stock' ? (
-          <PosSection section="stock" />
+          <CustomersPage
+            repository={customerRepository}
+            paymentRepository={paymentRepository}
+            photoRepository={photoRepository}
+            storage="cloud"
+            initialCustomerId={openCustomerId}
+            onNewJob={(customerId) => {
+              setNewJobCustomerId(customerId);
+              setActiveId('new-photo-job');
+            }}
+            onOpenJob={openJob}
+          />
+        ) : activeId === 'payments' ? (
+          <CobrosPage
+            repository={paymentRepository}
+            customerRepository={customerRepository}
+          />
+        ) : activeId === 'products' ||
+          activeId === 'new-sale' ||
+          activeId === 'sales' ||
+          activeId === 'stock' ? (
+          <PosSection
+            section={activeId}
+            productRepository={productRepository}
+            saleRepository={saleRepository}
+            inventoryRepository={inventoryRepository}
+          />
         ) : activeId === 'settings' ? (
           <>
-            <DriveSettingsPage
-              context={context}
-              repository={fileIntakeRepository}
-            />
-            <WhatsAppSettingsPage
-              context={context}
-              repository={whatsappRepository}
-            />
+            <PageHeader title="Configuración" />
+            <div className="settings-grid">
+              <DriveSettingsPage
+                context={context}
+                repository={fileIntakeRepository}
+              />
+              <WhatsAppSettingsPage
+                context={context}
+                repository={whatsappRepository}
+              />
+            </div>
           </>
         ) : (
           <PlaceholderPage title={title} />
         )}
-      </AppShell>
+      </PanelShell>
     </BusinessContextProvider>
   );
-}
 
-/**
- * Public routes are resolved before the administrative gate: no login, no Business
- * context, no navigation. Everything else is the authenticated application.
- */
-function publicRoute(pathname: string) {
-  const upload = pathname.match(/^\/enviar\/([^/]+)\/?$/);
-  if (upload)
-    return <PhotoUploadPortal token={decodeURIComponent(upload[1]!)} />;
-  if (/^\/imprimir\/?$/.test(pathname)) return <PrintOrderPortal />;
-  const tracking = pathname.match(/^\/pedido\/([^/]+)\/?$/);
-  if (tracking)
-    return <OrderTracking token={decodeURIComponent(tracking[1]!)} />;
-  return null;
+  function navigateTo(id: string) {
+    setOpenPhotoJobId(null);
+    setOpenCustomerId(null);
+    setNewJobCustomerId(null);
+    setActiveId(id);
+  }
+  function openJob(id: string) {
+    setOpenPhotoJobId(id);
+    setActiveId('photo-jobs');
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

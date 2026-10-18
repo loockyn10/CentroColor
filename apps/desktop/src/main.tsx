@@ -12,7 +12,7 @@ import {
   syncWorkPayments,
   type BusinessContext,
 } from '@centrocolor/application';
-import { AppShell, navigation } from '@centrocolor/ui';
+import { navigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -21,6 +21,8 @@ import {
   CalendarPage,
   CustomersPage,
   HomePage,
+  CobrosPage,
+  PanelShell,
   LoginPage,
   PlaceholderPage,
   ProductsPage,
@@ -121,6 +123,8 @@ type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
 
 function App() {
   const [openPhotoJobId, setOpenPhotoJobId] = useState<string | null>(null);
+  const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
+  const [newJobCustomerId, setNewJobCustomerId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState('home');
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
@@ -673,6 +677,16 @@ function App() {
       />
     );
   if (!context) return null;
+  const navigateTo = (id: string) => {
+    setOpenPhotoJobId(null);
+    setOpenCustomerId(null);
+    setNewJobCustomerId(null);
+    setActiveId(id);
+  };
+  const openJob = (id: string) => {
+    setOpenPhotoJobId(id);
+    setActiveId('photo-jobs');
+  };
   const title =
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';
   const syncLabel =
@@ -698,11 +712,22 @@ function App() {
               : 'Sincronizado';
   return (
     <BusinessContextProvider context={context}>
-      <AppShell
+      <PanelShell
         activeId={activeId}
-        onNavigate={setActiveId}
+        onNavigate={navigateTo}
         platform="Desktop"
         onLogout={() => void logout()}
+        customerRepository={customerRepository}
+        photoRepository={photoRepository}
+        paymentRepository={workPaymentRepository}
+        productRepository={productRepository}
+        inventoryRepository={inventoryRepository}
+        refreshToken={dataRefresh}
+        onOpenCustomer={(id) => {
+          setOpenCustomerId(id);
+          setActiveId('customers');
+        }}
+        onOpenJob={openJob}
         statusArea={
           <div>
             <div className="sync-status-bar" role="status">
@@ -973,7 +998,13 @@ function App() {
             eventRepository={eventRepository}
             photoRepository={photoRepository}
             paymentRepository={workPaymentRepository}
+            saleRepository={saleRepository}
+            framingRepository={framingRepository}
+            productRepository={productRepository}
+            inventoryRepository={inventoryRepository}
             refreshToken={dataRefresh}
+            onNavigate={navigateTo}
+            onOpenJob={openJob}
             onRevalidate={
               context.authorization === 'offline-authenticated'
                 ? () => setGate('login')
@@ -1054,6 +1085,7 @@ function App() {
           <NewPhotoJobPage
             repository={photoRepository}
             customerRepository={customerRepository}
+            initialCustomerId={newJobCustomerId}
             refreshToken={dataRefresh}
             onMutation={() => {
               setDataRefresh((x) => x + 1);
@@ -1075,9 +1107,10 @@ function App() {
           <PhotoProductionPage
             repository={photoRepository}
             refreshToken={dataRefresh}
-            onOpenJob={(id) => {
-              setOpenPhotoJobId(id);
-              setActiveId('photo-jobs');
+            onOpenJob={openJob}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
             }}
           />
         ) : activeId === 'photo-services' ? (
@@ -1099,12 +1132,34 @@ function App() {
           <CustomersPage
             repository={customerRepository}
             paymentRepository={workPaymentRepository}
+            photoRepository={photoRepository}
             storage="local"
+            initialCustomerId={openCustomerId}
+            onNewJob={(customerId) => {
+              setNewJobCustomerId(customerId);
+              setActiveId('new-photo-job');
+            }}
+            onOpenJob={openJob}
             refreshToken={dataRefresh}
             onLocalMutation={() => {
               void refreshSyncSummary(context.businessId);
               if (cloudSessionReady) void runSync(context);
             }}
+          />
+        ) : activeId === 'payments' ? (
+          <CobrosPage
+            repository={workPaymentRepository}
+            customerRepository={customerRepository}
+            refreshToken={dataRefresh}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'settings' ? (
+          <PlaceholderPage
+            title="Configuración"
+            message="Google Drive y WhatsApp se configuran desde la versión Web."
           />
         ) : activeId === 'products' ? (
           <ProductsPage
@@ -1141,7 +1196,7 @@ function App() {
         ) : (
           <PlaceholderPage title={title} />
         )}
-      </AppShell>
+      </PanelShell>
     </BusinessContextProvider>
   );
 }

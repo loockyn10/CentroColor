@@ -18,7 +18,7 @@ import {
   type AppointmentType,
   type Customer,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Card, PageHeader, Segmented } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 const statusLabels: Record<AppointmentStatus, string> = {
@@ -563,28 +563,17 @@ export function CalendarPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="AGENDA"
-        title="Calendario"
-        description="Turnos de la sucursal actual, en horario local."
-      />
+      <PageHeader title="Calendario" />
       <div className="agenda-toolbar">
-        <div className="segmented">
-          <button
-            className={view === 'day' ? 'active' : ''}
-            type="button"
-            onClick={() => setView('day')}
-          >
-            Hoy / Día
-          </button>
-          <button
-            className={view === 'week' ? 'active' : ''}
-            type="button"
-            onClick={() => setView('week')}
-          >
-            Semana
-          </button>
-        </div>
+        <Segmented
+          label="Vista"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'day', label: 'Hoy / Día' },
+            { value: 'week', label: 'Semana' },
+          ]}
+        />
         <div className="date-navigation">
           <button
             type="button"
@@ -763,11 +752,7 @@ export function AppointmentsPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="AGENDA"
-        title="Turnos"
-        description="Listado y búsqueda por cliente, título, período y estado."
-      />
+      <PageHeader title="Turnos" />
       <div className="appointment-list-filters">
         <label>
           Buscar
@@ -934,11 +919,7 @@ export function AppointmentTypesPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="AGENDA"
-        title="Tipos de turno"
-        description="Plantillas configurables de nombre y duración predeterminada."
-      />
+      <PageHeader title="Tipos de turno" />
       {error && (
         <p role="alert" className="appointment-error">
           {error}
@@ -1020,53 +1001,5 @@ export function AppointmentTypesPage({
         )}
       </Card>
     </>
-  );
-}
-
-export function TodayAppointments({
-  repository,
-}: {
-  repository: AppointmentRepository;
-}) {
-  const context = useBusinessContext();
-  const [rows, setRows] = useState<AppointmentSummary[]>([]);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let live = true;
-    const from = startOfDay(new Date());
-    void repository
-      .list({
-        businessId: context.businessId,
-        branchId: context.branchId!,
-        from: from.toISOString(),
-        to: addDays(from, 1).toISOString(),
-        status: 'scheduled',
-        limit: 100,
-      })
-      .then((result) => {
-        if (live) setRows(result);
-      })
-      .catch(() => live && setFailed(true));
-    return () => {
-      live = false;
-    };
-  }, [repository, context.businessId, context.branchId]);
-  return (
-    <Card className="metric-card today-appointments">
-      <h2>Turnos de hoy</h2>
-      {failed ? (
-        <p>No se pudo cargar la agenda.</p>
-      ) : (
-        <>
-          <div className="metric-value">{rows.length}</div>
-          {rows.slice(0, 3).map((row) => (
-            <p key={row.id}>
-              <strong>{time(row.startsAt)}</strong> {row.customerName} —{' '}
-              {row.title}
-            </p>
-          ))}
-        </>
-      )}
-    </Card>
   );
 }

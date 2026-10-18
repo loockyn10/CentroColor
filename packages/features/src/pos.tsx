@@ -221,11 +221,11 @@ function ProductForm({
 
 export function ProductsPage({
   repository,
-  storage = 'local',
   onMutation,
   refreshToken,
 }: {
   repository: ProductRepository;
+  /** Se acepta por compatibilidad: la pantalla ya no muestra dónde se guardan los datos. */
   storage?: 'local' | 'cloud';
   onMutation?: () => void;
   refreshToken?: number;
@@ -366,15 +366,7 @@ export function ProductsPage({
 
   return (
     <>
-      <PageHeader
-        eyebrow="CATÁLOGO"
-        title="Productos"
-        description={
-          storage === 'local'
-            ? 'Catálogo local de este negocio. Se sincroniza al validar la sesión Cloud.'
-            : 'Catálogo de este negocio en Cloud. Requiere conexión.'
-        }
-      />
+      <PageHeader title="Productos" />
       {error && (
         <p className="customer-error" role="alert">
           {error}
@@ -752,11 +744,7 @@ export function NewSalePage({
 
   return (
     <>
-      <PageHeader
-        eyebrow="VENTAS"
-        title="Nueva venta"
-        description="Escaneá un código y presioná Enter, o buscá un producto por nombre."
-      />
+      <PageHeader title="Nueva venta" />
       {notice && (
         <p className="pos-success" role="status">
           {notice}
@@ -1061,10 +1049,10 @@ export function NewSalePage({
 
 export function SalesPage({
   repository,
-  storage = 'local',
   refreshToken,
 }: {
   repository: SaleRepository;
+  /** Se acepta por compatibilidad: la pantalla ya no muestra dónde se guardan los datos. */
   storage?: 'local' | 'cloud';
   refreshToken?: number;
 }) {
@@ -1100,16 +1088,10 @@ export function SalesPage({
   return (
     <>
       <PageHeader
-        eyebrow="VENTAS"
         title={
           detail
             ? `Venta ${detail.sale.id.slice(0, 8).toUpperCase()}`
             : 'Ventas'
-        }
-        description={
-          storage === 'local'
-            ? 'Historial local de ventas completadas. Se sincroniza con Cloud.'
-            : 'Historial de ventas completadas en Cloud.'
         }
       />
       {error && (

@@ -1,16 +1,27 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Button, Icon, type IconName } from '@centrocolor/ui';
 import { PublicOrderError, trackOrder, type TrackedOrder } from './client';
 import {
   formatMoney,
+  paymentNote,
   trackingHeadline,
   trackingNote,
   trackingStepIndex,
   trackingSteps,
+  type TrackedStatus,
 } from './model';
 import { PublicShell, useDocumentMeta } from './shell';
 import './public-order.css';
 
 const REFRESH_MS = 60_000;
+
+const stepIcon: Record<TrackedStatus, IconName> = {
+  received: 'receipt',
+  in_progress: 'printer',
+  ready: 'check',
+  delivered: 'store',
+  cancelled: 'x',
+};
 
 /**
  * /pedido/:token — read-only status of one order. The token is a tracking capability: it
@@ -61,90 +72,121 @@ export function OrderTracking({ token }: { token: string }) {
   if (!order)
     return (
       <PublicShell>
-        {error ? (
-          <section className="po-card po-center">
-            <h2>No pudimos mostrar el pedido</h2>
-            <p>{error.message}</p>
-            {!error.invalid && (
-              <button className="po-primary" onClick={() => void load()}>
-                Reintentar
-              </button>
-            )}
-          </section>
-        ) : (
-          <p className="po-center" role="status">
-            Cargando…
-          </p>
-        )}
+        <div className="pt-page">
+          {error ? (
+            <section className="po-card po-center">
+              <h2>No pudimos mostrar el pedido</h2>
+              <p>{error.message}</p>
+              {!error.invalid && (
+                <Button variant="primary" onClick={() => void load()}>
+                  Reintentar
+                </Button>
+              )}
+            </section>
+          ) : (
+            <p className="po-center pad" role="status">
+              Cargando…
+            </p>
+          )}
+        </div>
       </PublicShell>
     );
 
   const index = trackingStepIndex(order.status);
+  const ready = order.status === 'ready';
   return (
     <PublicShell businessName={order.businessName}>
-      <section
-        className={`po-card po-track po-track-${order.status}`}
-        aria-live="polite"
-      >
-        <small className="po-hint">Pedido</small>
-        <h2 className="po-code">{order.orderCode}</h2>
-        <p className="po-headline">{trackingHeadline(order.status)}</p>
-        {order.status !== 'cancelled' && (
-          <ol className="po-steps" aria-label="Avance del pedido">
-            {trackingSteps.map((step, i) => (
-              <li
-                key={step.status}
-                className={
-                  i < index ? 'po-step-done' : i === index ? 'po-step-now' : ''
-                }
-                aria-current={i === index ? 'step' : undefined}
-              >
-                <span>{i < index ? '✓' : i + 1}</span>
-                {step.label}
-              </li>
-            ))}
-          </ol>
+      <div className="pt-page" aria-live="polite">
+        <div className="state-head">
+          <p className="frame-tag">{order.orderCode}</p>
+          {!ready && <h1>{trackingHeadline(order.status)}</h1>}
+        </div>
+
+        {ready && (
+          <section className="ready" aria-label="Tu pedido está listo">
+            <div className="ready-in">
+              <span className="stamp" aria-hidden="true">
+                <Icon name="check" />
+              </span>
+              <h2>{trackingHeadline(order.status)}</h2>
+              <p>{trackingNote(order.status)}</p>
+            </div>
+          </section>
         )}
-        <p>{trackingNote(order.status)}</p>
+
+        {order.status !== 'cancelled' && (
+          <section className="po-card" aria-label="Avance del pedido">
+            <ol className="tl tl--h">
+              {trackingSteps.map((step, i) => {
+                const state =
+                  i < index ? 'done' : i === index ? 'current' : 'todo';
+                return (
+                  <li
+                    key={step.status}
+                    data-s={state}
+                    aria-current={i === index ? 'step' : undefined}
+                  >
+                    <span className="node">
+                      <Icon
+                        name={
+                          state === 'done' ? 'check' : stepIcon[step.status]
+                        }
+                      />
+                    </span>
+                    <span className="txt">
+                      <strong>{step.label}</strong>
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </section>
+        )}
+
+        {!ready && <p className="state-note">{trackingNote(order.status)}</p>}
         {error && !error.invalid && (
           <p className="po-error">
             No pudimos actualizar el estado. Mostramos el último dato conocido.
           </p>
         )}
-        <dl className="po-facts">
-          <dt>Fecha</dt>
-          <dd>
+
+        <section className="po-card">
+          <p className="meta">
             {new Date(order.createdAt).toLocaleDateString('es-AR', {
               dateStyle: 'long',
             })}
-          </dd>
-        </dl>
-        <ul className="po-summary">
-          {order.items.map((item) => (
-            <li key={item.name}>
-              <span>
-                {item.name} · {item.quantity}{' '}
-                {item.quantity === 1 ? 'copia' : 'copias'}
-              </span>
-              <b>{formatMoney(item.totalCents)}</b>
-            </li>
-          ))}
-          <li className="po-total">
+          </p>
+          <ul className="order-lines">
+            {order.items.map((item) => (
+              <li key={item.name}>
+                <span className="sz">{item.name}</span>
+                <span className="meta">
+                  {item.quantity} {item.quantity === 1 ? 'copia' : 'copias'}
+                </span>
+                <b className="num">{formatMoney(item.totalCents)}</b>
+              </li>
+            ))}
+          </ul>
+          <p className="order-total">
             <span>TOTAL</span>
-            <b>{formatMoney(order.totalCents)}</b>
-          </li>
-        </ul>
-        <button
-          className="po-secondary"
-          disabled={refreshing}
-          onClick={() => void load()}
-        >
-          {refreshing ? 'Actualizando…' : 'Actualizar estado'}
-        </button>
-        <small className="po-hint">
-          El pago se realiza en el local al retirar.
-        </small>
-      </section>
+            <b className="num">{formatMoney(order.totalCents)}</b>
+          </p>
+          <p className="fine">
+            <Icon name="info" />
+            <span>{paymentNote}</span>
+          </p>
+        </section>
+
+        <div className="row-actions">
+          <Button
+            icon="refresh"
+            disabled={refreshing}
+            onClick={() => void load()}
+          >
+            {refreshing ? 'Actualizando…' : 'Actualizar estado'}
+          </Button>
+        </div>
+      </div>
     </PublicShell>
   );
 }

@@ -1,5 +1,7 @@
 # DESIGN-01/02 — Preview de la nueva identidad UX/UI
 
+> **Adoptado (17/10/2026):** DESIGN-02 ya está implementado en `apps/web` y `apps/desktop` (ver `docs/CURRENT_STATE.md` y §16). Esta preview queda como **referencia histórica**: no se toca ni se despliega. Las afirmaciones de «no aplica nada a la app» de §14 describen su estado al momento de DESIGN-01/02.
+
 > **DESIGN-02 (simplificación) está al final (§15) y prevalece sobre §5–§9 donde difieran**: portal con mínimo texto, panel ~35 % más tranquilo, Trabajos en Lista por defecto, Cobros como bandeja, Eventos como tablero.
 
 Paquete aislado `apps/design-preview` (`@centrocolor/design-preview`). **No aplica nada a `apps/web` ni `apps/desktop`.** Usa únicamente datos simulados en memoria: sin Supabase, SQLite, Edge Functions, migraciones, sync, auth real ni APIs (no hay `fetch`, `localStorage` ni variables de entorno).
@@ -124,3 +126,9 @@ La identidad de DESIGN-01 (amarillo, grafito, crema, logo, fotografía, tipograf
 **Solo pulido:** POS (bordes, categorías, tarjetas; el carrito conserva su peso), Marquetería (30 × 40 → 140 cm de varilla intacto), Agenda (título, controles y estados más suaves), Productos/Stock (KPI «Bajo mínimo» en amarillo pálido; el badge «OK» desaparece y solo se marca bajo mínimo / sin stock), Configuración.
 
 Verificado en 390 / 768 / 1440 px: sin desbordes horizontales en las 14 rutas del portal y el panel; `pnpm --filter @centrocolor/design-preview build`, `tsc`, ESLint y Prettier pasan. Sin lector de pantalla ni dispositivos reales.
+
+## 16. Adopción en producción
+
+Mapa preview → producción: tokens y fuentes (`src/styles/tokens.css`) → `packages/ui/src/tokens.css`; componentes (`src/ui.tsx`, `ui.css`) → `packages/ui/src/primitives.tsx`, `sheet.tsx`, `components.css`; capa «calma» (`calm.css`) → valores por defecto del panel (el portal sube bordes y sombras dentro de `.portal`); shell (`PanelShell.tsx`) → `packages/ui/src/shell.tsx` + `navigation.ts` + `packages/features/src/panel-shell.tsx`; portal (`src/portal/*`, `portal.css`) → `apps/web/src/public-order/*`.
+
+Diferencias necesarias (la preview supone cosas que el backend no hace): sin «Transferí»/alias/«Confirmar transferencia»/estado «esperando transferencia» (el pago es en el local; el paso 3 dice «Confirmá» y el copy de transferencia queda tras `PAYMENT_MODE`); la casilla de WhatsApp se **conserva**; sin dirección/horario ni «Personalizar · muy pronto»; fotos de muestra reemplazadas por impresiones dibujadas con la proporción real; Clientes sin «compras» (no existe el vínculo en el dominio); Stock sin «mínimo» (el estado crítico es «Sin stock»/«Negativo»); regla de varilla corregida en dominio (30 × 40 → 140 cm); Cobros usa saldos reales de `WorkPayment`; las pestañas de submódulo (§13.5) están implementadas.

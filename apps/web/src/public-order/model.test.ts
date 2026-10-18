@@ -9,6 +9,9 @@ import {
   loadRememberedOrder,
   missingForConfirm,
   newClientKey,
+  howItWorks,
+  paymentNote,
+  PAYMENT_MODE,
   orderTotal,
   rememberOrder,
   startBody,
@@ -200,5 +203,21 @@ describe('avance del seguimiento', () => {
     expect(trackingHeadline('ready')).toBe('LISTO PARA RETIRAR');
     expect(trackingHeadline('received')).toBe('Pedido recibido');
     expect(trackingHeadline('cancelled')).toBe('Cancelado');
+  });
+});
+
+describe('pago: sólo se promete lo que el backend hace', () => {
+  it('hoy el pago es en el local; la transferencia previa es sólo copy preparado', () => {
+    expect(PAYMENT_MODE).toBe('pickup');
+    expect(paymentNote).toBe(
+      'El pago se realiza en el local al retirar tu pedido.',
+    );
+    expect(howItWorks.map((step) => step.label)).toEqual([
+      'Elegí el tamaño',
+      'Subí tus fotos',
+      'Confirmá',
+      'Retirá en el local',
+    ]);
+    expect(howItWorks.some((step) => /transfer/i.test(step.label))).toBe(false);
   });
 });

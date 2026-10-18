@@ -173,17 +173,19 @@ export function markupPrice(costCents: number, markupPercent: number) {
   const cost = requireCents(costCents);
   return Math.ceil((cost * (100 + requirePercent(markupPercent))) / 100);
 }
-/** Opening is the internal useful dimension. Cut length is 2 * ((width + face width) + (height + face width)); face width may be zero until configured. */
+/**
+ * Cut length of moulding: the perimeter of the measured opening, 2 × (width + height), plus waste.
+ * Business rule: 30 × 40 cm → 140 cm. The moulding face width is descriptive metadata only and
+ * never changes consumption.
+ */
 export function mouldingLengthMm(
   widthMm: number,
   heightMm: number,
-  faceWidthMm: number | null,
   wastePercent: number,
 ) {
   const w = requireMillimeters(widthMm),
     h = requireMillimeters(heightMm);
-  const face = faceWidthMm === null ? 0 : requireMillimeters(faceWidthMm);
-  return applyWaste(2 * (w + h + 2 * face), wastePercent);
+  return applyWaste(2 * (w + h), wastePercent);
 }
 export function materialAreaMm2(
   widthMm: number,
@@ -213,7 +215,6 @@ export function calculateFrameQuote(input: {
   const mouldingLength = mouldingLengthMm(
     input.widthMm,
     input.heightMm,
-    input.moulding.faceWidthMm,
     input.moulding.wastePercent ?? input.settings.defaultMouldingWastePercent,
   );
   const mouldingMeterPrice =

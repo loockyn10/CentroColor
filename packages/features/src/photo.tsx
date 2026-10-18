@@ -3,6 +3,7 @@ import {
   buildPhotoJob,
   createCustomer,
   createPhotoService,
+  getCustomer,
   searchCustomers,
   sortPhotoProductionQueue,
   describeNotificationFailure,
@@ -31,7 +32,16 @@ import {
   type PhotoServiceType,
   type PhotoWorkflowRoute,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import {
+  Card,
+  EmptyState,
+  Icon,
+  PageHeader,
+  Segmented,
+  Sheet,
+  StateLine,
+} from '@centrocolor/ui';
+import { dueText, plural } from './format';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 const money = (x: number) =>
@@ -79,14 +89,6 @@ const noticeStatusLabel: Record<PhotoJobNotification['status'], string> = {
   read: '✓ Aviso leído',
   failed: '⚠ No pudo enviarse',
 };
-
-function OriginBadge({ channel }: { channel: string }) {
-  return channel === 'public_web' ? (
-    <b className="photo-origin" title="Pedido hecho por el cliente en la web">
-      ORIGEN: WEB
-    </b>
-  ) : null;
-}
 
 function WhatsAppNoticePanel({
   jobStatus,
@@ -276,9 +278,8 @@ export function PhotoServicesPage({
   return (
     <>
       <PageHeader
-        eyebrow="FOTOGRAFÍA"
         title="Servicios"
-        description="Catálogo configurable. Los trabajos conservan nombre y precio históricos."
+        description="Cambiar un precio no modifica los trabajos ya cargados."
       />
       {message && <p className="appointment-error">{message}</p>}
       {canEdit ? (
@@ -483,17 +484,21 @@ export function NewPhotoJobPage({
   customerRepository,
   onMutation,
   refreshToken,
+  initialCustomerId,
 }: {
   repository: PhotoRepository;
   customerRepository: CustomerRepository;
   onMutation?: () => void;
   refreshToken?: number;
+  /** Cliente preseleccionado (p. ej. desde su ficha). */
+  initialCustomerId?: string | null;
 }) {
   const c = useBusinessContext();
   const [services, setServices] = useState<PhotoService[]>([]),
     [customers, setCustomers] = useState<Customer[]>([]),
     [query, setQuery] = useState(''),
-    [customerId, setCustomerId] = useState(''),
+    [customerId, setCustomerId] = useState(initialCustomerId ?? ''),
+    [preset, setPreset] = useState<Customer | null>(null),
     [quick, setQuick] = useState(''),
     [showQuick, setShowQuick] = useState(false),
     [promised, setPromised] = useState(''),
@@ -518,6 +523,16 @@ export function NewPhotoJobPage({
     );
     return () => clearTimeout(timer);
   }, [customerRepository, c.businessId, query]);
+  useEffect(() => {
+    if (!initialCustomerId) return;
+    let live = true;
+    void getCustomer(customerRepository, c.businessId, initialCustomerId)
+      .then((x) => live && setPreset(x))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [customerRepository, c.businessId, initialCustomerId]);
   function addService(id: string) {
     const s = services.find((x) => x.id === id);
     if (!s) return;
@@ -623,11 +638,7 @@ export function NewPhotoJobPage({
   );
   return (
     <>
-      <PageHeader
-        eyebrow="FOTOGRAFÍA"
-        title="Nuevo trabajo"
-        description="Carga rápida con precio snapshot; no modifica el catálogo."
-      />
+      <PageHeader title="Nuevo trabajo" />
       {message && <p className="appointment-error">{message}</p>}
       <Card>
         <form className="photo-job-form" onSubmit={save}>
@@ -648,7 +659,10 @@ export function NewPhotoJobPage({
               onChange={(e) => setCustomerId(e.target.value)}
             >
               <option value="">Seleccionar…</option>
-              {customers.map((x) => (
+              {(preset && !customers.some((x) => x.id === preset.id)
+                ? [preset, ...customers]
+                : customers
+              ).map((x) => (
                 <option value={x.id} key={x.id}>
                   {x.fullName}
                   {x.phone ? ` · ${x.phone}` : ''}
@@ -854,6 +868,8 @@ export function PhotoJobsPage({
     [editPriority, setEditPriority] = useState<PhotoJobPriority>('normal'),
     [editNotes, setEditNotes] = useState(''),
     [filter, setFilter] = useState('active'),
+    [view, setView] = useState<'list' | 'board'>('list'),
+    [balances, setBalances] = useState<Record<string, number>>({}),
     [query, setQuery] = useState(''),
     [message, setMessage] = useState<string | null>(null),
     [uploadLink, setUploadLink] = useState<UploadLinkView | null>(null),
@@ -893,6 +909,32 @@ export function PhotoJobsPage({
     const t = setTimeout(load, 120);
     return () => clearTimeout(t);
   }, [repository, c.businessId, c.branchId, filter, query, refreshToken]);
+  useEffect(() => {
+    if (c.role === 'staff') return;
+    let live = true;
+    paymentRepository
+      .listOutstanding(c.businessId, c.branchId!)
+      .then((accounts) => {
+        if (live)
+          setBalances(
+            Object.fromEntries(
+              accounts
+                .filter((x) => x.sourceType === 'photo_job')
+                .map((x) => [x.sourceId, x.balanceCents]),
+            ),
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [paymentRepository, c.businessId, c.branchId, c.role, refreshToken, rows]);
+  const boardColumns: PhotoJobStatus[] =
+    filter === 'all'
+      ? ['received', 'in_progress', 'ready', 'delivered', 'cancelled']
+      : filter === 'delivered' || filter === 'cancelled'
+        ? [filter]
+        : ['received', 'in_progress', 'ready'];
   async function open(id: string) {
     try {
       const bundle = await repository.getJob(c.businessId, id);
@@ -1035,79 +1077,146 @@ export function PhotoJobsPage({
   return (
     <>
       <PageHeader
-        eyebrow="FOTOGRAFÍA"
         title="Trabajos"
-        description="Cola de producción: urgentes, atrasados y entrega más próxima primero."
+        actions={
+          <Segmented
+            label="Vista"
+            value={view}
+            onChange={setView}
+            options={[
+              { value: 'list', label: 'Lista' },
+              { value: 'board', label: 'Tablero' },
+            ]}
+          />
+        }
       />
       {message && <p className="appointment-error">{message}</p>}
-      <Card>
-        <div className="photo-filters">
+      <div className="jobs-toolbar">
+        <div className="search-field">
+          <Icon name="search" />
           <input
             type="search"
+            aria-label="Buscar trabajos"
             placeholder="Cliente, teléfono, servicio o notas"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="active">Todos activos</option>
-            <option value="received">Recibidos</option>
-            <option value="in_progress">En proceso</option>
-            <option value="ready">Listos</option>
-            <option value="delivered">Entregados</option>
-            <option value="cancelled">Cancelados</option>
-            <option value="urgent">Urgentes</option>
-            <option value="all">Todos</option>
-          </select>
         </div>
-      </Card>
-      <div className="photo-jobs-layout">
-        <div className="photo-job-list">
-          {rows.map((x) => {
-            const overdue = isPhotoJobOverdue(x.job);
+        <div className="chips" role="group" aria-label="Filtrar por estado">
+          {jobFilters.map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className="chip"
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {view === 'list' ? (
+        <Card className="card--flush">
+          {rows.length === 0 ? (
+            <EmptyState
+              icon="camera"
+              title="No hay trabajos para este filtro"
+            />
+          ) : (
+            <div className="rows">
+              <div className="rows-head oprow job-row" aria-hidden="true">
+                <span>Cliente</span>
+                <span>Trabajo</span>
+                <span>Entrega</span>
+                <span>Estado</span>
+              </div>
+              {rows.map((x) => (
+                <JobRow
+                  key={x.job.id}
+                  row={x}
+                  balance={balances[x.job.id] ?? 0}
+                  onOpen={() => void open(x.job.id)}
+                />
+              ))}
+            </div>
+          )}
+        </Card>
+      ) : (
+        <div className="board">
+          {boardColumns.map((status) => {
+            const column = rows.filter((x) => x.job.status === status);
             return (
-              <button
-                key={x.job.id}
-                className={`photo-job-card ${x.job.status === 'ready' ? 'photo-ready' : ''}`}
-                onClick={() => void open(x.job.id)}
+              <section
+                className="board-col"
+                key={status}
+                aria-label={statusLabel[status]}
               >
-                {x.job.priority === 'urgent' && (
-                  <b className="photo-urgent">URGENTE</b>
-                )}
-                {overdue && <b className="photo-overdue">ATRASADO</b>}
-                <OriginBadge channel={x.job.sourceChannel} />
-                <strong>{x.customerName}</strong>
-                <span>{x.itemSummary || 'Sin ítems activos'}</span>
-                <span>
-                  {x.job.promisedAt
-                    ? new Date(x.job.promisedAt).toLocaleString('es-AR')
-                    : 'Sin fecha prometida'}
-                </span>
-                <span className={`photo-status status-${x.job.status}`}>
-                  {statusLabel[x.job.status]}
-                </span>
-                <b>{money(x.totalCents)}</b>
-              </button>
+                <header>
+                  <h2>{statusLabel[status]}</h2>
+                  <span className="meta">{column.length}</span>
+                </header>
+                {column.map((x) => (
+                  <JobRow
+                    key={x.job.id}
+                    row={x}
+                    balance={balances[x.job.id] ?? 0}
+                    onOpen={() => void open(x.job.id)}
+                    card
+                  />
+                ))}
+              </section>
             );
           })}
-          {!rows.length && <Card>No hay trabajos para este filtro.</Card>}
         </div>
+      )}
+      <Sheet
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        title={selected?.customerName ?? 'Trabajo'}
+        variant="side"
+      >
         {selected && (
-          <Card className="photo-detail">
-            <button
-              className="photo-detail-close"
-              onClick={() => setSelected(null)}
-            >
-              ✕
-            </button>
-            <h2>{selected.customerName}</h2>
-            <p>{selected.customerPhone ?? 'Sin teléfono'}</p>
-            {selected.job.priority === 'urgent' && (
-              <b className="photo-urgent">URGENTE</b>
-            )}
-            {isPhotoJobOverdue(selected.job) && (
-              <b className="photo-overdue">ATRASADO</b>
-            )}
-            <OriginBadge channel={selected.job.sourceChannel} />
+          <div className="photo-detail">
+            <div className="ficha-head">
+              <div>
+                <p className="meta">
+                  {selected.customerPhone ?? 'Sin teléfono'}
+                </p>
+                <JobStateLine job={selected.job} />
+                {selected.job.sourceChannel === 'public_web' && (
+                  <p className="meta">Pedido web</p>
+                )}
+              </div>
+            </div>
+            <div className="photo-actions">
+              {selected.job.status === 'received' && (
+                <button onClick={() => void status('in_progress')}>
+                  En proceso
+                </button>
+              )}
+              {['received', 'in_progress'].includes(selected.job.status) && (
+                <button
+                  className="customer-primary"
+                  onClick={() => void status('ready')}
+                >
+                  Marcar listo
+                </button>
+              )}
+              {selected.job.status === 'ready' && (
+                <button
+                  className="customer-primary"
+                  onClick={() => void status('delivered')}
+                >
+                  Entregado
+                </button>
+              )}
+              {!['delivered', 'cancelled'].includes(selected.job.status) && (
+                <button onClick={() => void status('cancelled')}>
+                  Cancelar
+                </button>
+              )}
+            </div>
             <dl>
               <dt>Fecha ingreso</dt>
               <dd>
@@ -1374,88 +1483,98 @@ export function PhotoJobsPage({
               </button>
             )}
             {selected.job.notes && <p>{selected.job.notes}</p>}
-            <div className="photo-actions">
-              {selected.job.status === 'received' && (
-                <button onClick={() => void status('in_progress')}>
-                  En proceso
-                </button>
-              )}
-              {['received', 'in_progress'].includes(selected.job.status) && (
-                <button
-                  className="customer-primary"
-                  onClick={() => void status('ready')}
-                >
-                  Marcar listo
-                </button>
-              )}
-              {selected.job.status === 'ready' && (
-                <button
-                  className="customer-primary"
-                  onClick={() => void status('delivered')}
-                >
-                  Entregado
-                </button>
-              )}
-              {!['delivered', 'cancelled'].includes(selected.job.status) && (
-                <button onClick={() => void status('cancelled')}>
-                  Cancelar
-                </button>
-              )}
-            </div>
             {selected.job.sourceAppointmentId && (
               <small>Origen: turno {selected.job.sourceAppointmentId}</small>
             )}
             {selected.job.sourceEventId && (
               <small>Origen: evento {selected.job.sourceEventId}</small>
             )}
-          </Card>
+          </div>
         )}
-      </div>
+      </Sheet>
     </>
   );
 }
 
-export function PhotoJobsDashboard({
-  repository,
-  refreshToken,
+const jobFilters: Array<[string, string]> = [
+  ['active', 'Activos'],
+  ['received', 'Recibidos'],
+  ['in_progress', 'En proceso'],
+  ['ready', 'Listos'],
+  ['urgent', 'Urgentes'],
+  ['delivered', 'Entregados'],
+  ['cancelled', 'Cancelados'],
+  ['all', 'Todos'],
+];
+
+/** Estado principal del trabajo en una línea; sólo urgencia/atraso/listo llevan tono. */
+function JobStateLine({ job }: { job: PhotoJobSummary['job'] }) {
+  const parts: Array<{ text: string; tone?: 'alert' | 'warn' | 'ok' }> = [];
+  if (
+    job.priority === 'urgent' &&
+    !['delivered', 'cancelled'].includes(job.status)
+  )
+    parts.push({ text: 'Urgente', tone: 'alert' });
+  if (isPhotoJobOverdue(job)) parts.push({ text: 'Atrasado', tone: 'alert' });
+  parts.push({
+    text: statusLabel[job.status],
+    tone: job.status === 'ready' ? 'ok' : undefined,
+  });
+  return <StateLine parts={parts} />;
+}
+
+function JobRow({
+  row,
+  balance,
+  onOpen,
+  card = false,
 }: {
-  repository: PhotoRepository;
-  refreshToken?: number;
+  row: PhotoJobSummary;
+  balance: number;
+  onOpen: () => void;
+  card?: boolean;
 }) {
-  const c = useBusinessContext();
-  const [rows, setRows] = useState<PhotoJobSummary[]>([]);
-  useEffect(() => {
-    repository
-      .listJobs(c.businessId, c.branchId!, {
-        statuses: ['received', 'in_progress', 'ready'],
-        limit: 100,
-      })
-      .then((x) => setRows(sortPhotoProductionQueue(x)))
-      .catch(() => setRows([]));
-  }, [repository, c.businessId, c.branchId, refreshToken]);
-  const pending = rows.filter((x) =>
-      ['received', 'in_progress'].includes(x.job.status),
-    ).length,
-    ready = rows.filter((x) => x.job.status === 'ready').length,
-    urgent = rows.filter(
-      (x) =>
-        x.job.priority === 'urgent' &&
-        !['delivered', 'cancelled'].includes(x.job.status),
-    ).length;
+  const { job } = row;
+  const active = !['delivered', 'cancelled'].includes(job.status);
+  const flag =
+    active && (isPhotoJobOverdue(job) || job.priority === 'urgent')
+      ? 'alert'
+      : job.status === 'ready'
+        ? 'ok'
+        : undefined;
   return (
-    <Card className="metric-card">
-      <h2>Trabajos fotográficos</h2>
-      <div className="metric-value">{pending}</div>
-      <p>
-        {urgent} urgentes · <strong>{ready} listos para entregar</strong>
-      </p>
-      {rows.slice(0, 3).map((x) => (
-        <small key={x.job.id}>
-          {x.job.priority === 'urgent' ? 'URGENTE · ' : ''}
-          {x.customerName} · {statusLabel[x.job.status]}
-        </small>
-      ))}
-    </Card>
+    <button
+      type="button"
+      className={`oprow job-row ${card ? 'job-card' : ''}`.trim()}
+      data-flag={flag}
+      onClick={onOpen}
+    >
+      <span className="who">
+        {row.customerName}
+        {job.sourceChannel === 'public_web' && (
+          <span
+            className="meta block"
+            title="Pedido hecho por el cliente en la web"
+          >
+            Pedido web
+          </span>
+        )}
+      </span>
+      <span className="what">{row.itemSummary || 'Sin ítems activos'}</span>
+      <span className="when">
+        <span className={isPhotoJobOverdue(job) ? 'txt-alert' : undefined}>
+          {dueText(job.promisedAt)}
+        </span>
+      </span>
+      <span className="when">
+        <JobStateLine job={job} />
+        {active && balance > 0 && (
+          <span className={job.status === 'ready' ? 'txt-warn' : 'meta'}>
+            Saldo {money(balance)}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 
@@ -1465,21 +1584,42 @@ type ProductionRow = {
   route: 'lab' | 'editing';
   files: NonNullable<PhotoJobBundle['files']>;
 };
+type ProductionJob = {
+  key: string;
+  bundle: PhotoJobBundle;
+  route: 'lab' | 'editing';
+  services: string[];
+  files: NonNullable<PhotoJobBundle['files']>;
+};
+
+/**
+ * Producción: la cola de Laboratorio y de Edición. Una fila por trabajo y carril, pensada para
+ * una tablet de ~10": ver la cola, abrir Drive o el trabajo y pasarlo a «en proceso» / «listo».
+ */
 export function PhotoProductionPage({
   repository,
   fileIntakeRepository,
+  notificationRepository,
   refreshToken,
   onOpenJob,
+  onMutation,
 }: {
   repository: PhotoRepository;
   fileIntakeRepository?: PhotoFileIntakeAdminRepository;
+  /** Web: avisa a la nube de que el pedido quedó listo (el aviso de WhatsApp lo envía ella). */
+  notificationRepository?: PhotoJobNotificationRepository;
   refreshToken?: number;
   onOpenJob?: (jobId: string) => void;
+  onMutation?: () => void;
 }) {
   const c = useBusinessContext();
   const [rows, setRows] = useState<ProductionRow[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [busyJob, setBusyJob] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   useEffect(() => {
+    let live = true;
     void repository
       .listJobs(c.businessId, c.branchId!, {
         statuses: ['received', 'in_progress', 'ready'],
@@ -1509,10 +1649,16 @@ export function PhotoProductionPage({
         next.sort((a, b) =>
           comparePhotoProductionQueue(a.bundle.job, b.bundle.job),
         );
-        setRows(next);
+        if (live) {
+          setRows(next);
+          setLoaded(true);
+        }
       })
-      .catch((x) => setMessage(errorText(x)));
-  }, [repository, c.businessId, c.branchId, refreshToken]);
+      .catch((x) => live && setMessage(errorText(x)));
+    return () => {
+      live = false;
+    };
+  }, [repository, c.businessId, c.branchId, refreshToken, reload]);
   const openFolder = (id: string) =>
     fileIntakeRepository?.openDriveFolder(id) ??
     window.open(
@@ -1520,57 +1666,161 @@ export function PhotoProductionPage({
       '_blank',
       'noopener,noreferrer',
     );
-  const queue = (route: 'lab' | 'editing') =>
-    rows.filter((x) => x.route === route);
+
+  const queue = (route: 'lab' | 'editing'): ProductionJob[] => {
+    const byJob = new Map<string, ProductionJob>();
+    for (const row of rows.filter((x) => x.route === route)) {
+      const found = byJob.get(row.bundle.job.id);
+      if (found) {
+        found.services.push(row.item.serviceNameSnapshot);
+        found.files.push(...row.files);
+      } else
+        byJob.set(row.bundle.job.id, {
+          key: `${route}:${row.bundle.job.id}`,
+          bundle: row.bundle,
+          route,
+          services: [row.item.serviceNameSnapshot],
+          files: [...row.files],
+        });
+    }
+    return [...byJob.values()];
+  };
+
+  async function advance(job: ProductionJob, next: PhotoJobStatus) {
+    setBusyJob(job.bundle.job.id);
+    setMessage(null);
+    try {
+      await repository.setJobStatus(c.businessId, job.bundle.job.id, next);
+      if (next === 'ready' && job.bundle.job.sourceChannel === 'public_web')
+        await notificationRepository?.wake(c.businessId, job.bundle.job.id);
+      setReload((x) => x + 1);
+      onMutation?.();
+    } catch (x) {
+      setMessage(errorText(x));
+    } finally {
+      setBusyJob(null);
+    }
+  }
+
   return (
-    <>
-      <PageHeader
-        eyebrow="FOTOGRAFÍA"
-        title="Producción"
-        description="Archivos enviados y listos para laboratorio o edición."
-      />
+    <div className="production">
+      <PageHeader title="Producción" />
       {message && <p className="appointment-error">{message}</p>}
-      {(['lab', 'editing'] as const).map((route) => (
-        <section className="production-queue" key={route}>
-          <h2>{route === 'lab' ? 'LABORATORIO' : 'EDICIÓN'}</h2>
-          {queue(route).map((row) => (
-            <Card
-              key={`${row.bundle.job.id}:${row.item.id}`}
-              className="production-row"
-            >
-              <div>
-                {row.bundle.job.priority === 'urgent' && (
-                  <b className="photo-urgent">URGENTE</b>
-                )}{' '}
-                {isPhotoJobOverdue(row.bundle.job) && (
-                  <b className="photo-overdue">ATRASADO</b>
+      {(['lab', 'editing'] as const).map((route) => {
+        const jobs = queue(route);
+        const urgent = jobs.filter(
+          (x) =>
+            x.bundle.job.priority === 'urgent' ||
+            isPhotoJobOverdue(x.bundle.job),
+        ).length;
+        return (
+          <section
+            className="lane"
+            key={route}
+            aria-label={route === 'lab' ? 'Laboratorio' : 'Edición'}
+          >
+            <header className="lane-head on-dark">
+              <h2>{route === 'lab' ? 'LABORATORIO' : 'EDICIÓN'}</h2>
+              <span className="lane-stats">
+                {jobs.length} en cola
+                {urgent > 0 && (
+                  <span className="hot"> · {urgent} urgentes o atrasados</span>
                 )}
-                <OriginBadge channel={row.bundle.job.sourceChannel} />
-                <strong>{row.bundle.customerName}</strong>
-                <span>{row.item.serviceNameSnapshot}</span>
+              </span>
+            </header>
+            {!loaded ? (
+              <p className="pad meta">Cargando cola…</p>
+            ) : jobs.length === 0 ? (
+              <EmptyState icon="printer" title="No hay trabajos en esta cola" />
+            ) : (
+              <div className="rows">
+                {jobs.map((job) => {
+                  const j = job.bundle.job;
+                  const busy = busyJob === j.id;
+                  const copies = job.files.reduce((s, x) => s + x.copies, 0);
+                  const flag =
+                    isPhotoJobOverdue(j) || j.priority === 'urgent'
+                      ? 'alert'
+                      : j.status === 'ready'
+                        ? 'ok'
+                        : undefined;
+                  return (
+                    <div
+                      className="oprow prod-row"
+                      data-flag={flag}
+                      key={job.key}
+                    >
+                      <span className="who">
+                        {job.bundle.customerName}
+                        {j.sourceChannel === 'public_web' && (
+                          <span className="meta block">Pedido web</span>
+                        )}
+                      </span>
+                      <span className="what">
+                        {job.services.join(' · ')}
+                        <span className="meta block">
+                          {plural(job.files.length, 'archivo', 'archivos')}
+                          {route === 'lab' ? ` · ${copies} copias` : ''}
+                        </span>
+                      </span>
+                      <span className="when">
+                        <span
+                          className={
+                            isPhotoJobOverdue(j) ? 'txt-alert' : undefined
+                          }
+                        >
+                          {dueText(j.promisedAt)}
+                        </span>
+                        <JobStateLine job={j} />
+                      </span>
+                      <span className="act">
+                        {j.status === 'received' && (
+                          <button
+                            type="button"
+                            className="btn touch-lg"
+                            disabled={busy}
+                            onClick={() => void advance(job, 'in_progress')}
+                          >
+                            En proceso
+                          </button>
+                        )}
+                        {['received', 'in_progress'].includes(j.status) && (
+                          <button
+                            type="button"
+                            className="btn btn--primary touch-lg"
+                            disabled={busy}
+                            onClick={() => void advance(job, 'ready')}
+                          >
+                            Listo
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn--ghost touch-lg"
+                          onClick={() =>
+                            openFolder(job.files[0]!.driveFolderId)
+                          }
+                        >
+                          {route === 'editing' ? 'Originales' : 'Drive'}
+                        </button>
+                        {onOpenJob && (
+                          <button
+                            type="button"
+                            className="btn btn--ghost touch-lg"
+                            onClick={() => onOpenJob(j.id)}
+                          >
+                            Abrir
+                          </button>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
-              <span>
-                {row.files.length} archivos ·{' '}
-                {row.files.reduce((s, x) => s + x.copies, 0)} copias
-              </span>
-              <span>
-                {row.bundle.job.promisedAt
-                  ? new Date(row.bundle.job.promisedAt).toLocaleString('es-AR')
-                  : 'Sin fecha prometida'}
-              </span>
-              <button onClick={() => openFolder(row.files[0].driveFolderId)}>
-                {route === 'editing' ? 'Abrir originales' : 'Abrir Drive'}
-              </button>
-              {onOpenJob && (
-                <button onClick={() => onOpenJob(row.bundle.job.id)}>
-                  Abrir Job
-                </button>
-              )}
-            </Card>
-          ))}
-          {!queue(route).length && <Card>No hay trabajos en esta cola.</Card>}
-        </section>
-      ))}
-    </>
+            )}
+          </section>
+        );
+      })}
+    </div>
   );
 }

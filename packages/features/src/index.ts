@@ -1,4 +1,7 @@
 export { HomePage, PlaceholderPage } from './pages';
+export { useNavAttention } from './attention';
+export { GlobalSearch } from './search';
+export { PanelShell } from './panel-shell';
 export { CustomersPage } from './customers';
 export { ProductsPage, NewSalePage, SalesPage } from './pos';
 export { StockPage } from './stock';
@@ -6,14 +9,8 @@ export {
   AppointmentTypesPage,
   AppointmentsPage,
   CalendarPage,
-  TodayAppointments,
 } from './appointments';
-export {
-  EventsPage,
-  ResourcesPage,
-  ResourceCalendarPage,
-  UpcomingEvents,
-} from './events';
+export { EventsPage, ResourcesPage, ResourceCalendarPage } from './events';
 export {
   FramingCatalogPage,
   NewFrameQuotePage,
@@ -24,12 +21,11 @@ export {
   NewPhotoJobPage,
   PhotoJobsPage,
   PhotoProductionPage,
-  PhotoJobsDashboard,
 } from './photo';
 export {
+  CobrosPage,
   PaymentAccountPanel,
   CustomerAccountPanel,
-  WorkPaymentsDashboard,
 } from './payments';
 export {
   AuthStatePage,

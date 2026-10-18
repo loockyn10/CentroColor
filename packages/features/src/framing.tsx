@@ -13,7 +13,8 @@ import {
   type FrameMaterial,
   type FrameMoulding,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import { Button, Card, EmptyState, PageHeader } from '@centrocolor/ui';
+import { dueText } from './format';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 const money = (x: number) =>
@@ -22,6 +23,11 @@ const money = (x: number) =>
   );
 const error = (x: unknown) =>
   x instanceof Error ? x.message : 'No se pudo completar la operación.';
+const unitLabel: Record<string, string> = {
+  square_meter: 'Por m²',
+  linear_meter: 'Por metro',
+  unit: 'Por unidad',
+};
 export function FramingCatalogPage({
   repository,
   kind,
@@ -77,13 +83,9 @@ export function FramingCatalogPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="MARQUETERÍA"
-        title={kind === 'mouldings' ? 'Varillas' : 'Materiales'}
-        description="Catálogo configurable. Desactivar conserva el historial."
-      />
+      <PageHeader title={kind === 'mouldings' ? 'Varillas' : 'Materiales'} />
       <Card>
-        <form className="pos-form" onSubmit={submit}>
+        <form className="catalog-form" onSubmit={submit}>
           <label>
             Nombre
             <input
@@ -100,30 +102,44 @@ export function FramingCatalogPage({
               onChange={(e) => setCost(e.target.value)}
             />
           </label>
-          <button className="customer-primary" type="submit">
+          <Button variant="primary" type="submit" icon="plus">
             Agregar
-          </button>
+          </Button>
         </form>
         {message && <p className="appointment-error">{message}</p>}
       </Card>
-      <Card className="pos-list-card">
-        <div className="pos-product-head">
-          <span>Nombre</span>
-          <span>Tipo</span>
-          <span>Costo</span>
-          <span>Estado</span>
-        </div>
-        {rows.map((x: any) => (
-          <div className="pos-product-row" key={x.id}>
-            <strong>
-              {x.code ? `${x.code} · ` : ''}
-              {x.name}
-            </strong>
-            <span>{x.pricingUnit ?? 'varilla'}</span>
-            <span>{money(x.costCents ?? x.costPerMeterCents)}</span>
-            <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
+      <Card className="card--flush">
+        {rows.length === 0 ? (
+          <EmptyState icon="frame" title="Todavía no hay registros" />
+        ) : (
+          <div className="rows">
+            <div className="oprow rows-head catalog-row" aria-hidden="true">
+              <span>Nombre</span>
+              <span>Tipo</span>
+              <span>Costo</span>
+              <span>Estado</span>
+            </div>
+            {rows.map((x: any) => (
+              <div className="oprow catalog-row" key={x.id}>
+                <span className="who">
+                  {x.code ? `${x.code} · ` : ''}
+                  {x.name}
+                </span>
+                <span className="meta">
+                  {x.pricingUnit
+                    ? (unitLabel[x.pricingUnit] ?? x.pricingUnit)
+                    : 'Varilla'}
+                </span>
+                <span className="num">
+                  {money(x.costCents ?? x.costPerMeterCents)}
+                </span>
+                <span className={x.isActive ? 'meta' : 'txt-warn'}>
+                  {x.isActive ? 'Activo' : 'Inactivo'}
+                </span>
+              </div>
+            ))}
           </div>
-        ))}
+        )}
       </Card>
     </>
   );
@@ -184,24 +200,31 @@ export function NewFrameQuotePage({
       setMessage(error(x));
     }
   }
+  const calc = result?.calculation;
   return (
     <>
-      <PageHeader
-        eyebrow="MARQUETERÍA"
-        title="Nueva cotización"
-        description="La medida opening es la medida interior útil. Los precios son snapshots al guardar."
-      />
+      <PageHeader title="Nueva cotización" />
       {message && <p className="appointment-error">{message}</p>}
-      <div className="pos-layout">
-        <Card>
-          <label>
-            Ancho (cm)
-            <input value={width} onChange={(e) => setWidth(e.target.value)} />
-          </label>
-          <label>
-            Alto (cm)
-            <input value={height} onChange={(e) => setHeight(e.target.value)} />
-          </label>
+      <div className="quote-layout">
+        <Card className="quote-form">
+          <div className="quote-size">
+            <label>
+              Ancho (cm)
+              <input
+                inputMode="decimal"
+                value={width}
+                onChange={(e) => setWidth(e.target.value)}
+              />
+            </label>
+            <label>
+              Alto (cm)
+              <input
+                inputMode="decimal"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+              />
+            </label>
+          </div>
           <label>
             Varilla
             <select
@@ -216,61 +239,90 @@ export function NewFrameQuotePage({
               ))}
             </select>
           </label>
-          <p>Materiales</p>
-          {materials.map((x) => (
-            <label key={x.id}>
-              <input
-                type="checkbox"
-                checked={selected.includes(x.id)}
-                onChange={() =>
-                  setSelected((v) =>
-                    v.includes(x.id)
-                      ? v.filter((id) => id !== x.id)
-                      : [...v, x.id],
-                  )
-                }
-              />
-              {x.name}
-            </label>
-          ))}
-          <p>
-            <button onClick={() => void calculate()}>Actualizar cálculo</button>{' '}
-            <button
-              className="customer-primary"
-              onClick={() => void calculate(true)}
-            >
+          <fieldset className="quote-materials">
+            <legend>Materiales</legend>
+            {materials.map((x) => (
+              <label className="check-row" key={x.id}>
+                <input
+                  type="checkbox"
+                  checked={selected.includes(x.id)}
+                  onChange={() =>
+                    setSelected((v) =>
+                      v.includes(x.id)
+                        ? v.filter((id) => id !== x.id)
+                        : [...v, x.id],
+                    )
+                  }
+                />
+                {x.name}
+              </label>
+            ))}
+          </fieldset>
+          <div className="quote-actions">
+            <Button onClick={() => void calculate()}>Actualizar cálculo</Button>
+            <Button variant="primary" onClick={() => void calculate(true)}>
               Guardar cotizado
-            </button>
-          </p>
+            </Button>
+          </div>
         </Card>
-        <Card>
-          {result ? (
+        <Card className="card--dark quote-ticket on-dark">
+          {calc ? (
             <>
               <h2>Desglose</h2>
-              <p>
-                Varilla ·{' '}
-                {(result.calculation.mouldingLengthMm / 1000).toFixed(3)} m ·{' '}
-                {money(result.calculation.mouldingPriceCents)}
+              <dl className="ticket">
+                <div>
+                  <dt>
+                    Varilla
+                    <span className="meta">
+                      {Math.round(calc.mouldingLengthMm / 10)} cm
+                    </span>
+                  </dt>
+                  <dd>{money(calc.mouldingPriceCents)}</dd>
+                </div>
+                {calc.materials.map((x: any) => (
+                  <div key={x.sourceId}>
+                    <dt>
+                      {x.name}
+                      <span className="meta">
+                        {x.unit === 'square_meter'
+                          ? `${(x.quantityNumerator / x.quantityDenominator)
+                              .toFixed(2)
+                              .replace('.', ',')} m²`
+                          : x.unit === 'linear_meter'
+                            ? `${Math.round((x.quantityNumerator / x.quantityDenominator) * 100)} cm`
+                            : `${x.quantityNumerator} u.`}
+                      </span>
+                    </dt>
+                    <dd>{money(x.priceCents)}</dd>
+                  </div>
+                ))}
+                <div>
+                  <dt>Mano de obra</dt>
+                  <dd>{money(calc.labourCents)}</dd>
+                </div>
+              </dl>
+              <p className="ticket-total">
+                <span>Total</span>
+                <strong>{money(calc.totalCents)}</strong>
               </p>
-              {result.calculation.materials.map((x: any) => (
-                <p key={x.sourceId}>
-                  {x.name} ·{' '}
-                  {(x.quantityNumerator / x.quantityDenominator).toFixed(3)}{' '}
-                  {x.unit === 'square_meter' ? 'm²' : x.unit} ·{' '}
-                  {money(x.priceCents)}
-                </p>
-              ))}
-              <p>Mano de obra · {money(result.calculation.labourCents)}</p>
-              <h2>Total {money(result.calculation.totalCents)}</h2>
             </>
           ) : (
-            <p>Elegí dimensiones y actualizá para ver el desglose.</p>
+            <p className="muted">
+              Elegí las medidas y actualizá el cálculo para ver el desglose.
+            </p>
           )}
         </Card>
       </div>
     </>
   );
 }
+const frameStatusLabel: Record<FrameJobStatus, string> = {
+  pending: 'Pendiente',
+  in_progress: 'En producción',
+  ready: 'Listo',
+  delivered: 'Entregado',
+  cancelled: 'Cancelado',
+};
 export function FrameJobsPage({
   repository,
   paymentRepository,
@@ -327,61 +379,121 @@ export function FrameJobsPage({
   }
   return (
     <>
-      <PageHeader
-        eyebrow="MARQUETERÍA"
-        title="Presupuestos / Trabajos"
-        description="Aceptar una cotización crea un trabajo pendiente; no intervienen pagos ni stock."
-      />
+      <PageHeader title="Trabajos de marquetería" />
       {message && <p className="appointment-error">{message}</p>}
-      <Card>
-        {quotes.map((q) => (
-          <div className="stock-movement" key={q.id}>
-            <strong>
-              {q.widthMm / 10} × {q.heightMm / 10} cm · {money(q.totalCents)}
-            </strong>
-            <button onClick={() => void accept(q)}>Aceptar presupuesto</button>
+      {quotes.length > 0 && (
+        <Card className="card--flush">
+          <div className="section-head pad">
+            <h2>Presupuestos cotizados</h2>
           </div>
-        ))}
-        {jobs.length
-          ? jobs.map((x) => (
-              <div className="stock-movement" key={x.id}>
-                <strong>{x.status}</strong>
-                <span>{x.promisedAt ?? 'Sin fecha prometida'}</span>
-                {x.status === 'pending' && (
-                  <button onClick={() => void status(x.id, 'in_progress')}>
-                    En producción
-                  </button>
-                )}
-                {x.status === 'in_progress' && (
-                  <button onClick={() => void status(x.id, 'ready')}>
-                    Listo
-                  </button>
-                )}
-                {x.status === 'ready' && (
-                  <button onClick={() => void status(x.id, 'delivered')}>
-                    Entregado
-                  </button>
-                )}
-                <button
-                  onClick={() =>
-                    setSelectedJobId(selectedJobId === x.id ? null : x.id)
-                  }
+          <div className="rows">
+            {quotes.map((q) => (
+              <div
+                className="oprow"
+                style={{ ['--cols' as string]: 'minmax(0, 1fr) auto' }}
+                key={q.id}
+              >
+                <span className="who">
+                  {q.widthMm / 10} × {q.heightMm / 10} cm ·{' '}
+                  <span className="num">{money(q.totalCents)}</span>
+                </span>
+                <span className="act">
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => void accept(q)}
+                  >
+                    Aceptar presupuesto
+                  </Button>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+      <Card className="card--flush">
+        {jobs.length === 0 ? (
+          !quotes.length && (
+            <EmptyState
+              icon="frame"
+              title="Aún no hay trabajos ni presupuestos cotizados"
+            />
+          )
+        ) : (
+          <div className="rows">
+            {jobs.map((x) => (
+              <div key={x.id}>
+                <div
+                  className="oprow"
+                  data-flag={x.status === 'ready' ? 'ok' : undefined}
+                  style={{
+                    ['--cols' as string]: 'minmax(0, 1fr) minmax(0, 1fr) auto',
+                  }}
                 >
-                  {selectedJobId === x.id ? 'Cerrar cuenta' : 'Ver cuenta'}
-                </button>
+                  <span className="state-line">
+                    <span
+                      className={x.status === 'ready' ? 'tone-ok' : undefined}
+                    >
+                      {frameStatusLabel[x.status as FrameJobStatus] ?? x.status}
+                    </span>
+                  </span>
+                  <span className="meta">
+                    {x.promisedAt
+                      ? dueText(x.promisedAt)
+                      : 'Sin fecha prometida'}
+                  </span>
+                  <span className="act">
+                    {x.status === 'pending' && (
+                      <Button
+                        size="sm"
+                        onClick={() => void status(x.id, 'in_progress')}
+                      >
+                        En producción
+                      </Button>
+                    )}
+                    {x.status === 'in_progress' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => void status(x.id, 'ready')}
+                      >
+                        Listo
+                      </Button>
+                    )}
+                    {x.status === 'ready' && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => void status(x.id, 'delivered')}
+                      >
+                        Entregado
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setSelectedJobId(selectedJobId === x.id ? null : x.id)
+                      }
+                    >
+                      {selectedJobId === x.id ? 'Cerrar cuenta' : 'Ver cuenta'}
+                    </Button>
+                  </span>
+                </div>
                 {selectedJobId === x.id && (
-                  <PaymentAccountPanel
-                    repository={paymentRepository}
-                    sourceType="frame_job"
-                    sourceId={x.id}
-                    onMutation={() => void load()}
-                  />
+                  <div className="pad">
+                    <PaymentAccountPanel
+                      repository={paymentRepository}
+                      sourceType="frame_job"
+                      sourceId={x.id}
+                      onMutation={() => void load()}
+                    />
+                  </div>
                 )}
               </div>
-            ))
-          : !quotes.length && (
-              <p>Aún no hay trabajos ni presupuestos cotizados.</p>
-            )}
+            ))}
+          </div>
+        )}
       </Card>
     </>
   );

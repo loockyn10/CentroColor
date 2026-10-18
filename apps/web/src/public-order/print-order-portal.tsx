@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Button, Icon, Sheet } from '@centrocolor/ui';
 import {
   fetchCatalog,
   PublicOrderError,
@@ -11,24 +12,27 @@ import {
   type SubmittedOrder,
 } from './client';
 import {
-  clampCopies,
   deriveLines,
   fileProblem,
   FILE_INPUT_ACCEPT,
   formatMoney,
   formatSize,
-  lineLabel,
+  howItWorks,
   loadClientKey,
   loadRememberedOrder,
   MAX_FILES_PER_ORDER,
   missingForConfirm,
   orderTotal,
+  paymentNote,
   rememberOrder,
   resetClientKey,
   startBody,
+  type CatalogService,
   type CustomerForm,
+  type OrderLine,
   type PhotoEntry,
 } from './model';
+import { CopiesStepper, PrintFrame, Thumb } from './parts';
 import { PublicShell, useDocumentMeta } from './shell';
 import './public-order.css';
 
@@ -39,32 +43,21 @@ type Progress = {
   error?: string;
 };
 
-function Thumb({ file }: { file: File }) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [broken, setBroken] = useState(false);
-  useEffect(() => {
-    const created = URL.createObjectURL(file);
-    setUrl(created);
-    return () => URL.revokeObjectURL(created);
-  }, [file]);
-  return broken || !url ? (
-    <span className="po-thumb po-thumb-empty" aria-hidden="true">
-      🖼
-    </span>
-  ) : (
-    <img
-      className="po-thumb"
-      src={url}
-      alt=""
-      onError={() => setBroken(true)}
-    />
-  );
-}
-
 const messageFor = (error: unknown) =>
   error instanceof Error && error.message
     ? error.message
     : 'No se pudo completar la operación. Reintentá.';
+
+const plural = (n: number, one: string, many: string) =>
+  `${n} ${n === 1 ? one : many}`;
+
+const dimensions = (service: CatalogService) =>
+  service.widthMm && service.heightMm
+    ? `${service.widthMm / 10} × ${service.heightMm / 10} cm`.replaceAll(
+        '.',
+        ',',
+      )
+    : null;
 
 export function PrintOrderPortal() {
   useDocumentMeta('Imprimí tus fotos · CentroColor', false);
@@ -84,6 +77,7 @@ export function PrintOrderPortal() {
   const [notice, setNotice] = useState<string | null>(null);
   const [result, setResult] = useState<SubmittedOrder | null>(null);
   const [showMissing, setShowMissing] = useState(false);
+  const [sheet, setSheet] = useState(false);
   const session = useRef<{ started: StartedOrder } | null>(null);
   const remembered = useMemo(() => loadRememberedOrder(), []);
 
@@ -189,20 +183,27 @@ export function PrintOrderPortal() {
     resetClientKey();
     setResult(done);
     setPhase('done');
+    window.history.replaceState(null, '', '/imprimir/recibido');
+    window.scrollTo?.({ top: 0 });
   }
 
   async function confirm() {
+    setSheet(false);
     if (missing.length) {
       setShowMissing(true);
       // Take the customer to the first thing that is missing.
       const target = missing[0]!.startsWith('elegí')
-        ? 'po-step-1'
+        ? 'tamanos'
         : missing[0]!.startsWith('agregá')
-          ? 'po-step-2'
-          : 'po-step-3';
-      document
-        .getElementById(target)
-        ?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+          ? 'fotos'
+          : 'datos';
+      window.setTimeout(
+        () =>
+          document
+            .getElementById(target)
+            ?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }),
+        60,
+      );
       return;
     }
     setNotice(null);
@@ -277,19 +278,21 @@ export function PrintOrderPortal() {
   if (loadError && !catalog)
     return (
       <PublicShell>
-        <section className="po-card po-center">
-          <h2>No pudimos cargar la lista de precios</h2>
-          <p>{loadError}</p>
-          <button className="po-primary" onClick={() => void loadCatalog()}>
-            Reintentar
-          </button>
-        </section>
+        <div className="pt-page">
+          <section className="po-card po-center">
+            <h2>No pudimos cargar la lista de precios</h2>
+            <p>{loadError}</p>
+            <Button variant="primary" onClick={() => void loadCatalog()}>
+              Reintentar
+            </Button>
+          </section>
+        </div>
       </PublicShell>
     );
   if (!catalog)
     return (
       <PublicShell>
-        <p className="po-center" role="status">
+        <p className="po-center pad" role="status">
           Cargando…
         </p>
       </PublicShell>
@@ -297,52 +300,69 @@ export function PrintOrderPortal() {
   if (!catalog.available || !catalog.services.length)
     return (
       <PublicShell businessName={catalog.businessName}>
-        <section className="po-card po-center">
-          <h2>Los pedidos online no están disponibles por ahora</h2>
-          <p>Podés acercarte al local y te atendemos enseguida.</p>
-        </section>
+        <div className="pt-page">
+          <section className="po-card po-center">
+            <h2>Los pedidos online no están disponibles por ahora</h2>
+            <p>Podés acercarte al local y te atendemos enseguida.</p>
+          </section>
+        </div>
       </PublicShell>
     );
 
   if (phase === 'done' && result)
     return (
       <PublicShell businessName={catalog.businessName}>
-        <section className="po-card po-done" aria-live="polite">
-          <div className="po-check" aria-hidden="true">
-            ✓
+        <div className="pt-page" aria-live="polite">
+          <div className="rcv-title">
+            <span className="stamp" aria-hidden="true">
+              <Icon name="check" />
+            </span>
+            <div>
+              <h1>
+                PEDIDO <span className="marker">RECIBIDO</span>
+              </h1>
+              <p className="frame-tag code">{result.orderCode}</p>
+            </div>
           </div>
-          <h2>PEDIDO RECIBIDO</h2>
-          <dl className="po-facts">
-            <dt>Pedido</dt>
-            <dd>{result.orderCode}</dd>
-            <dt>Estado</dt>
-            <dd>Recibido</dd>
-          </dl>
-          <ul className="po-summary">
-            {result.items.map((item) => (
-              <li key={item.name}>
-                <span>
-                  {item.name} · {item.quantity}{' '}
-                  {item.quantity === 1 ? 'copia' : 'copias'}
-                </span>
-                <b>{formatMoney(item.totalCents)}</b>
-              </li>
-            ))}
-            <li className="po-total">
+          <section className="po-card">
+            <ul className="order-lines">
+              {result.items.map((item) => (
+                <li key={item.name}>
+                  <span className="sz">{item.name}</span>
+                  <span className="meta">
+                    {plural(item.quantity, 'copia', 'copias')}
+                  </span>
+                  <b className="num">{formatMoney(item.totalCents)}</b>
+                </li>
+              ))}
+            </ul>
+            <p className="order-total">
               <span>TOTAL</span>
-              <b>{formatMoney(result.totalCents)}</b>
-            </li>
-          </ul>
-          <p>
-            {customer.whatsappOptIn
-              ? 'Te avisaremos por WhatsApp cuando esté listo para retirar.'
-              : 'Guardá el link de seguimiento para ver cuándo está listo.'}
-          </p>
-          <a className="po-primary" href={`/pedido/${result.trackingToken}`}>
-            Ver estado del pedido
-          </a>
-          <small>El pago se realiza en el local al retirar.</small>
-        </section>
+              <b className="num">{formatMoney(result.totalCents)}</b>
+            </p>
+            <p className="fine">
+              <Icon name="info" />
+              <span>{paymentNote}</span>
+            </p>
+          </section>
+          {customer.whatsappOptIn && (
+            <div className="callout callout--wa">
+              <Icon name="chat" />
+              <div>
+                <strong>Te avisamos por WhatsApp</strong>
+                <p>Cuando esté listo para retirar.</p>
+              </div>
+            </div>
+          )}
+          <div className="row-actions">
+            <a
+              className="btn btn--primary btn--lg"
+              href={`/pedido/${result.trackingToken}`}
+            >
+              <Icon name="receipt" /> Ver estado del pedido
+            </a>
+          </div>
+        </div>
       </PublicShell>
     );
 
@@ -364,319 +384,547 @@ export function PrintOrderPortal() {
       : 0;
     return (
       <PublicShell businessName={catalog.businessName}>
-        <section className="po-card" aria-live="polite">
-          {phase === 'sending' ? (
-            <>
-              <h2>Enviando tu pedido…</h2>
-              <p>
-                {done} de {entries.length} fotos enviadas. No cierres esta
-                página hasta que termine.
-              </p>
-              <progress max="100" value={percent} aria-label="Progreso total" />
-            </>
-          ) : (
-            <>
-              <h2>Algunas fotos no se pudieron enviar</h2>
-              <p>
-                Llegaron {done} de {entries.length}. Podés reintentar las que
-                faltan o enviar el pedido sólo con las que llegaron.
-              </p>
-            </>
-          )}
-          {notice && <p className="po-error">{notice}</p>}
-          <ul className="po-upload-list">
-            {entries.map((entry) => {
-              const state = progress[entry.id];
-              return (
-                <li key={entry.id}>
-                  <Thumb file={entry.file} />
-                  <span className="po-upload-name">
-                    {entry.file.name}
-                    <small>
-                      {state?.status === 'done'
-                        ? '✓ recibida'
-                        : state?.status === 'failed'
-                          ? state.error
-                          : state?.status === 'uploading'
-                            ? `${state.percent}%`
-                            : 'esperando'}
-                    </small>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-          {phase === 'partial' && (
-            <div className="po-actions">
-              <button className="po-primary" onClick={() => void retryFailed()}>
-                Reintentar ({failed.length})
-              </button>
-              <button
-                className="po-secondary"
-                onClick={() => void skipFailed()}
-              >
-                Enviar sin esas fotos
-              </button>
-            </div>
-          )}
-        </section>
+        <div className="pt-page">
+          <section className="po-card" aria-live="polite">
+            {phase === 'sending' ? (
+              <>
+                <h2>Enviando tu pedido…</h2>
+                <p>
+                  {done} de {entries.length} fotos enviadas. No cierres esta
+                  página hasta que termine.
+                </p>
+                <progress
+                  max="100"
+                  value={percent}
+                  aria-label="Progreso total"
+                />
+              </>
+            ) : (
+              <>
+                <h2>Algunas fotos no se pudieron enviar</h2>
+                <p>
+                  Llegaron {done} de {entries.length}. Podés reintentar las que
+                  faltan o enviar el pedido sólo con las que llegaron.
+                </p>
+              </>
+            )}
+            {notice && <p className="po-error">{notice}</p>}
+            <ul className="po-upload-list">
+              {entries.map((entry) => {
+                const state = progress[entry.id];
+                return (
+                  <li key={entry.id}>
+                    <Thumb file={entry.file} />
+                    <span className="po-upload-name">
+                      {entry.file.name}
+                      <small>
+                        {state?.status === 'done'
+                          ? '✓ recibida'
+                          : state?.status === 'failed'
+                            ? state.error
+                            : state?.status === 'uploading'
+                              ? `${state.percent}%`
+                              : 'esperando'}
+                      </small>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {phase === 'partial' && (
+              <div className="row-actions">
+                <Button variant="primary" onClick={() => void retryFailed()}>
+                  Reintentar ({failed.length})
+                </Button>
+                <Button onClick={() => void skipFailed()}>
+                  Enviar sin esas fotos
+                </Button>
+              </div>
+            )}
+          </section>
+        </div>
       </PublicShell>
     );
   }
 
-  return (
-    <PublicShell businessName={catalog.businessName}>
-      {remembered && (
-        <a className="po-last" href={`/pedido/${remembered.trackingToken}`}>
-          Ver el estado de tu último pedido ({remembered.orderCode})
-        </a>
-      )}
-      {notice && (
-        <p className="po-error" role="alert">
-          {notice}
+  const photoCount = lines.reduce((sum, line) => sum + line.files, 0);
+  const copyCount = lines.reduce((sum, line) => sum + line.copies, 0);
+
+  const summary = (
+    <Summary
+      lines={lines}
+      total={total}
+      missing={showMissing ? missing : []}
+      onConfirm={() => void confirm()}
+    />
+  );
+
+  const hero = (
+    <div className="pt-hero">
+      <div>
+        <h1>
+          Imprimí <span className="marker">tus fotos</span>
+        </h1>
+        <p className="lede">
+          Elegí el tamaño, subí tus fotos y pasá a retirarlas por el local.
         </p>
-      )}
-
-      <section className="po-card" aria-labelledby="po-step-1">
-        <h2 id="po-step-1">
-          <span className="po-step">1</span> ¿Qué querés imprimir?
-        </h2>
-        <p className="po-hint">Podés elegir más de un tamaño.</p>
-        <div className="po-sizes">
-          {catalog.services.map((service) => {
-            const on = selected.includes(service.id);
-            return (
-              <button
-                key={service.id}
-                type="button"
-                className={`po-size ${on ? 'po-size-on' : ''}`}
-                aria-pressed={on}
-                onClick={() => toggleService(service.id)}
-              >
-                <strong>{service.name}</strong>
-                {service.description && <small>{service.description}</small>}
-                <span className="po-price">
-                  {formatMoney(service.unitPriceCents)} c/u
-                </span>
-                {on && (
-                  <span className="po-mark" aria-hidden="true">
-                    ✓
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="actions">
+          <a className="btn btn--dark btn--lg" href="#tamanos">
+            Empezar <Icon name="chevD" />
+          </a>
         </div>
-      </section>
+      </div>
+      <div className="print-stack" aria-hidden="true">
+        <span className="print p1" />
+        <span className="print p2" />
+        <span className="print p3" />
+      </div>
+      <ul className="how how-row" aria-label="Cómo funciona">
+        {howItWorks.map((step, index) => (
+          <li key={step.label}>
+            <span className="ico">
+              <Icon name={step.icon} />
+            </span>
+            <span>
+              {index + 1}. {step.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 
-      {!lines.length && (
-        <section className="po-card po-pending" aria-labelledby="po-step-2">
-          <h2 id="po-step-2">
-            <span className="po-step">2</span> Subí tus fotos
-          </h2>
-          <p className="po-hint">
-            Primero elegí el tamaño y después agregás las fotos.
-          </p>
-        </section>
-      )}
-      {!!lines.length && (
-        <section className="po-card" aria-labelledby="po-step-2">
-          <h2 id="po-step-2">
-            <span className="po-step">2</span> Subí tus fotos
-          </h2>
-          <p className="po-hint">
-            Elegí las fotos de cada tamaño y cuántas copias querés de cada una.
-          </p>
-          {lines.map((line) => (
-            <div className="po-group" key={line.service.id}>
-              <header>
-                <h3>{line.service.name}</h3>
-                <span>{formatMoney(line.service.unitPriceCents)} c/u</span>
-              </header>
-              <label className="po-add">
-                <input
-                  type="file"
-                  multiple
-                  accept={FILE_INPUT_ACCEPT}
-                  onChange={(event) => {
-                    addFiles(line.service.id, event.target.files);
-                    event.target.value = '';
-                  }}
-                />
-                + Agregar fotos de {line.service.name}
-              </label>
-              <ul className="po-photos">
-                {entries
-                  .filter((x) => x.serviceId === line.service.id)
-                  .map((entry) => (
-                    <li key={entry.id}>
-                      <Thumb file={entry.file} />
-                      <div className="po-photo-info">
-                        <strong>{entry.file.name}</strong>
-                        <small>{formatSize(entry.file.size)}</small>
-                      </div>
-                      <div
-                        className="po-stepper"
-                        role="group"
-                        aria-label={`Copias de ${entry.file.name}`}
-                      >
-                        <button
-                          type="button"
-                          aria-label="Menos copias"
-                          disabled={entry.copies <= 1}
-                          onClick={() =>
-                            patchEntry(entry.id, {
-                              copies: clampCopies(entry.copies - 1),
-                            })
-                          }
-                        >
-                          −
-                        </button>
-                        <output>{entry.copies}</output>
-                        <button
-                          type="button"
-                          aria-label="Más copias"
-                          onClick={() =>
-                            patchEntry(entry.id, {
-                              copies: clampCopies(entry.copies + 1),
-                            })
-                          }
-                        >
-                          +
-                        </button>
-                      </div>
-                      <button
-                        type="button"
-                        className="po-remove"
-                        aria-label={`Quitar ${entry.file.name}`}
-                        onClick={() => removeEntry(entry.id)}
-                      >
-                        ✕
-                      </button>
-                    </li>
-                  ))}
-              </ul>
-              {line.files > 0 && <p className="po-line">{lineLabel(line)}</p>}
-            </div>
-          ))}
-        </section>
-      )}
-
-      <section className="po-card" aria-labelledby="po-step-3">
-        <h2 id="po-step-3">
-          <span className="po-step">3</span> Tus datos
-        </h2>
-        <label className="po-field">
-          Nombre *
-          <input
-            autoComplete="name"
-            value={customer.name}
-            maxLength={80}
-            onChange={(e) => setCustomer({ ...customer, name: e.target.value })}
-          />
-        </label>
-        <label className="po-field">
-          WhatsApp *
-          <input
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="342 555 1234"
-            value={customer.phone}
-            maxLength={30}
-            onChange={(e) =>
-              setCustomer({ ...customer, phone: e.target.value })
-            }
-          />
-        </label>
-        <label className="po-field">
-          Email (opcional)
-          <input
-            type="email"
-            autoComplete="email"
-            value={customer.email}
-            maxLength={120}
-            onChange={(e) =>
-              setCustomer({ ...customer, email: e.target.value })
-            }
-          />
-        </label>
-        <label className="po-field">
-          Notas (opcional)
-          <textarea
-            rows={2}
-            maxLength={500}
-            value={customer.notes}
-            onChange={(e) =>
-              setCustomer({ ...customer, notes: e.target.value })
-            }
-          />
-        </label>
-        <label className="po-consent">
-          <input
-            type="checkbox"
-            checked={customer.whatsappOptIn}
-            onChange={(e) =>
-              setCustomer({ ...customer, whatsappOptIn: e.target.checked })
-            }
-          />
-          <span>
-            Quiero recibir por WhatsApp avisos relacionados con este pedido.
-            <small>
-              Sólo te escribimos por este pedido. No enviamos promociones.
-            </small>
-          </span>
-        </label>
-      </section>
-
-      <section className="po-card" aria-labelledby="po-step-4">
-        <h2 id="po-step-4">
-          <span className="po-step">4</span> Confirmá tu pedido
-        </h2>
-        {lines.length ? (
-          <ul className="po-summary">
-            {lines.map((line) => (
-              <li key={line.service.id}>
-                <span>
-                  {line.service.name} · {line.copies}{' '}
-                  {line.copies === 1 ? 'copia' : 'copias'}
-                </span>
-                <b>{formatMoney(line.totalCents)}</b>
-              </li>
-            ))}
-            <li className="po-total">
-              <span>TOTAL</span>
-              <b>{formatMoney(total)}</b>
-            </li>
-          </ul>
-        ) : (
-          <p className="po-hint">Todavía no elegiste ningún tamaño.</p>
-        )}
-        {customer.name.trim() && (
-          <p className="po-hint">
-            {customer.name.trim()}
-            {customer.phone.trim() ? ` · ${customer.phone.trim()}` : ''}
-          </p>
-        )}
-        <small className="po-hint">
-          El pago se realiza en el local al retirar tu pedido.
-        </small>
-      </section>
-
-      <div className="po-bar">
-        <div>
-          <small>TOTAL</small>
-          <strong>{formatMoney(total)}</strong>
-          {showMissing && missing.length > 0 && (
-            <small className="po-missing" role="alert">
-              Falta: {missing.join(', ')}.
-            </small>
+  return (
+    <PublicShell businessName={catalog.businessName} hero={hero}>
+      <div className="pt-main">
+        <div className="pt-flow">
+          {remembered && (
+            <a className="po-last" href={`/pedido/${remembered.trackingToken}`}>
+              Ver el estado de tu último pedido ({remembered.orderCode})
+            </a>
           )}
+          {notice && (
+            <p className="po-error" role="alert">
+              {notice}
+            </p>
+          )}
+
+          <section id="tamanos" aria-labelledby="h-tam">
+            <div className="pt-step">
+              <span className="pt-num" aria-hidden="true">
+                1
+              </span>
+              <h2 id="h-tam">Elegí el tamaño</h2>
+            </div>
+            <div className="sizes">
+              {catalog.services.map((service) => (
+                <SizeCard
+                  key={service.id}
+                  service={service}
+                  selected={selected.includes(service.id)}
+                  onToggle={() => toggleService(service.id)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section id="fotos" aria-labelledby="h-fotos">
+            <div className="pt-step">
+              <span className="pt-num" aria-hidden="true">
+                2
+              </span>
+              <h2 id="h-fotos">Subí tus fotos</h2>
+            </div>
+            {!lines.length ? (
+              <div className="empty-box">
+                <Icon name="image" size={38} />
+                <strong>Primero elegí un tamaño</strong>
+              </div>
+            ) : (
+              lines.map((line) => (
+                <PhotoGroup
+                  key={line.service.id}
+                  line={line}
+                  entries={entries.filter(
+                    (x) => x.serviceId === line.service.id,
+                  )}
+                  onAdd={(files) => addFiles(line.service.id, files)}
+                  onCopies={(id, copies) => patchEntry(id, { copies })}
+                  onRemove={removeEntry}
+                  onRemoveSize={() => toggleService(line.service.id)}
+                />
+              ))
+            )}
+          </section>
+
+          <section id="datos" aria-labelledby="h-datos">
+            <div className="pt-step">
+              <span className="pt-num" aria-hidden="true">
+                3
+              </span>
+              <h2 id="h-datos">Tus datos</h2>
+            </div>
+            <form
+              className="cust"
+              onSubmit={(event) => event.preventDefault()}
+              noValidate
+            >
+              <label className="field">
+                <span>Nombre</span>
+                <input
+                  className="input"
+                  autoComplete="name"
+                  value={customer.name}
+                  maxLength={80}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, name: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>WhatsApp</span>
+                <input
+                  className="input"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  placeholder="342 555 1234"
+                  value={customer.phone}
+                  maxLength={30}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, phone: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  Email <span className="opt">Opcional</span>
+                </span>
+                <input
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  value={customer.email}
+                  maxLength={120}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, email: e.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>
+                  Notas <span className="opt">Opcional</span>
+                </span>
+                <textarea
+                  className="textarea"
+                  rows={2}
+                  maxLength={500}
+                  value={customer.notes}
+                  onChange={(e) =>
+                    setCustomer({ ...customer, notes: e.target.value })
+                  }
+                />
+              </label>
+              <label className="check wide po-consent">
+                <input
+                  type="checkbox"
+                  checked={customer.whatsappOptIn}
+                  onChange={(e) =>
+                    setCustomer({
+                      ...customer,
+                      whatsappOptIn: e.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  Quiero recibir por WhatsApp avisos relacionados con este
+                  pedido.
+                  <small className="meta block">
+                    Sólo te escribimos por este pedido. No enviamos promociones.
+                  </small>
+                </span>
+              </label>
+            </form>
+          </section>
+
+          <section
+            className="narrow-only"
+            aria-labelledby="h-conf"
+            id="resumen"
+          >
+            <div className="pt-step">
+              <span className="pt-num" aria-hidden="true">
+                4
+              </span>
+              <h2 id="h-conf">Confirmá tu pedido</h2>
+            </div>
+            {summary}
+          </section>
         </div>
-        <button className="po-primary" onClick={() => void confirm()}>
-          Confirmar pedido
+
+        <aside className="sum-side" aria-label="Resumen del pedido">
+          {summary}
+        </aside>
+      </div>
+
+      {selected.length > 0 && (
+        <div className="pt-bar on-dark">
+          <button
+            type="button"
+            className="sum-open"
+            onClick={() => setSheet(true)}
+            aria-label={`Ver resumen del pedido. Total ${formatMoney(total)}`}
+          >
+            <span className="lbl">TOTAL</span>
+            <span className="amt num">{formatMoney(total)}</span>
+            <span className="cnt">
+              {plural(copyCount, 'copia', 'copias')} ·{' '}
+              {plural(photoCount, 'foto', 'fotos')}
+              <Icon name="chevR" />
+            </span>
+          </button>
+          <Button variant="primary" size="lg" onClick={() => void confirm()}>
+            Confirmar
+          </Button>
+        </div>
+      )}
+
+      <Sheet open={sheet} onClose={() => setSheet(false)} title="Tu pedido">
+        {summary}
+      </Sheet>
+    </PublicShell>
+  );
+}
+
+/* ───────────────────────────── pieces ───────────────────────────── */
+
+function SizeCard({
+  service,
+  selected,
+  onToggle,
+}: {
+  service: CatalogService;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  const dims = dimensions(service);
+  return (
+    <article className="size-card" data-selected={selected}>
+      <div className="size-stage">
+        {dims && <span className="dim">{dims}</span>}
+        <PrintFrame
+          widthMm={service.widthMm}
+          heightMm={service.heightMm}
+          label={dims ? `Proporción de ${service.name}: ${dims}` : service.name}
+        />
+      </div>
+      <div className="size-body">
+        <h3>{service.name}</h3>
+        {service.description && <p className="tag">{service.description}</p>}
+        <div className="size-price">
+          <b className="num">{formatMoney(service.unitPriceCents)}</b>
+          <small>c/u</small>
+        </div>
+        <button
+          type="button"
+          className="btn btn--primary btn--block"
+          aria-pressed={selected}
+          onClick={onToggle}
+        >
+          <Icon name={selected ? 'check' : 'plus'} />
+          {selected ? 'Elegido' : 'Elegir'}
+          <span className="sr-only"> tamaño {service.name}</span>
         </button>
       </div>
-    </PublicShell>
+    </article>
+  );
+}
+
+function PhotoGroup({
+  line,
+  entries,
+  onAdd,
+  onCopies,
+  onRemove,
+  onRemoveSize,
+}: {
+  line: OrderLine;
+  entries: PhotoEntry[];
+  onAdd: (files: FileList | null) => void;
+  onCopies: (id: string, copies: number) => void;
+  onRemove: (id: string) => void;
+  onRemoveSize: () => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const { service } = line;
+  const onDrop = (event: DragEvent) => {
+    event.preventDefault();
+    setOver(false);
+    onAdd(event.dataTransfer.files);
+  };
+  return (
+    <section className="grp" aria-label={`Fotos para ${service.name}`}>
+      <div className="grp-head">
+        <h3>{service.name}</h3>
+        <div className="meta">
+          {plural(line.files, 'foto', 'fotos')} ·{' '}
+          {plural(line.copies, 'copia', 'copias')}
+        </div>
+        <div className="sub num">{formatMoney(line.totalCents)}</div>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="trash"
+          aria-label={`Quitar el tamaño ${service.name}`}
+          onClick={onRemoveSize}
+        >
+          Quitar
+        </Button>
+      </div>
+      <div className="grp-body">
+        <div
+          className={`drop ${over ? 'drop--over' : ''} ${entries.length ? 'drop--compact' : ''}`.trim()}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setOver(true);
+          }}
+          onDragLeave={() => setOver(false)}
+          onDrop={onDrop}
+        >
+          {!entries.length && <Icon name="upload" />}
+          <div>
+            <strong>
+              {entries.length ? (
+                'Agregar más fotos'
+              ) : (
+                <>
+                  <span className="desk-only">Arrastrá tus fotos acá</span>
+                  <span className="mob-only">Agregar fotos</span>
+                </>
+              )}
+            </strong>
+            <div className="hint">JPG, PNG, HEIC o TIFF</div>
+          </div>
+          <div className="drop-actions">
+            <Button
+              variant="primary"
+              icon="image"
+              onClick={() => input.current?.click()}
+            >
+              <span className="mob-only">Elegir de la galería</span>
+              <span className="desk-only">Elegir fotos</span>
+              <span className="sr-only"> de {service.name}</span>
+            </Button>
+          </div>
+          <input
+            ref={input}
+            type="file"
+            multiple
+            accept={FILE_INPUT_ACCEPT}
+            hidden
+            tabIndex={-1}
+            aria-hidden="true"
+            onChange={(event) => {
+              onAdd(event.target.files);
+              event.target.value = '';
+            }}
+          />
+        </div>
+        {entries.length > 0 && (
+          <ul className="ph-grid" aria-label={`Fotos en ${service.name}`}>
+            {entries.map((entry) => (
+              <li className="ph-card" key={entry.id}>
+                <div className="ph-thumb">
+                  <div className="ph-frame">
+                    <Thumb file={entry.file} />
+                  </div>
+                  <button
+                    type="button"
+                    className="ph-remove"
+                    aria-label={`Quitar ${entry.file.name}`}
+                    onClick={() => onRemove(entry.id)}
+                  >
+                    <span>
+                      <Icon name="x" />
+                    </span>
+                  </button>
+                </div>
+                <div className="ph-body">
+                  <div className="ph-name">
+                    <span>{entry.file.name}</span>
+                    <span>{formatSize(entry.file.size)}</span>
+                  </div>
+                  <CopiesStepper
+                    label={entry.file.name}
+                    value={entry.copies}
+                    onChange={(copies) => onCopies(entry.id, copies)}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Summary({
+  lines,
+  total,
+  missing,
+  onConfirm,
+}: {
+  lines: OrderLine[];
+  total: number;
+  missing: string[];
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="sum on-dark">
+      <div className="sum-in">
+        <h2>Resumen</h2>
+        {lines.length > 0 && (
+          <ul className="sum-lines">
+            {lines.map((line) => (
+              <li className="sum-line" key={line.service.id}>
+                <span className="sz">{line.service.name}</span>
+                <span className="pr num">{formatMoney(line.totalCents)}</span>
+                <span className="cp">
+                  {plural(line.copies, 'copia', 'copias')} ·{' '}
+                  {plural(line.files, 'foto', 'fotos')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="sum-total">
+          <span className="lbl">TOTAL</span>
+          <span className="amt num" aria-live="polite">
+            {formatMoney(total)}
+          </span>
+        </div>
+        {missing.length > 0 && (
+          <div className="sum-missing" role="alert">
+            <strong>Para confirmar falta:</strong>
+            <span>{missing.join(' · ')}</span>
+          </div>
+        )}
+        <Button
+          variant="primary"
+          size="lg"
+          block
+          onClick={onConfirm}
+          icon="check"
+        >
+          Confirmar pedido
+        </Button>
+        <p className="fine">
+          <Icon name="info" />
+          <span>{paymentNote}</span>
+        </p>
+      </div>
+    </div>
   );
 }
