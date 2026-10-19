@@ -141,17 +141,6 @@ export function PrintPortal() {
           </Button>
         </div>
       </div>
-      <div className="print-stack" aria-hidden="true">
-        <div className="print p1" style={{ width: 118, height: 160 }}>
-          <img src={samplePhoto(3)} alt="" />
-        </div>
-        <div className="print p2" style={{ width: 150, height: 200 }}>
-          <img src={samplePhoto(0)} alt="" />
-        </div>
-        <div className="print p3" style={{ width: 118, height: 160 }}>
-          <img src={samplePhoto(8)} alt="" />
-        </div>
-      </div>
       <ul className="how how-row" aria-label="Cómo funciona">
         {HOW.map((h, i) => (
           <li key={h.label}>
@@ -432,8 +421,10 @@ function SizeCard({
           aria-pressed={selected}
           onClick={onToggle}
         >
-          {selected ? <Icon name="check" /> : <Icon name="plus" />}
-          {selected ? 'Elegido' : 'Elegir'}
+          <span className="btn-unit">
+            {selected ? <Icon name="check" /> : <Icon name="plus" />}
+            {selected ? 'Elegido' : 'Elegir'}
+          </span>
           <span className="sr-only"> tamaño {size.name}</span>
         </button>
       </div>
