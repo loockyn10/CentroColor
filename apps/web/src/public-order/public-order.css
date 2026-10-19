@@ -742,10 +742,6 @@
     grid-column: 1 / -1;
   }
 }
-.po-consent {
-  font-size: var(--fs-sm);
-}
-
 /* Resumen del pedido: ticket oscuro */
 .sum {
   background: var(--ink-900);
@@ -1235,4 +1231,87 @@
 .ready p {
   font-size: var(--fs-lg);
   max-width: 38ch;
+}
+
+/* Transferencia (copiado de DESIGN-02) */
+.xfer {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink-900);
+  color: var(--paper-50);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-hard-lg);
+}
+.xfer-in {
+  padding: 22px 20px 24px;
+  display: grid;
+  gap: 18px;
+}
+.xfer .lbl {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--y-300);
+}
+.xfer .amount {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(3rem, 2rem + 6vw, 5rem);
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--y-500);
+}
+.alias-row {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 2px dashed var(--y-500);
+  border-radius: var(--r-md);
+  background: var(--ink-800);
+}
+.alias {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: clamp(1.05rem, 0.6rem + 2.2vw, 1.6rem);
+  letter-spacing: 0.04em;
+  color: #fff;
+  word-break: break-all;
+}
+@media (min-width: 560px) {
+  .alias-row {
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+}
+.xfer-steps {
+  display: grid;
+  gap: 8px;
+  color: #e7dfca;
+  font-size: var(--fs-sm);
+}
+.xfer-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.xfer-steps b {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--y-500);
+  color: var(--ink-900);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.po-xfer-label {
+  margin-bottom: 8px;
+}
+.po-copy-amount {
+  min-height: 32px;
+  padding: 0 6px;
+  text-decoration: underline;
 }

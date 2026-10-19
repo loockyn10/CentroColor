@@ -26,8 +26,8 @@ Pasada integral de UX/UI sobre Web/PWA y Desktop: el sistema visual aprobado en 
 
 ### Diferencias necesarias respecto de DESIGN-02 y deuda
 
-- **Pago**: el backend no implementa «transferencia antes de imprimir». El portal conserva el texto verdadero («El pago se realiza en el local al retirar tu pedido») y el paso 3 del hero dice «Confirmá» en vez de «Transferí». El copy de DESIGN-02 queda preparado tras `PAYMENT_MODE` en `apps/web/src/public-order/model.ts`; no activarlo hasta que exista el gate y el modelo de datos. Cobros no inventa transferencias ni «Confirmar transferencia».
-- **Consentimiento de WhatsApp**: DESIGN-02 quitó la casilla; producción **conserva la existente** (registra el opt-in). Sin cambios de consentimiento ni backend.
+- **Pago (corregido 18/10/2026)**: el portal comunica la regla de DESIGN-02: Transferí → acreditación → impresión → retiro, con el alias `CENTROCOLORESPERANZA`, total, «Copiar alias» y «La impresión se realiza una vez acreditado el pago.» en `/imprimir`, la pantalla de pedido recibido y `/pedido/:token`. **Es sólo UX/regla comercial**: el backend no tiene aún estado de pago ni gate de impresión (la acreditación es manual/operativa) y el seguimiento muestra el aviso de transferencia mientras el pedido está en «recibido». Test: `commercial-rule.test.ts`.
+- **Consentimiento de WhatsApp (corregido 18/10/2026)**: sin casilla, como DESIGN-02; el campo WhatsApp es el único dato y el envío sigue con `whatsappOptIn: true` interno. Pendiente la revisión legal.
 - **Footer/portal**: sin dirección, horario ni teléfono del local (el catálogo no los provee); sin editor Polaroid ni «Personalizar».
 - **Clientes**: «compras/historial» no existe en el dominio (`Sale` no referencia a `Customer`); la ficha muestra cuenta, trabajos y datos.
 - **Inicio/atención**: sin avisos de WhatsApp/Drive (requeriría nuevos puertos); Desktop muestra «Configuración» informativa (Drive/WhatsApp son sólo Web).

@@ -3,7 +3,8 @@ import { Button, Icon, type IconName } from '@centrocolor/ui';
 import { PublicOrderError, trackOrder, type TrackedOrder } from './client';
 import {
   formatMoney,
-  paymentNote,
+  BANK_ALIAS,
+  PRINT_AFTER_PAYMENT,
   trackingHeadline,
   trackingNote,
   trackingStepIndex,
@@ -171,11 +172,28 @@ export function OrderTracking({ token }: { token: string }) {
             <span>TOTAL</span>
             <b className="num">{formatMoney(order.totalCents)}</b>
           </p>
-          <p className="fine">
-            <Icon name="info" />
-            <span>{paymentNote}</span>
-          </p>
         </section>
+
+        {order.status === 'received' && (
+          <div className="callout" role="note">
+            <Icon name="wallet" />
+            <div>
+              <strong>
+                Transferí {formatMoney(order.totalCents)} a {BANK_ALIAS}
+              </strong>
+              <p>{PRINT_AFTER_PAYMENT}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="callout callout--wa">
+          <Icon name="chat" />
+          <div>
+            <strong>
+              Te avisaremos por WhatsApp cuando tu pedido esté listo.
+            </strong>
+          </div>
+        </div>
 
         <div className="row-actions">
           <Button

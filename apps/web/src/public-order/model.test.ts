@@ -11,7 +11,8 @@ import {
   newClientKey,
   howItWorks,
   paymentNote,
-  PAYMENT_MODE,
+  BANK_ALIAS,
+  PRINT_AFTER_PAYMENT,
   orderTotal,
   rememberOrder,
   startBody,
@@ -206,18 +207,40 @@ describe('avance del seguimiento', () => {
   });
 });
 
-describe('pago: sólo se promete lo que el backend hace', () => {
-  it('hoy el pago es en el local; la transferencia previa es sólo copy preparado', () => {
-    expect(PAYMENT_MODE).toBe('pickup');
-    expect(paymentNote).toBe(
-      'El pago se realiza en el local al retirar tu pedido.',
+describe('pago: transferencia previa (DESIGN-02)', () => {
+  it('comunica pedido → transferencia → acreditación → impresión → retiro', () => {
+    expect(BANK_ALIAS).toBe('CENTROCOLORESPERANZA');
+    expect(PRINT_AFTER_PAYMENT).toBe(
+      'La impresión se realiza una vez acreditado el pago.',
     );
+    expect(paymentNote).toBe('Se imprime una vez acreditada la transferencia.');
     expect(howItWorks.map((step) => step.label)).toEqual([
       'Elegí el tamaño',
       'Subí tus fotos',
-      'Confirmá',
+      'Transferí',
       'Retirá en el local',
     ]);
-    expect(howItWorks.some((step) => /transfer/i.test(step.label))).toBe(false);
+  });
+
+  it('confirmar no depende de ningún consentimiento de WhatsApp', () => {
+    const svc = service('s1', '10x15', 500);
+    const line = deriveLines([svc], ['s1'], [
+      {
+        id: 'p1',
+        serviceId: 's1',
+        file: new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+        copies: 1,
+      },
+    ] as unknown as PhotoEntry[]);
+    const base = {
+      name: 'Ana Pérez',
+      phone: '+54 9 11 5555 1234',
+      email: '',
+      notes: '',
+    };
+    for (const whatsappOptIn of [true, false])
+      expect(
+        missingForConfirm(line, ['s1'], { ...base, whatsappOptIn }),
+      ).toEqual([]);
   });
 });

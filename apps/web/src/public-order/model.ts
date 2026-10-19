@@ -32,27 +32,20 @@ export type OrderLine = {
   totalCents: number;
 };
 
-/**
- * How the customer pays today. `pickup`: in the shop when collecting (what the backend does).
- * `transfer` is the DESIGN-02 flow (printing waits for an accredited transfer): it only exists
- * as a prepared copy here and must NOT be switched on until the backend gates printing on it.
- */
-export const PAYMENT_MODE = 'pickup' as 'pickup' | 'transfer';
+/** Alias de transferencia y regla comercial de DESIGN-02: se imprime una vez acreditado el pago. */
+export const BANK_ALIAS = 'CENTROCOLORESPERANZA';
+export const PRINT_AFTER_PAYMENT =
+  'La impresión se realiza una vez acreditado el pago.';
 
 export const howItWorks: Array<{ icon: IconName; label: string }> = [
   { icon: 'grid', label: 'Elegí el tamaño' },
   { icon: 'upload', label: 'Subí tus fotos' },
-  PAYMENT_MODE === 'transfer'
-    ? { icon: 'wallet', label: 'Transferí' }
-    : { icon: 'check', label: 'Confirmá' },
+  { icon: 'wallet', label: 'Transferí' },
   { icon: 'store', label: 'Retirá en el local' },
 ];
 
-/** The one commercial clarification shown next to the total. */
-export const paymentNote =
-  PAYMENT_MODE === 'transfer'
-    ? 'Se imprime una vez acreditada la transferencia.'
-    : 'El pago se realiza en el local al retirar tu pedido.';
+/** The one commercial clarification shown next to the total, before confirming. */
+export const paymentNote = 'Se imprime una vez acreditada la transferencia.';
 
 export const MIN_COPIES = 1;
 export const MAX_COPIES = 99;

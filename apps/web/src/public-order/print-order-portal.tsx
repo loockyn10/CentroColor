@@ -24,6 +24,8 @@ import {
   missingForConfirm,
   orderTotal,
   paymentNote,
+  BANK_ALIAS,
+  PRINT_AFTER_PAYMENT,
   rememberOrder,
   resetClientKey,
   startBody,
@@ -78,6 +80,7 @@ export function PrintOrderPortal() {
   const [result, setResult] = useState<SubmittedOrder | null>(null);
   const [showMissing, setShowMissing] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [copied, setCopied] = useState<'alias' | 'amount' | null>(null);
   const session = useRef<{ started: StartedOrder } | null>(null);
   const remembered = useMemo(() => loadRememberedOrder(), []);
 
@@ -102,6 +105,16 @@ export function PrintOrderPortal() {
   );
   const total = orderTotal(lines);
   const missing = missingForConfirm(lines, selected, customer);
+
+  async function copy(text: string, key: 'alias' | 'amount') {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* el portapapeles puede no estar disponible: igual se confirma visualmente */
+    }
+    setCopied(key);
+    window.setTimeout(() => setCopied(null), 2200);
+  }
 
   function toggleService(id: string) {
     if (selected.includes(id)) {
@@ -340,20 +353,71 @@ export function PrintOrderPortal() {
               <span>TOTAL</span>
               <b className="num">{formatMoney(result.totalCents)}</b>
             </p>
-            <p className="fine">
-              <Icon name="info" />
-              <span>{paymentNote}</span>
-            </p>
           </section>
-          {customer.whatsappOptIn && (
-            <div className="callout callout--wa">
-              <Icon name="chat" />
+          <section className="xfer on-dark" aria-labelledby="h-xfer">
+            <div className="xfer-in">
               <div>
-                <strong>Te avisamos por WhatsApp</strong>
-                <p>Cuando esté listo para retirar.</p>
+                <h2 id="h-xfer" className="lbl">
+                  Total a transferir
+                </h2>
+                <div className="amount num">
+                  {formatMoney(result.totalCents)}
+                </div>
               </div>
+              <div>
+                <div className="lbl po-xfer-label">Transferí a este alias</div>
+                <div className="alias-row">
+                  <span className="alias" translate="no">
+                    {BANK_ALIAS}
+                  </span>
+                  <Button
+                    variant="primary"
+                    icon={copied === 'alias' ? 'check' : 'copy'}
+                    onClick={() => void copy(BANK_ALIAS, 'alias')}
+                  >
+                    {copied === 'alias' ? 'Copiado' : 'Copiar alias'}
+                  </Button>
+                </div>
+              </div>
+              <ol className="xfer-steps">
+                <li>
+                  <b>1</b>
+                  <span>
+                    Transferí <strong>{formatMoney(result.totalCents)}</strong>{' '}
+                    al alias de arriba.{' '}
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm on-dark po-copy-amount"
+                      onClick={() =>
+                        void copy(String(result.totalCents / 100), 'amount')
+                      }
+                    >
+                      {copied === 'amount' ? 'Monto copiado ✓' : 'Copiar monto'}
+                    </button>
+                  </span>
+                </li>
+                <li>
+                  <b>2</b>
+                  <span>Cuando se acredite, empezamos a imprimir.</span>
+                </li>
+              </ol>
             </div>
-          )}
+          </section>
+          <div className="callout" role="note">
+            <Icon name="printer" />
+            <div>
+              <strong>{PRINT_AFTER_PAYMENT}</strong>
+            </div>
+          </div>
+          <div className="callout callout--wa">
+            <Icon name="chat" />
+            <div>
+              <strong>
+                Te avisaremos por WhatsApp cuando tu pedido esté listo.
+              </strong>
+              <p className="mono">{customer.phone}</p>
+            </div>
+          </div>
           <div className="row-actions">
             <a
               className="btn btn--primary btn--lg"
@@ -624,25 +688,6 @@ export function PrintOrderPortal() {
                     setCustomer({ ...customer, notes: e.target.value })
                   }
                 />
-              </label>
-              <label className="check wide po-consent">
-                <input
-                  type="checkbox"
-                  checked={customer.whatsappOptIn}
-                  onChange={(e) =>
-                    setCustomer({
-                      ...customer,
-                      whatsappOptIn: e.target.checked,
-                    })
-                  }
-                />
-                <span>
-                  Quiero recibir por WhatsApp avisos relacionados con este
-                  pedido.
-                  <small className="meta block">
-                    Sólo te escribimos por este pedido. No enviamos promociones.
-                  </small>
-                </span>
               </label>
             </form>
           </section>
