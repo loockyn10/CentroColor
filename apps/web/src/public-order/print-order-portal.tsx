@@ -538,11 +538,6 @@ export function PrintOrderPortal() {
           </a>
         </div>
       </div>
-      <div className="print-stack" aria-hidden="true">
-        <span className="print p1" />
-        <span className="print p2" />
-        <span className="print p3" />
-      </div>
       <ul className="how how-row" aria-label="Cómo funciona">
         {howItWorks.map((step, index) => (
           <li key={step.label}>

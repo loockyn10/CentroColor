@@ -227,35 +227,6 @@
   flex-wrap: wrap;
   gap: 12px;
 }
-.print-stack {
-  position: relative;
-  height: 170px;
-  margin-top: 4px;
-}
-.print-stack .print {
-  position: absolute;
-  bottom: 0;
-}
-.print-stack .p1 {
-  left: 4%;
-  width: 104px;
-  height: 142px;
-  transform: rotate(-9deg);
-}
-.print-stack .p2 {
-  left: 30%;
-  bottom: 14px;
-  width: 132px;
-  height: 176px;
-  transform: rotate(4deg);
-  z-index: 2;
-}
-.print-stack .p3 {
-  left: 58%;
-  width: 104px;
-  height: 142px;
-  transform: rotate(-3deg);
-}
 .how {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -294,28 +265,8 @@
 }
 @media (min-width: 960px) {
   .pt-hero {
-    grid-template-columns: 1.2fr 0.8fr;
-    align-items: center;
     padding-block: 18px 40px;
-    gap: 40px;
-  }
-  .print-stack {
-    height: 320px;
-  }
-  .print-stack .p1 {
-    width: 140px;
-    height: 190px;
-  }
-  .print-stack .p2 {
-    width: 180px;
-    height: 240px;
-  }
-  .print-stack .p3 {
-    width: 140px;
-    height: 190px;
-  }
-  .how-row {
-    grid-column: 1 / -1;
+    gap: 32px;
   }
 }
 
@@ -463,13 +414,15 @@
 }
 .size-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   padding: 12px 14px 14px;
   flex: 1;
 }
 .size-body h3 {
-  font-size: 2rem;
+  font-size: clamp(1.45rem, 6vw, 2rem);
   letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
 }
 .size-body .tag {
   color: var(--text-muted);
