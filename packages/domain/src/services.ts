@@ -1,3 +1,4 @@
+import type { PhotoService } from './photo';
 import { requireCents } from './product';
 
 /** All dimensions are integral millimetres and all money is integral cents. */
@@ -66,6 +67,85 @@ export function labUnitPrice(
   );
   if (!tier) throw new Error('No hay una tarifa para esta cantidad y lista.');
   return requireCents(tier.unitPriceCents);
+}
+
+export interface LabPortalVariantStatus {
+  variantId: string;
+  channel: LabChannel;
+  paper: LabPaper;
+  /** True when `/imprimir` offers this variant. */
+  offered: boolean;
+  /** Why it is not offered; null when it is. */
+  reason: string | null;
+}
+export interface LabPortalStatus {
+  /** Service-level conditions that hide every variant (the legacy Sprint 14 publication gate). */
+  serviceBlockers: string[];
+  /** The blockers an administrator can lift with one click (no price or variant changes). */
+  publishable: boolean;
+  variants: LabPortalVariantStatus[];
+}
+
+/**
+ * Mirrors `cc_public_lab_catalog`: a variant reaches the anonymous portal only when its service
+ * is active, public and accepts direct orders, the variant is an active laboratory one and the
+ * default (Pública) list has a tier for it. Professional/custom lists never count.
+ */
+export function labPortalStatus(
+  service: Pick<
+    PhotoService,
+    | 'isActive'
+    | 'isPublic'
+    | 'publicOrderEnabled'
+    | 'workflowRoute'
+    | 'requiresCustomerFiles'
+  >,
+  variants: LabVariant[],
+  tiers: LabPriceTier[],
+  lists: PriceList[],
+): LabPortalStatus {
+  const publicList = lists.find((list) => list.isDefault && list.isActive);
+  const serviceBlockers: string[] = [];
+  let publishable = true;
+  if (!service.isActive) {
+    serviceBlockers.push('El servicio está inactivo.');
+    publishable = false;
+  }
+  if (service.workflowRoute !== 'lab' || !service.requiresCustomerFiles) {
+    serviceBlockers.push(
+      'Debe usar flujo Laboratorio y recibir archivos del cliente.',
+    );
+    publishable = false;
+  }
+  if (!service.isPublic) serviceBlockers.push('Falta «Mostrar en la web».');
+  if (!service.publicOrderEnabled)
+    serviceBlockers.push('Falta «Aceptar pedidos directos».');
+  return {
+    serviceBlockers,
+    publishable: publishable && serviceBlockers.length > 0,
+    variants: variants.map((variant) => {
+      const reason = !variant.isActive
+        ? 'Variante no disponible.'
+        : variant.channel !== 'laboratory'
+          ? 'Kiosco no se ofrece en la web.'
+          : !publicList
+            ? 'No hay una lista Pública activa.'
+            : !tiers.some(
+                  (tier) =>
+                    tier.variantId === variant.id &&
+                    tier.priceListId === publicList.id,
+                )
+              ? 'Sin tramo de precio en la lista Pública.'
+              : null;
+      return {
+        variantId: variant.id,
+        channel: variant.channel,
+        paper: variant.paper,
+        offered: reason === null && serviceBlockers.length === 0,
+        reason,
+      };
+    }),
+  };
 }
 
 export type PlotterMaterialCode =

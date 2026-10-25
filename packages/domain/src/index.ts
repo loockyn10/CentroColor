@@ -165,6 +165,7 @@ export type {
 export {
   effectivePriceListId,
   labUnitPrice,
+  labPortalStatus,
   squareMillimeters,
   areaPriceCents,
   rollFit,
@@ -183,6 +184,8 @@ export type {
   LabChannel,
   LabVariant,
   LabPriceTier,
+  LabPortalStatus,
+  LabPortalVariantStatus,
   PlotterMaterialCode,
   PlotterMaterial,
   PlotterRate,

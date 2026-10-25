@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   effectivePriceListId,
+  labPortalStatus,
   labUnitPrice,
   ledAvailability,
   effectiveWindow,
@@ -131,6 +132,76 @@ describe('listas y laboratorio', () => {
     expect(() => labUnitPrice(matte, tiers, 'public', 1)).toThrow(
       'no está disponible',
     );
+  });
+});
+
+describe('visibilidad de Laboratorio en /imprimir', () => {
+  const variant = (id: string, over: Partial<LabVariant> = {}): LabVariant => ({
+    id,
+    businessId: 'b',
+    photoServiceId: 's',
+    channel: 'laboratory',
+    paper: 'glossy',
+    isActive: true,
+    ...over,
+  });
+  const tier = (variantId: string, priceListId: string): LabPriceTier => ({
+    id: `${variantId}:${priceListId}`,
+    businessId: 'b',
+    variantId,
+    priceListId,
+    minQuantity: 1,
+    maxQuantity: null,
+    unitPriceCents: 1,
+  });
+  const published = {
+    isActive: true,
+    isPublic: true,
+    publicOrderEnabled: true,
+    workflowRoute: 'lab' as const,
+    requiresCustomerFiles: true,
+  };
+  it('ofrece sólo variantes activas con tramo en la lista Pública', () => {
+    const status = labPortalStatus(
+      published,
+      [
+        variant('ok'),
+        variant('inactive', { paper: 'matte', isActive: false }),
+        variant('only-pro'),
+        variant('kiosk', { channel: 'kiosk' }),
+      ],
+      [tier('ok', 'public'), tier('only-pro', 'pro'), tier('kiosk', 'public')],
+      lists,
+    );
+    expect(
+      status.variants.map((x) => [x.variantId, x.offered, x.reason]),
+    ).toEqual([
+      ['ok', true, null],
+      ['inactive', false, 'Variante no disponible.'],
+      ['only-pro', false, 'Sin tramo de precio en la lista Pública.'],
+      ['kiosk', false, 'Kiosco no se ofrece en la web.'],
+    ]);
+  });
+  it('explica la compuerta de publicación y sólo ofrece publicar si es seguro', () => {
+    const hidden = labPortalStatus(
+      { ...published, isPublic: false, publicOrderEnabled: false },
+      [variant('ok')],
+      [tier('ok', 'public')],
+      lists,
+    );
+    expect(hidden.serviceBlockers).toEqual([
+      'Falta «Mostrar en la web».',
+      'Falta «Aceptar pedidos directos».',
+    ]);
+    expect(hidden.publishable).toBe(true);
+    expect(hidden.variants[0]?.offered).toBe(false);
+    const notLab = labPortalStatus(
+      { ...published, isPublic: false, workflowRoute: 'editing' as const },
+      [variant('ok')],
+      [tier('ok', 'public')],
+      lists,
+    );
+    expect(notLab.publishable).toBe(false);
   });
 });
 

@@ -76,6 +76,108 @@ describe('catálogo público', () => {
     ]);
   });
 
+  it('muestra las variantes nuevas de Laboratorio y no el servicio heredado como único resultado', async () => {
+    const lists = (
+      await w.db.query<any>(
+        `select id, kind from public.price_lists where business_id=$1`,
+        [IDS.business],
+      )
+    ).rows;
+    const publicList = lists.find((x) => x.kind === 'public').id;
+    const professional = lists.find((x) => x.kind === 'professional').id;
+    // 10×15 Mate público, 13×18 Mate sólo profesional, 20×30 Mate sin disponibilidad.
+    const addVariant = async (
+      service: string,
+      paper: string,
+      active: boolean,
+      tierList: string | null,
+      price: number,
+    ) => {
+      const variant = (
+        await w.db.query<any>(
+          `insert into public.lab_variants(business_id,photo_service_id,channel,paper,is_active)
+          values($1,$2,'laboratory',$3,$4) returning id`,
+          [IDS.business, service, paper, active],
+        )
+      ).rows[0].id;
+      if (tierList)
+        await w.db.query(
+          `insert into public.lab_price_tiers(business_id,variant_id,price_list_id,min_quantity,unit_price_cents)
+          values($1,$2,$3,1,$4)`,
+          [IDS.business, variant, tierList, price],
+        );
+      return variant as string;
+    };
+    const matte10 = await addVariant(
+      IDS.svc10x15,
+      'matte',
+      true,
+      publicList,
+      55000,
+    );
+    await addVariant(IDS.svc13x18, 'matte', true, professional, 123456);
+    await addVariant(IDS.svc20x30, 'matte', false, publicList, 777777);
+    // Un precio profesional para una variante pública jamás llega al portal.
+    await w.db.query(
+      `insert into public.lab_price_tiers(business_id,variant_id,price_list_id,min_quantity,unit_price_cents)
+      select business_id,id,$2,1,99999 from public.lab_variants where photo_service_id=$1 and paper='glossy'`,
+      [IDS.svc10x15, professional],
+    );
+    // Servicio nuevo con tramo público pero sin la publicación heredada de Sprint 14.
+    const fresh = (
+      await w.db.query<any>(
+        `insert into public.photo_services(id,business_id,name,service_type,width_mm,height_mm,
+          default_unit_price_cents,workflow_route,requires_customer_files,is_public,public_order_enabled,public_sort_order)
+        values(gen_random_uuid(),$1,'15x21','print',150,210,0,'lab',true,true,false,4) returning id`,
+        [IDS.business],
+      )
+    ).rows[0].id;
+    const freshVariant = await addVariant(
+      fresh,
+      'glossy',
+      true,
+      publicList,
+      90000,
+    );
+
+    let { body } = await catalog();
+    const names = body.services.map((x: any) => x.name);
+    expect(names).toEqual([
+      '10x15 · Brillo',
+      '10x15 · Mate',
+      '13x18 · Brillo',
+      '20x30 · Brillo',
+    ]);
+    expect(body.services.length).toBeGreaterThan(1);
+    const text = JSON.stringify(body);
+    for (const hidden of ['99999', '123456', '777777', '90000'])
+      expect(text, hidden).not.toContain(hidden);
+    const mate = body.services.find((x: any) => x.name === '10x15 · Mate');
+    expect(mate).toMatchObject({
+      id: matte10,
+      variantId: matte10,
+      unitPriceCents: 55000,
+    });
+
+    // Una variante sin tramo público no se puede comprar aunque el cliente la nombre.
+    const refused = await start({
+      items: [
+        { serviceId: freshVariant, variantId: freshVariant, quantity: 1 },
+      ],
+    });
+    expect(refused.status).toBe(409);
+
+    // Al publicar el servicio (sin tocar precios) aparece con su tramo público.
+    await w.db.query(
+      `update public.photo_services set public_order_enabled=true where id=$1`,
+      [fresh],
+    );
+    ({ body } = await catalog());
+    expect(
+      body.services.map((x: any) => [x.name, x.unitPriceCents]),
+    ).toContainEqual(['15x21 · Brillo', 90000]);
+  });
+
   it('sin Google Drive conectado no ofrece pedidos', async () => {
     await w.db.query(
       `update public.google_drive_integrations set status='disconnected'`,

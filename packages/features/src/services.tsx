@@ -8,6 +8,7 @@ import type {
 } from '@centrocolor/application';
 import {
   effectivePriceListId,
+  labPortalStatus,
   quotePlotter,
   type Customer,
   type LabPriceTier,
@@ -327,6 +328,36 @@ export function ServiceCatalogPage({
     }
   }
   const activeVariants = variants.filter((x) => x.photoServiceId === serviceId);
+  const selectedService = services.find((x) => x.id === serviceId);
+  const portal = selectedService
+    ? labPortalStatus(selectedService, activeVariants, tiers, lists)
+    : null;
+  /** Lifts only the publication flags; prices, variants and tiers are untouched. */
+  async function publishService() {
+    if (!selectedService) return;
+    try {
+      await photoRepository.updateService(businessId, selectedService.id, {
+        code: selectedService.code,
+        name: selectedService.name,
+        serviceType: selectedService.serviceType,
+        widthMm: selectedService.widthMm,
+        heightMm: selectedService.heightMm,
+        defaultUnitPriceCents: selectedService.defaultUnitPriceCents,
+        workflowRoute: selectedService.workflowRoute,
+        requiresCustomerFiles: selectedService.requiresCustomerFiles,
+        isPublic: true,
+        publicName: selectedService.publicName,
+        publicDescription: selectedService.publicDescription,
+        publicSortOrder: selectedService.publicSortOrder,
+        publicOrderEnabled: true,
+      });
+      await reload();
+      onMutation?.();
+      setNotice(null);
+    } catch (error) {
+      setNotice(errorText(error));
+    }
+  }
   return (
     <>
       <PageHeader
@@ -420,6 +451,46 @@ export function ServiceCatalogPage({
                 Kiosco sólo conserva precios de referencia; no genera pedidos ni
                 trabajos.
               </p>
+            </Card>
+          )}
+          {serviceId && portal && (
+            <Card>
+              <h2>Visibilidad en /imprimir</h2>
+              <p className="meta">
+                El portal público sólo ofrece variantes de Laboratorio
+                disponibles con un tramo en la lista Pública; las listas
+                Profesional y de convenio nunca se muestran.
+              </p>
+              {portal.serviceBlockers.length > 0 && (
+                <>
+                  <p role="status">
+                    Este servicio no se muestra en la web:{' '}
+                    {portal.serviceBlockers.join(' ')}
+                  </p>
+                  {admin && portal.publishable && (
+                    <Button onClick={() => void publishService()}>
+                      Publicar en /imprimir
+                    </Button>
+                  )}
+                </>
+              )}
+              <div className="rows">
+                {portal.variants.map((status) => (
+                  <div className="oprow" key={status.variantId}>
+                    <span>
+                      {status.channel === 'laboratory'
+                        ? 'Laboratorio'
+                        : 'Kiosco'}{' '}
+                      · {status.paper === 'glossy' ? 'Brillo' : 'Mate'}
+                    </span>
+                    <span className="meta">
+                      {status.offered
+                        ? 'Se ofrece en la web'
+                        : (status.reason ?? 'Oculta por el servicio')}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </Card>
           )}
           {activeVariants.map((variant) => (
