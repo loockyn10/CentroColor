@@ -8,6 +8,7 @@ export { ScanDetector } from './scan-detector';
 export { CustomersPage } from './customers';
 export { ProductsPage, NewSalePage, SalesPage } from './pos';
 export { StockPage } from './stock';
+export { PriceListsPage, ServiceCatalogPage, PlotterPage } from './services';
 export {
   AppointmentTypesPage,
   AppointmentsPage,

@@ -16,6 +16,7 @@ type PendingRow = {
   email: string | null;
   document_number: string | null;
   notes: string | null;
+  price_list_id: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -35,6 +36,7 @@ function fromPendingRow(row: PendingRow): PendingCustomerChange {
       email: row.email,
       documentNumber: row.document_number,
       notes: row.notes,
+      priceListId: row.price_list_id ?? null,
       isActive: row.is_active === 1,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -44,7 +46,7 @@ function fromPendingRow(row: PendingRow): PendingCustomerChange {
 
 const pendingSql = `SELECT o.id AS outbox_id, o.local_revision AS outbox_revision,
   c.id, c.business_id, c.full_name, c.phone, c.email, c.document_number,
-  c.notes, c.is_active, c.created_at, c.updated_at, c.cloud_updated_at
+  c.notes, c.price_list_id, c.is_active, c.created_at, c.updated_at, c.cloud_updated_at
   FROM sync_outbox o JOIN customers c
     ON c.id = o.entity_id AND c.business_id = o.business_id
   WHERE o.business_id = ? AND o.entity_type = 'customer'`;
@@ -158,13 +160,13 @@ export class SQLiteCustomerSyncAdapter implements CustomerSyncLocalPort {
     const db = await database();
     const result = await db.execute(
       `INSERT INTO customers
-       (id, business_id, full_name, phone, email, document_number, notes,
+       (id, business_id, full_name, phone, email, document_number, notes, price_list_id,
         is_active, created_at, updated_at, sync_origin, local_revision, cloud_updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'remote', 0, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'remote', 0, ?)
        ON CONFLICT(id) DO UPDATE SET
          full_name = excluded.full_name, phone = excluded.phone,
          email = excluded.email, document_number = excluded.document_number,
-         notes = excluded.notes, is_active = excluded.is_active,
+         notes = excluded.notes, price_list_id = excluded.price_list_id, is_active = excluded.is_active,
          created_at = excluded.created_at, updated_at = excluded.updated_at,
          sync_origin = 'remote', cloud_updated_at = excluded.cloud_updated_at
        WHERE customers.business_id = excluded.business_id
@@ -180,6 +182,7 @@ export class SQLiteCustomerSyncAdapter implements CustomerSyncLocalPort {
         customer.email,
         customer.documentNumber,
         customer.notes,
+        customer.priceListId ?? null,
         customer.isActive ? 1 : 0,
         customer.createdAt,
         customer.updatedAt,
@@ -268,7 +271,7 @@ export class SQLiteCustomerSyncAdapter implements CustomerSyncLocalPort {
     const db = await database();
     const result = await db.execute(
       `UPDATE customers SET full_name = ?, phone = ?, email = ?, document_number = ?,
-       notes = ?, is_active = ?, created_at = ?, updated_at = ?,
+       notes = ?, price_list_id = ?, is_active = ?, created_at = ?, updated_at = ?,
        cloud_updated_at = ?, sync_origin = 'remote'
        WHERE id = ? AND business_id = ? AND local_revision = ?
        AND EXISTS (SELECT 1 FROM sync_outbox o WHERE o.business_id = ?
@@ -280,6 +283,7 @@ export class SQLiteCustomerSyncAdapter implements CustomerSyncLocalPort {
         customer.email,
         customer.documentNumber,
         customer.notes,
+        customer.priceListId ?? null,
         customer.isActive ? 1 : 0,
         customer.createdAt,
         customer.updatedAt,

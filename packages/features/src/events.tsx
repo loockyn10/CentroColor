@@ -14,6 +14,7 @@ import {
   type EventRepository,
   type EventSummary,
   type ResourceReservationSummary,
+  type ServiceCatalogRepository,
   type WorkPaymentRepository,
 } from '@centrocolor/application';
 import {
@@ -27,6 +28,7 @@ import {
   type EventType,
   type Resource,
   type ResourceReservation,
+  type LedPanelReservation,
 } from '@centrocolor/domain';
 import {
   Button,
@@ -38,6 +40,7 @@ import {
 } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
+import { EventServiceComposer } from './event-service-composer';
 
 const statusLabels: Record<EventStatus, string> = {
   inquiry: 'Consulta',
@@ -132,6 +135,7 @@ function MoneyInput({
 function EventEditor({
   repository,
   customerRepository,
+  serviceCatalogRepository,
   paymentRepository,
   onMutation,
   eventId,
@@ -140,6 +144,7 @@ function EventEditor({
 }: {
   repository: EventRepository;
   customerRepository: CustomerRepository;
+  serviceCatalogRepository: ServiceCatalogRepository;
   paymentRepository: WorkPaymentRepository;
   onMutation?: () => void;
   eventId?: string;
@@ -167,6 +172,9 @@ function EventEditor({
   const [status, setStatus] = useState<EventStatus>('inquiry');
   const [services, setServices] = useState<ServiceDraft[]>([]);
   const [reservations, setReservations] = useState<ReservationDraft[]>([]);
+  const [ledReservations, setLedReservations] = useState<LedPanelReservation[]>(
+    [],
+  );
   const [quickName, setQuickName] = useState('');
   const [showQuick, setShowQuick] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -198,13 +206,17 @@ function EventEditor({
           setStatus(b.event.status);
           setServices(b.services);
           setReservations(b.reservations);
+          void serviceCatalogRepository
+            .listEventLedReservations(context.businessId, b.event.id)
+            .then((rows) => live && setLedReservations(rows))
+            .catch((e) => live && setError(errorText(e)));
         }
       })
       .catch((e) => live && setError(errorText(e)));
     return () => {
       live = false;
     };
-  }, [repository, context.businessId, eventId]);
+  }, [repository, serviceCatalogRepository, context.businessId, eventId]);
   useEffect(() => {
     let live = true;
     const timer = window.setTimeout(() => {
@@ -394,6 +406,16 @@ function EventEditor({
             updatedAt: new Date().toISOString(),
           });
       }
+      for (const item of ledReservations) {
+        const active =
+          services.find((x) => x.id === item.eventServiceItemId)?.isActive ??
+          item.isActive;
+        await serviceCatalogRepository.saveLedPanelReservation({
+          ...item,
+          eventId: saved.id,
+          isActive: active,
+        });
+      }
       if (saved.status !== status)
         await changeEventStatus(
           repository,
@@ -558,6 +580,29 @@ function EventEditor({
                 + Agregar servicio
               </button>
             </div>
+            {(!loaded ||
+              ['inquiry', 'quoted'].includes(loaded.event.status)) && (
+              <EventServiceComposer
+                catalog={serviceCatalogRepository}
+                eventRepository={repository}
+                customerRepository={customerRepository}
+                customerId={customerId}
+                startsAt={startsAt}
+                endsAt={endsAt}
+                currentServices={services}
+                currentReservations={reservations}
+                currentLed={ledReservations}
+                onAdd={(service, travel, resourceRows, led) => {
+                  setServices((all) => [
+                    ...all,
+                    service,
+                    ...(travel ? [travel] : []),
+                  ]);
+                  setReservations((all) => [...all, ...resourceRows]);
+                  if (led) setLedReservations((all) => [...all, led]);
+                }}
+              />
+            )}
             {services.map((item, index) => (
               <div
                 className={`event-line ${!item.isActive ? 'inactive' : ''}`}
@@ -930,12 +975,14 @@ function EventTypesManager({
 export function EventsPage({
   repository,
   customerRepository,
+  serviceCatalogRepository,
   paymentRepository,
   refreshToken,
   onMutation,
 }: {
   repository: EventRepository;
   customerRepository: CustomerRepository;
+  serviceCatalogRepository: ServiceCatalogRepository;
   paymentRepository: WorkPaymentRepository;
   refreshToken?: number;
   onMutation?: () => void;
@@ -1144,6 +1191,7 @@ export function EventsPage({
         <EventEditor
           repository={repository}
           customerRepository={customerRepository}
+          serviceCatalogRepository={serviceCatalogRepository}
           paymentRepository={paymentRepository}
           onMutation={onMutation}
           eventId={typeof editor === 'string' ? editor : undefined}

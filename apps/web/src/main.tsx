@@ -28,6 +28,9 @@ import {
   NewPhotoJobPage,
   PhotoJobsPage,
   PhotoProductionPage,
+  PriceListsPage,
+  ServiceCatalogPage,
+  PlotterPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -43,6 +46,7 @@ import { SupabaseAppointmentRepository } from './supabase-appointment-repository
 import { SupabaseEventRepository } from './supabase-event-repository';
 import { SupabaseFramingRepository } from './supabase-framing-repository';
 import { SupabasePhotoRepository } from './supabase-photo-repository';
+import { SupabaseServiceCatalogRepository } from './supabase-service-catalog-repository';
 import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repository';
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
 import { DriveSettingsPage } from './drive-settings';
@@ -111,6 +115,9 @@ function App() {
   const [eventRepository] = useState(() => new SupabaseEventRepository());
   const [framingRepository] = useState(() => new SupabaseFramingRepository());
   const [photoRepository] = useState(() => new SupabasePhotoRepository());
+  const [serviceCatalogRepository] = useState(
+    () => new SupabaseServiceCatalogRepository(),
+  );
   const [paymentRepository] = useState(
     () => new SupabaseWorkPaymentRepository(),
   );
@@ -297,6 +304,7 @@ function App() {
           <EventsPage
             repository={eventRepository}
             customerRepository={customerRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             paymentRepository={paymentRepository}
           />
         ) : activeId === 'resources' ? (
@@ -318,6 +326,7 @@ function App() {
           <NewPhotoJobPage
             repository={photoRepository}
             customerRepository={customerRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             initialCustomerId={newJobCustomerId}
           />
         ) : activeId === 'photo-jobs' ? (
@@ -337,11 +346,25 @@ function App() {
           />
         ) : activeId === 'photo-services' ? (
           <PhotoServicesPage repository={photoRepository} />
+        ) : activeId === 'services' ? (
+          <ServiceCatalogPage
+            repository={serviceCatalogRepository}
+            photoRepository={photoRepository}
+            eventRepository={eventRepository}
+          />
+        ) : activeId === 'price-lists' ? (
+          <PriceListsPage repository={serviceCatalogRepository} />
+        ) : activeId === 'plotter' ? (
+          <PlotterPage
+            repository={serviceCatalogRepository}
+            customerRepository={customerRepository}
+          />
         ) : activeId === 'customers' ? (
           <CustomersPage
             repository={customerRepository}
             paymentRepository={paymentRepository}
             photoRepository={photoRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             storage="cloud"
             initialCustomerId={openCustomerId}
             onNewJob={(customerId) => {

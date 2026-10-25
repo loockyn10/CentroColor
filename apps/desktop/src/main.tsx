@@ -39,6 +39,9 @@ import {
   NewPhotoJobPage,
   PhotoJobsPage,
   PhotoProductionPage,
+  PriceListsPage,
+  ServiceCatalogPage,
+  PlotterPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
 import { getSupabaseClient } from './cloud-config';
@@ -59,6 +62,16 @@ import {
   validateCloudBusinessContext,
 } from './customer-sync-session';
 import { CloudCustomerSyncAdapter } from './cloud-customer-sync-adapter';
+import {
+  syncServiceCatalog,
+  catalogSyncIssues,
+  type CatalogSyncIssue,
+} from './service-catalog-sync';
+import {
+  stageNewLedEvents,
+  restoreLedEventStatuses,
+  clearSyncedLedIntents,
+} from './event-led-sync-staging';
 import {
   SQLiteProductRepository,
   SQLiteSaleRepository,
@@ -90,6 +103,7 @@ import { SQLiteFramingSyncAdapter } from './sqlite-framing-sync-adapter';
 import { CloudFramingSyncAdapter } from './cloud-framing-sync-adapter';
 import { SQLiteFramingRepository } from './sqlite-framing-repository';
 import { SQLitePhotoRepository } from './sqlite-photo-repository';
+import { SQLiteServiceCatalogRepository } from './sqlite-service-catalog-repository';
 import { SQLitePhotoSyncAdapter } from './sqlite-photo-sync-adapter';
 import { CloudPhotoSyncAdapter } from './cloud-photo-sync-adapter';
 import {
@@ -114,6 +128,7 @@ const eventSyncLocal = new SQLiteEventSyncAdapter();
 const framingRepository = new SQLiteFramingRepository();
 const framingSyncLocal = new SQLiteFramingSyncAdapter();
 const photoRepository = new SQLitePhotoRepository();
+const serviceCatalogRepository = new SQLiteServiceCatalogRepository();
 const photoSyncLocal = new SQLitePhotoSyncAdapter();
 const photoFileSyncLocal = new SQLitePhotoFileSyncAdapter();
 const workPaymentRepository = new SQLiteWorkPaymentRepository();
@@ -154,6 +169,7 @@ function App() {
   const [eventSyncSummary, setEventSyncSummary] =
     useState<EventSyncSummary | null>(null);
   const [eventConflicts, setEventConflicts] = useState<EventConflict[]>([]);
+  const [catalogIssues, setCatalogIssues] = useState<CatalogSyncIssue[]>([]);
   const [showConflicts, setShowConflicts] = useState(false);
   const [resolutionError, setResolutionError] = useState<string | null>(null);
   const [resolutionBusy, setResolutionBusy] = useState(false);
@@ -174,6 +190,7 @@ function App() {
         agendaConflicts,
         eventsSummary,
         eventsConflicts,
+        currentCatalogIssues,
       ] = await Promise.all([
         customerSyncLocal.summary(businessId),
         customerSyncLocal.conflicts(businessId),
@@ -184,6 +201,7 @@ function App() {
         appointmentSyncLocal.conflicts(businessId),
         eventSyncLocal.summary(businessId),
         eventSyncLocal.conflicts(businessId),
+        catalogSyncIssues(businessId),
       ]);
       setSyncSummary(summary);
       setConflicts(currentConflicts);
@@ -194,6 +212,7 @@ function App() {
       setAppointmentConflicts(agendaConflicts);
       setEventSyncSummary(eventsSummary);
       setEventConflicts(eventsConflicts);
+      setCatalogIssues(currentCatalogIssues);
     } catch {
       setSyncPhase('error');
     }
@@ -204,6 +223,8 @@ function App() {
     syncing.current = true;
     setSyncPhase('syncing');
     try {
+      // Price lists are a Customer FK and must arrive before Customer pull.
+      await syncServiceCatalog('price_list', target.businessId);
       await syncAuthenticatedCustomers(
         target,
         getSupabaseClient(),
@@ -244,9 +265,23 @@ function App() {
         cloudAppointments,
       );
       const cloudEvents = new CloudEventSyncAdapter(getSupabaseClient());
+      for (const type of ['event_type', 'resource'] as const)
+        await syncEventEntities(
+          type,
+          target.businessId,
+          eventSyncLocal,
+          cloudEvents,
+        );
       for (const type of [
-        'event_type',
-        'resource',
+        'event_offer',
+        'led_panel_pool',
+        'led_preset',
+        'led_controller',
+        'event_offer_rate',
+      ] as const)
+        await syncServiceCatalog(type, target.businessId);
+      await stageNewLedEvents(target.businessId);
+      for (const type of [
         'event',
         'event_service_item',
         'resource_reservation',
@@ -257,6 +292,8 @@ function App() {
           eventSyncLocal,
           cloudEvents,
         );
+      await syncServiceCatalog('led_panel_reservation', target.businessId);
+      await restoreLedEventStatuses(target.businessId);
       // Reservation edits can unblock a pending quoted → reserved transition.
       await syncEventEntities(
         'event',
@@ -264,6 +301,7 @@ function App() {
         eventSyncLocal,
         cloudEvents,
       );
+      await clearSyncedLedIntents(target.businessId);
       const cloudFraming = new CloudFramingSyncAdapter();
       for (const type of [
         'moulding',
@@ -280,11 +318,21 @@ function App() {
           cloudFraming,
         );
       const cloudPhoto = new CloudPhotoSyncAdapter();
-      for (const type of [
+      await syncPhotoEntities(
         'photo_service',
-        'photo_job',
-        'photo_job_item',
+        target.businessId,
+        photoSyncLocal,
+        cloudPhoto,
+      );
+      for (const type of [
+        'lab_variant',
+        'lab_price_tier',
+        'plotter_material',
+        'plotter_rate',
+        'plotter_quote',
       ] as const)
+        await syncServiceCatalog(type, target.businessId);
+      for (const type of ['photo_job', 'photo_job_item'] as const)
         await syncPhotoEntities(
           type,
           target.businessId,
@@ -689,11 +737,18 @@ function App() {
   };
   const title =
     navigation.find((item) => item.id === activeId)?.label ?? 'Inicio';
+  const catalogPending = catalogIssues.filter(
+    (x) => x.status === 'pending',
+  ).length;
+  const catalogConflicts = catalogIssues.filter(
+    (x) => x.status === 'conflict',
+  ).length;
   const syncLabel =
     (syncSummary?.conflicts ?? 0) +
       (posSyncSummary?.conflicts ?? 0) +
       (appointmentSyncSummary?.conflicts ?? 0) +
-      (eventSyncSummary?.conflicts ?? 0) >
+      (eventSyncSummary?.conflicts ?? 0) +
+      catalogConflicts >
     0
       ? 'Conflicto'
       : syncPhase === 'syncing'
@@ -706,7 +761,8 @@ function App() {
                   (posSyncSummary?.pending ?? 0) +
                   (stockSyncSummary?.pending ?? 0) +
                   (appointmentSyncSummary?.pending ?? 0) +
-                  (eventSyncSummary?.pending ?? 0) >
+                  (eventSyncSummary?.pending ?? 0) +
+                  catalogPending >
                 0
               ? 'Cambios pendientes'
               : 'Sincronizado';
@@ -736,27 +792,31 @@ function App() {
                 (posSyncSummary?.pending ?? 0) +
                 (stockSyncSummary?.pending ?? 0) +
                 (appointmentSyncSummary?.pending ?? 0) +
-                (eventSyncSummary?.pending ?? 0) >
+                (eventSyncSummary?.pending ?? 0) +
+                catalogPending >
                 0 && (
                 <span>
                   {(syncSummary?.pending ?? 0) +
                     (posSyncSummary?.pending ?? 0) +
                     (stockSyncSummary?.pending ?? 0) +
                     (appointmentSyncSummary?.pending ?? 0) +
-                    (eventSyncSummary?.pending ?? 0)}{' '}
+                    (eventSyncSummary?.pending ?? 0) +
+                    catalogPending}{' '}
                   pendiente(s)
                 </span>
               )}
               {(syncSummary?.conflicts ?? 0) +
                 (posSyncSummary?.conflicts ?? 0) +
                 (appointmentSyncSummary?.conflicts ?? 0) +
-                (eventSyncSummary?.conflicts ?? 0) >
+                (eventSyncSummary?.conflicts ?? 0) +
+                catalogConflicts >
                 0 && (
                 <span>
                   {(syncSummary?.conflicts ?? 0) +
                     (posSyncSummary?.conflicts ?? 0) +
                     (appointmentSyncSummary?.conflicts ?? 0) +
-                    (eventSyncSummary?.conflicts ?? 0)}{' '}
+                    (eventSyncSummary?.conflicts ?? 0) +
+                    catalogConflicts}{' '}
                   conflicto(s)
                 </span>
               )}
@@ -780,7 +840,8 @@ function App() {
               {conflicts.length +
                 posConflicts.length +
                 appointmentConflicts.length +
-                eventConflicts.length >
+                eventConflicts.length +
+                catalogConflicts >
                 0 && (
                 <button
                   type="button"
@@ -792,7 +853,8 @@ function App() {
               {(syncSummary?.conflicts ?? 0) +
                 (posSyncSummary?.conflicts ?? 0) +
                 (appointmentSyncSummary?.conflicts ?? 0) +
-                (eventSyncSummary?.conflicts ?? 0) >
+                (eventSyncSummary?.conflicts ?? 0) +
+                catalogConflicts >
               0 ? (
                 <small>Los cambios locales siguen guardados.</small>
               ) : !cloudSessionReady ? (
@@ -812,7 +874,8 @@ function App() {
               conflicts.length +
                 posConflicts.length +
                 appointmentConflicts.length +
-                eventConflicts.length >
+                eventConflicts.length +
+                catalogConflicts >
                 0 && (
                 <div className="sync-conflict-panel">
                   <p>
@@ -977,14 +1040,42 @@ function App() {
                       )}
                     </div>
                   ))}
+                  {catalogIssues
+                    .filter((x) => x.status === 'conflict')
+                    .map((item) => (
+                      <div className="sync-conflict-row" key={item.id}>
+                        <strong>
+                          {item.source}: {item.entityType.replaceAll('_', ' ')}
+                        </strong>
+                        <small>
+                          {item.lastError ??
+                            'La versión Cloud cambió o la reserva ya no está disponible.'}
+                        </small>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveId(
+                              item.entityType.includes('reservation')
+                                ? 'events'
+                                : 'services',
+                            );
+                            setShowConflicts(false);
+                          }}
+                        >
+                          Abrir módulo
+                        </button>
+                      </div>
+                    ))}
                   {(syncSummary?.conflicts ?? 0) +
                     (posSyncSummary?.conflicts ?? 0) +
                     (appointmentSyncSummary?.conflicts ?? 0) +
-                    (eventSyncSummary?.conflicts ?? 0) >
+                    (eventSyncSummary?.conflicts ?? 0) +
+                    catalogConflicts >
                     conflicts.length +
                       posConflicts.length +
                       appointmentConflicts.length +
-                      eventConflicts.length && (
+                      eventConflicts.length +
+                      catalogConflicts && (
                     <p>Se muestran los primeros 20 conflictos.</p>
                   )}
                 </div>
@@ -1044,6 +1135,7 @@ function App() {
           <EventsPage
             repository={eventRepository}
             customerRepository={customerRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             paymentRepository={workPaymentRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
@@ -1085,6 +1177,7 @@ function App() {
           <NewPhotoJobPage
             repository={photoRepository}
             customerRepository={customerRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             initialCustomerId={newJobCustomerId}
             refreshToken={dataRefresh}
             onMutation={() => {
@@ -1122,6 +1215,33 @@ function App() {
               if (cloudSessionReady) void runSync(context);
             }}
           />
+        ) : activeId === 'services' ? (
+          <ServiceCatalogPage
+            repository={serviceCatalogRepository}
+            photoRepository={photoRepository}
+            eventRepository={eventRepository}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'price-lists' ? (
+          <PriceListsPage
+            repository={serviceCatalogRepository}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
+        ) : activeId === 'plotter' ? (
+          <PlotterPage
+            repository={serviceCatalogRepository}
+            customerRepository={customerRepository}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
         ) : activeId === 'materials' ? (
           <FramingCatalogPage
             repository={framingRepository}
@@ -1133,6 +1253,7 @@ function App() {
             repository={customerRepository}
             paymentRepository={workPaymentRepository}
             photoRepository={photoRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             storage="local"
             initialCustomerId={openCustomerId}
             onNewJob={(customerId) => {

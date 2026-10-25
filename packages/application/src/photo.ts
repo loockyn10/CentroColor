@@ -126,6 +126,8 @@ export function buildPhotoJob(
       Pick<
         PhotoJobItem,
         | 'photoServiceId'
+        | 'labVariantId'
+        | 'priceListId'
         | 'serviceNameSnapshot'
         | 'quantity'
         | 'unitPriceCents'

@@ -86,6 +86,12 @@ export function handlePublicCatalog(request: Request, deps: PublicOrderDeps) {
         widthMm: x.width_mm,
         heightMm: x.height_mm,
         unitPriceCents: x.unit_price_cents,
+        variantId: x.variant_id,
+        tiers: x.tiers?.map((tier) => ({
+          minQuantity: tier.min_quantity,
+          maxQuantity: tier.max_quantity,
+          unitPriceCents: tier.unit_price_cents,
+        })),
       })),
     });
   });
@@ -179,6 +185,7 @@ export function handlePublicOrderStart(
             service_id: line.serviceId,
             quantity: line.quantity,
             expected_unit_price_cents: line.unitPriceCents,
+            ...(line.variantId ? { variant_id: line.variantId } : {}),
           })),
           token_hash: tokenHash,
           link_expires_at: new Date(

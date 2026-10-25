@@ -162,9 +162,9 @@ describe('cliente web del pedido público ↔ funciones reales', () => {
     const calls = installNetwork();
     const catalog = await fetchCatalog();
     expect(catalog.services.map((x) => x.name)).toEqual([
-      '10x15',
-      '13x18',
-      '20x30',
+      '10x15 · Brillo',
+      '13x18 · Brillo',
+      '20x30 · Brillo',
     ]);
 
     const entries: PhotoEntry[] = [

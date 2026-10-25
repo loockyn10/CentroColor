@@ -71,9 +71,10 @@ describe('navegación del panel (DESIGN-02)', () => {
       'Trabajos',
       'Producción',
       'Marquetería',
+      'Plotter',
       'Agenda y turnos',
       'Eventos y recursos',
-      'Productos',
+      'Catálogo',
       'Configuración',
     ]);
   });
@@ -89,7 +90,10 @@ describe('navegación del panel (DESIGN-02)', () => {
   });
 
   it('las sub-vistas (Servicios, Nuevo trabajo, Varillas…) cuelgan de su módulo', () => {
-    expect(moduleFor('photo-services')?.id).toBe('photo-jobs');
+    expect(moduleFor('photo-services')?.id).toBe('products');
+    expect(moduleFor('services')?.id).toBe('products');
+    expect(moduleFor('price-lists')?.id).toBe('products');
+    expect(moduleFor('plotter')?.id).toBe('plotter');
     expect(moduleFor('new-photo-job')?.id).toBe('photo-jobs');
     expect(moduleFor('mouldings')?.id).toBe('frame-jobs');
     expect(moduleFor('resources')?.id).toBe('events');

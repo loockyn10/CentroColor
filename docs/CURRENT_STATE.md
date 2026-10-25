@@ -1,5 +1,26 @@
 # Estado actual
 
+## SERVICIOS-01 — Listas de precios, Laboratorio, Plotter y Eventos/LED (24/10/2026)
+
+Implementado y verificado **en código**; **no aplicado ni desplegado** (ver `docs/HANDOFF.md`). Retomado tras un corte por límite: se auditó el árbol de trabajo en lugar de reimplementar.
+
+- **Dominio/aplicación**: `packages/domain/src/services.ts` (listas, tramos de laboratorio, cotizador Plotter, disponibilidad LED, buffers, viáticos) y `packages/application/src/services.ts` (puerto `ServiceCatalogRepository`, precio de PhotoJob por lista del Customer).
+- **Cloud**: tres migraciones `20261024*` (catálogo y listas, tramos públicos con `cc_public_order_start/confirm` y `cc_public_lab_catalog`, ofertas/LED con guards bajo lock del pool). **Desktop**: SQLite `0017`/`0018` registradas en `lib.rs`; repositorio `sqlite-service-catalog-repository.ts`, sync `service-catalog-sync.ts` y staging `event-led-sync-staging.ts`. **Web**: `supabase-service-catalog-repository.ts`.
+- **UI**: módulos Catálogo (Servicios, Listas de precios) y Plotter; el editor de Eventos arma servicios, viáticos, recursos y reserva LED; el trabajo fotográfico y la ficha de Customer usan la lista asignada; `/imprimir` muestra variantes Brillo/Mate con tramos públicos.
+- **Auditoría al retomar**: `sqlite-service-catalog-repository.ts` estaba completo (12 tablas) y compilaba; se endureció `save()` para aceptar sólo nombres de columna internos y `LedPanelReservation.eventServiceItemId` pasó a `string` (la columna es NOT NULL en Cloud y SQLite). `tests/work_payments_sqlite.py` insertaba `event_service_items` por posición y quedó obsoleto por las dos columnas nuevas; se corrigió. Las expectativas de navegación (Catálogo/Plotter) y del nombre público «· Brillo» ya estaban actualizadas. Se agregaron pruebas del lock transaccional del pool LED y de exclusividad de un recurso físico.
+
+### Verificación (24/10/2026)
+
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm build`, `pnpm build:desktop` y `git diff --check`: pasan (instalador NSIS generado; solo avisos conocidos).
+- `pnpm test`: 560 pruebas en 65 archivos, pasan (incluye PGlite con las migraciones reales: catálogo, RLS owner/admin, tramos, snapshots, LED 12 paneles = 393 216 px, TB20 650 000, falta de paneles/controlador, dos pantallas 3×2 con 24 paneles y 2 controladores, fechas reales y portal sin precio forzado). Python: 21 scripts pasan, incluido `tests/event_services_sqlite.py` (guards LED offline sobre las migraciones SQLite).
+- **No verificado**: concurrencia real entre dos conexiones (PGlite es de una sola conexión; el serializado se comprueba por el lock transaccional retenido, no por una carrera real), migraciones contra el Supabase remoto, UI en navegador/Tauri con datos reales y sync Desktop↔Cloud extremo a extremo.
+
+### Datos por cargar y deuda
+
+- Cargar en la app: tramos y precios de Laboratorio (Mate y los tamaños 13×18/15×21/20×30 no tienen precio salvo los migrados), listas de convenio, ancho de rollo de cada material, tarifas públicas de Plotter, tarifas de pantalla de tela/LED (por m²)/Cabina/Espejo mágico/Giro 360, tamaños y proyector de la pantalla de tela, y la capacidad (`max_pixels`) del Nova VX600.
+- Un evento LED creado offline sube primero como `quoted` y recupera su estado al sincronizar las reservas; si Cloud rechaza la reserva queda como conflicto visible del módulo.
+- Staff edita reservas LED pero no el catálogo; no hay UI de auditoría de cambios de tarifas.
+
 ## Escáner global de códigos de barras (18/10/2026)
 
 Un lector HID (keyboard wedge) funciona desde **cualquier módulo del panel autenticado** (Web y Desktop): el código conocido abre el POS con +1 en el ticket; el desconocido abre Productos → Nuevo producto con el barcode ya cargado (campo bloqueado) y, al guardar, vuelve al POS con el producto nuevo (1 unidad). Sin cambios de esquema, RLS, sync, stock ni ventas.

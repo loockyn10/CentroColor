@@ -181,3 +181,8 @@ export type {
   WorkPaymentSyncLocalPort,
   WorkPaymentSyncCloudPort,
 } from './payment-sync';
+export type {
+  ServiceCatalogRepository,
+  PlotterQuote,
+  PlotterQuoteStatus,
+} from './services';

@@ -11,17 +11,21 @@ import {
 } from './public-order-store.ts';
 import { run, type ServiceDb } from './store-supabase.ts';
 
-const serviceColumns =
-  'id,name,public_name,public_description,width_mm,height_mm,default_unit_price_cents,public_sort_order';
-
 const toService = (x: any): PublicServiceRow => ({
   id: x.id,
-  name: x.public_name ?? x.name,
-  description: x.public_description ?? null,
+  name: x.name,
+  description: x.description ?? null,
   width_mm: x.width_mm ?? null,
   height_mm: x.height_mm ?? null,
-  unit_price_cents: Number(x.default_unit_price_cents),
-  sort_order: x.public_sort_order,
+  unit_price_cents: Number(x.tiers[0].unit_price_cents),
+  sort_order: x.sort_order,
+  variant_id: x.variant_id,
+  photo_service_id: x.photo_service_id,
+  tiers: x.tiers.map((tier: any) => ({
+    min_quantity: Number(tier.min_quantity),
+    max_quantity: tier.max_quantity === null ? null : Number(tier.max_quantity),
+    unit_price_cents: Number(tier.unit_price_cents),
+  })),
 });
 
 /** Runs a SQL function; `cc_error:<code>` exceptions are business rules, the rest are database faults. */
@@ -39,6 +43,14 @@ async function rpc(db: ServiceDb, name: string, args: Record<string, unknown>) {
 }
 
 export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
+  const listCatalog = async (businessId: string) => {
+    const data = await rpc(db, 'cc_public_lab_catalog', {
+      p_business_id: businessId,
+    });
+    return ((data ?? []) as any[])
+      .filter((x) => Array.isArray(x.tiers) && x.tiers.length > 0)
+      .map(toService);
+  };
   return {
     async resolveBusiness(slug) {
       const { data } = await run(
@@ -55,36 +67,12 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
       return String(data?.name ?? '');
     },
     async listPublicServices(businessId) {
-      const { data } = await run(
-        'photo_services.list_public',
-        db
-          .from('photo_services')
-          .select(serviceColumns)
-          .eq('business_id', businessId)
-          .eq('is_active', true)
-          .eq('is_public', true)
-          .eq('public_order_enabled', true)
-          .order('public_sort_order', { ascending: true })
-          .order('name', { ascending: true }),
-      );
-      return ((data ?? []) as any[]).map(toService);
+      return listCatalog(businessId);
     },
     async getPublicServices(businessId, ids) {
       if (!ids.length) return [];
-      const { data } = await run(
-        'photo_services.get_public',
-        db
-          .from('photo_services')
-          .select(serviceColumns)
-          .eq('business_id', businessId)
-          .eq('is_active', true)
-          .eq('is_public', true)
-          .eq('public_order_enabled', true)
-          .in('id', ids)
-          .order('public_sort_order', { ascending: true })
-          .order('name', { ascending: true }),
-      );
-      return ((data ?? []) as any[]).map(toService);
+      const requested = new Set(ids);
+      return (await listCatalog(businessId)).filter((x) => requested.has(x.id));
     },
     async countOrdersSince(businessId, sinceIso, filter = {}) {
       let query = db

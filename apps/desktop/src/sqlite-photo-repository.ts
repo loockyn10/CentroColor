@@ -74,6 +74,8 @@ const item = (x: any): PhotoJobItem => ({
   businessId: x.business_id,
   photoJobId: x.photo_job_id,
   photoServiceId: x.photo_service_id,
+  labVariantId: x.lab_variant_id ?? null,
+  priceListId: x.price_list_id ?? null,
   serviceNameSnapshot: x.service_name_snapshot,
   quantity: x.quantity,
   unitPriceCents: x.unit_price_cents,
@@ -242,12 +244,14 @@ export class SQLitePhotoRepository implements PhotoRepository {
     );
     for (const i of items)
       await d.execute(
-        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,lab_variant_id,price_list_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           i.id,
           i.businessId,
           i.photoJobId,
           i.photoServiceId,
+          i.labVariantId ?? null,
+          i.priceListId ?? null,
           i.serviceNameSnapshot,
           i.quantity,
           i.unitPriceCents,
@@ -285,12 +289,14 @@ export class SQLitePhotoRepository implements PhotoRepository {
     );
     for (const i of items)
       await d.execute(
-        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET photo_service_id=excluded.photo_service_id,service_name_snapshot=excluded.service_name_snapshot,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,notes=excluded.notes,width_mm=excluded.width_mm,height_mm=excluded.height_mm,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='local',local_revision=photo_job_items.local_revision+1`,
+        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,lab_variant_id,price_list_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET photo_service_id=excluded.photo_service_id,lab_variant_id=excluded.lab_variant_id,price_list_id=excluded.price_list_id,service_name_snapshot=excluded.service_name_snapshot,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,notes=excluded.notes,width_mm=excluded.width_mm,height_mm=excluded.height_mm,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='local',local_revision=photo_job_items.local_revision+1`,
         [
           i.id,
           i.businessId,
           i.photoJobId,
           i.photoServiceId,
+          i.labVariantId ?? null,
+          i.priceListId ?? null,
           i.serviceNameSnapshot,
           i.quantity,
           i.unitPriceCents,

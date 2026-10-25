@@ -16,6 +16,7 @@ type Row = {
   email: string | null;
   document_number: string | null;
   notes: string | null;
+  price_list_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -30,6 +31,7 @@ function fromRow(row: Row): Customer {
     email: row.email,
     documentNumber: row.document_number,
     notes: row.notes,
+    priceListId: row.price_list_id ?? null,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -43,6 +45,7 @@ function fields(customer: Customer) {
     email: customer.email,
     document_number: customer.documentNumber,
     notes: customer.notes,
+    price_list_id: customer.priceListId ?? null,
     is_active: customer.isActive,
   };
 }
@@ -56,6 +59,7 @@ function sameDetails(a: Customer, b: Customer): boolean {
     a.email === b.email &&
     a.documentNumber === b.documentNumber &&
     a.notes === b.notes &&
+    (a.priceListId ?? null) === (b.priceListId ?? null) &&
     a.isActive === b.isActive
   );
 }

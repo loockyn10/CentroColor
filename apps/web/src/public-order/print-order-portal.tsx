@@ -763,7 +763,12 @@ function SizeCard({
         {service.description && <p className="tag">{service.description}</p>}
         <div className="size-price">
           <b className="num">{formatMoney(service.unitPriceCents)}</b>
-          <small>c/u</small>
+          <small>
+            c/u
+            {service.tiers?.[0] && service.tiers[0].minQuantity > 1
+              ? ` desde ${service.tiers[0].minQuantity} copias`
+              : ''}
+          </small>
         </div>
         <button
           type="button"
@@ -812,6 +817,9 @@ function PhotoGroup({
           {plural(line.copies, 'copia', 'copias')}
         </div>
         <div className="sub num">{formatMoney(line.totalCents)}</div>
+        {line.pricingAvailable === false && (
+          <p role="alert">No hay tarifa para esta cantidad de copias.</p>
+        )}
         <Button
           size="sm"
           variant="ghost"

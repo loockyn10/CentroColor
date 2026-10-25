@@ -77,6 +77,8 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       businessId: row.business_id,
       eventId: row.event_id as string,
       sourceServiceId: row.source_service_id as string | null,
+      priceListId: row.price_list_id as string | null,
+      configSnapshot: row.config_snapshot as Record<string, unknown> | null,
       name: row.name as string,
       description: row.description as string | null,
       quantity: row.quantity as number,
@@ -136,6 +138,8 @@ function details(
     return {
       event_id: x.eventId,
       source_service_id: x.sourceServiceId,
+      price_list_id: x.priceListId ?? null,
+      config_snapshot: x.configSnapshot ?? null,
       name: x.name,
       description: x.description,
       quantity: x.quantity,

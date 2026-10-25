@@ -62,6 +62,8 @@ type ServiceRow = {
   business_id: string;
   event_id: string;
   source_service_id: string | null;
+  price_list_id?: string | null;
+  config_snapshot?: string | null;
   name: string;
   description: string | null;
   quantity: number;
@@ -124,6 +126,10 @@ const fromService = (row: ServiceRow): EventServiceItem => ({
   businessId: row.business_id,
   eventId: row.event_id,
   sourceServiceId: row.source_service_id,
+  priceListId: row.price_list_id ?? null,
+  configSnapshot: row.config_snapshot
+    ? (JSON.parse(row.config_snapshot) as Record<string, unknown>)
+    : null,
   name: row.name,
   description: row.description,
   quantity: row.quantity,
@@ -434,7 +440,7 @@ export class SQLiteEventRepository implements EventRepository {
   async upsertServiceItem(item: EventServiceItem) {
     const db = await database();
     await db.execute(
-      `INSERT INTO event_service_items(id,business_id,event_id,source_service_id,name,description,quantity,unit_price_cents,total_cents,is_active,created_at,updated_at,sync_origin,local_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?,?, 'local',1) ON CONFLICT(id) DO UPDATE SET source_service_id=excluded.source_service_id,name=excluded.name,description=excluded.description,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='local',local_revision=event_service_items.local_revision+1 WHERE event_service_items.business_id=excluded.business_id AND event_service_items.event_id=excluded.event_id`,
+      `INSERT INTO event_service_items(id,business_id,event_id,source_service_id,name,description,quantity,unit_price_cents,total_cents,is_active,created_at,updated_at,price_list_id,config_snapshot,sync_origin,local_revision) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'local',1) ON CONFLICT(id) DO UPDATE SET source_service_id=excluded.source_service_id,name=excluded.name,description=excluded.description,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,is_active=excluded.is_active,price_list_id=excluded.price_list_id,config_snapshot=excluded.config_snapshot,updated_at=excluded.updated_at,sync_origin='local',local_revision=event_service_items.local_revision+1 WHERE event_service_items.business_id=excluded.business_id AND event_service_items.event_id=excluded.event_id`,
       [
         item.id,
         item.businessId,
@@ -448,6 +454,8 @@ export class SQLiteEventRepository implements EventRepository {
         item.isActive ? 1 : 0,
         item.createdAt,
         item.updatedAt,
+        item.priceListId ?? null,
+        item.configSnapshot ? JSON.stringify(item.configSnapshot) : null,
       ],
     );
     return (await this.getEventBundle(

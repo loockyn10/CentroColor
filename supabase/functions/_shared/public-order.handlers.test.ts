@@ -22,23 +22,25 @@ beforeEach(async () => {
 });
 
 describe('catálogo público', () => {
-  it('sólo publica servicios activos + públicos + con pedido directo, con precios del catálogo administrativo', async () => {
+  it('sólo publica variantes disponibles con tiers públicos del catálogo administrativo', async () => {
     const { status, body } = await catalog();
     expect(status).toBe(200);
     expect(body.available).toBe(true);
     expect(body.businessName).toBe('CentroColor');
-    expect(body.services).toEqual([
+    expect(body.services).toMatchObject([
       {
         id: IDS.svc10x15,
-        name: '10x15',
+        name: '10x15 · Brillo',
         description: 'Papel brillante',
         widthMm: 100,
         heightMm: 150,
         unitPriceCents: 50000,
+        variantId: expect.any(String),
+        tiers: [{ minQuantity: 1, maxQuantity: null, unitPriceCents: 50000 }],
       },
       {
         id: IDS.svc13x18,
-        name: '13x18',
+        name: '13x18 · Brillo',
         description: null,
         widthMm: 130,
         heightMm: 180,
@@ -46,7 +48,7 @@ describe('catálogo público', () => {
       },
       {
         id: IDS.svc20x30,
-        name: '20x30',
+        name: '20x30 · Brillo',
         description: null,
         widthMm: 200,
         heightMm: 300,
@@ -57,9 +59,10 @@ describe('catálogo público', () => {
     expect(JSON.stringify(body)).not.toContain(IDS.svcOtherBusiness);
   });
 
-  it('un cambio de precio en PhotoService se refleja de inmediato; un servicio desactivado desaparece', async () => {
+  it('el tier público es la tarifa; un servicio desactivado desaparece', async () => {
     await w.db.query(
-      `update public.photo_services set default_unit_price_cents=60000 where id=$1`,
+      `update public.lab_price_tiers set unit_price_cents=60000 where variant_id=(
+        select id from public.lab_variants where photo_service_id=$1 and paper='glossy')`,
       [IDS.svc10x15],
     );
     await w.db.query(
@@ -68,8 +71,8 @@ describe('catálogo público', () => {
     );
     const { body } = await catalog();
     expect(body.services.map((s: any) => [s.name, s.unitPriceCents])).toEqual([
-      ['10x15', 60000],
-      ['20x30', 250000],
+      ['10x15 · Brillo', 60000],
+      ['20x30 · Brillo', 250000],
     ]);
   });
 

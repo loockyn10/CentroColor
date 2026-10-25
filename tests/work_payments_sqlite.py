@@ -18,7 +18,7 @@ def main():
         c.execute("insert into customers(id,business_id,full_name,is_active,created_at,updated_at,sync_origin,local_revision) values('other-customer','other','Otro negocio',1,?,?,'remote',0)",(now,now))
         c.execute("insert into event_types values('type',?,'Evento',1,?,?,'remote',0,null)",(b,now,now))
         c.execute("insert into events values('event',?,?,?,'type','Casamiento',?,?,null,null,'reserved',null,?,?,?,'remote',0,null)",(b,branch,'customer',now,'2026-10-17T12:00:00Z',user,now,now))
-        c.execute("insert into event_service_items values('service',?,'event',null,'Cobertura',null,1,100000,100000,1,?,?,'remote',0,null)",(b,now,now))
+        c.execute("insert into event_service_items values('service',?,'event',null,'Cobertura',null,1,100000,100000,1,?,?,'remote',0,null,null,null)",(b,now,now))
         c.execute("insert into frame_quotes(id,business_id,branch_id,customer_id,width_mm,height_mm,measurement_mode,status,subtotal_cents,total_cents,created_by,created_at,updated_at,sync_origin,local_revision) values('quote',?,?,?,400,600,'opening','accepted',80000,80000,?,?,?,'remote',0)",(b,branch,'customer',user,now,now))
         c.execute("insert into frame_jobs(id,business_id,branch_id,quote_id,customer_id,status,created_at,updated_at,sync_origin,local_revision) values('frame',?,?, 'quote','customer','pending',?,?,'remote',0)",(b,branch,now,now))
         c.execute("insert into photo_jobs(id,business_id,branch_id,customer_id,status,priority,created_by,created_at,updated_at,sync_origin,local_revision) values('photo',?,?,?,'received','normal',?,?,?,'remote',0)",(b,branch,'customer',user,now,now))

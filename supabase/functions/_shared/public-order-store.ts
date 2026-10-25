@@ -10,6 +10,13 @@ export type PublicServiceRow = {
   height_mm: number | null;
   unit_price_cents: number;
   sort_order: number;
+  variant_id?: string;
+  photo_service_id?: string;
+  tiers?: Array<{
+    min_quantity: number;
+    max_quantity: number | null;
+    unit_price_cents: number;
+  }>;
 };
 
 export type StartOrderArgs = {
@@ -26,6 +33,7 @@ export type StartOrderArgs = {
     service_id: string;
     quantity: number;
     expected_unit_price_cents: number;
+    variant_id?: string;
   }[];
   token_hash: string;
   link_expires_at: string;

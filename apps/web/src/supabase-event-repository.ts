@@ -54,6 +54,8 @@ type ServiceRow = {
   business_id: string;
   event_id: string;
   source_service_id: string | null;
+  price_list_id?: string | null;
+  config_snapshot?: Record<string, unknown> | null;
   name: string;
   description: string | null;
   quantity: number;
@@ -111,6 +113,8 @@ const fromService = (r: ServiceRow): EventServiceItem => ({
   businessId: r.business_id,
   eventId: r.event_id,
   sourceServiceId: r.source_service_id,
+  priceListId: r.price_list_id ?? null,
+  configSnapshot: r.config_snapshot ?? null,
   name: r.name,
   description: r.description,
   quantity: r.quantity,
@@ -152,6 +156,8 @@ const eventFields = (x: Event | EventDetails) => ({
 const serviceFields = (x: EventServiceItem) => ({
   event_id: x.eventId,
   source_service_id: x.sourceServiceId,
+  price_list_id: x.priceListId ?? null,
+  config_snapshot: x.configSnapshot ?? null,
   name: x.name,
   description: x.description,
   quantity: x.quantity,

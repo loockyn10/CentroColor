@@ -89,6 +89,10 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       businessId: row.business_id,
       eventId: row.event_id as string,
       sourceServiceId: row.source_service_id as string | null,
+      priceListId: row.price_list_id as string | null,
+      configSnapshot: row.config_snapshot
+        ? (JSON.parse(row.config_snapshot as string) as Record<string, unknown>)
+        : null,
       name: row.name as string,
       description: row.description as string | null,
       quantity: row.quantity as number,
@@ -338,7 +342,7 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     } else if (type === 'event_service_item') {
       const x = entity as EventServiceItem;
       result = await db.execute(
-        `INSERT INTO event_service_items(id,business_id,event_id,source_service_id,name,description,quantity,unit_price_cents,total_cents,is_active,created_at,updated_at,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?, 'remote',?) ON CONFLICT(id) DO UPDATE SET source_service_id=excluded.source_service_id,name=excluded.name,description=excluded.description,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,is_active=excluded.is_active,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE event_service_items.business_id=excluded.business_id${guard}`,
+        `INSERT INTO event_service_items(id,business_id,event_id,source_service_id,name,description,quantity,unit_price_cents,total_cents,is_active,created_at,updated_at,price_list_id,config_snapshot,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET source_service_id=excluded.source_service_id,name=excluded.name,description=excluded.description,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,is_active=excluded.is_active,price_list_id=excluded.price_list_id,config_snapshot=excluded.config_snapshot,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE event_service_items.business_id=excluded.business_id${guard}`,
         [
           x.id,
           x.businessId,
@@ -352,6 +356,8 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
           x.isActive ? 1 : 0,
           x.createdAt,
           x.updatedAt,
+          x.priceListId ?? null,
+          x.configSnapshot ? JSON.stringify(x.configSnapshot) : null,
           x.updatedAt,
         ],
       );
@@ -556,7 +562,7 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     } else if (type === 'event_service_item') {
       const value = cloud as EventServiceItem;
       result = await db.execute(
-        `UPDATE event_service_items SET event_id=?,source_service_id=?,name=?,description=?,quantity=?,unit_price_cents=?,total_cents=?,is_active=?,created_at=?,updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
+        `UPDATE event_service_items SET event_id=?,source_service_id=?,name=?,description=?,quantity=?,unit_price_cents=?,total_cents=?,is_active=?,created_at=?,updated_at=?,price_list_id=?,config_snapshot=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
         [
           value.eventId,
           value.sourceServiceId,
@@ -568,6 +574,8 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
           value.isActive ? 1 : 0,
           value.createdAt,
           value.updatedAt,
+          value.priceListId ?? null,
+          value.configSnapshot ? JSON.stringify(value.configSnapshot) : null,
           value.updatedAt,
           ...common,
         ],

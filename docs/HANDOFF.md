@@ -1,5 +1,9 @@
 # Handoff
 
+## SERVICIOS-01 (24/10/2026)
+
+Implementado y verificado en código (detalle en `docs/CURRENT_STATE.md`, decisiones 93–97). **Nada aplicado ni desplegado**: pendientes `db push` de `20261024000000_service_catalog.sql`, `20261024010000_public_lab_tiers.sql` y `20261024020000_event_services.sql` (primero `--dry-run`: debe sumarse a las dos `20261018*` si tampoco están aplicadas), redeploy de las funciones del pedido público (`public-order-*` usan `cc_public_lab_catalog`) y publicar la Web; Desktop recibe `0017`/`0018` al actualizar el instalador. Después cargar los datos listados en CURRENT_STATE (precios de Laboratorio/Plotter público/Eventos, anchos de rollo, capacidad del Nova VX600) y probar el sync Desktop↔Cloud y un pedido `/imprimir` con Mate y Brillo. No hay commit de este trabajo.
+
 ## Punto de reanudación
 
 Sprint 14 está implementado y verificado en código (ver `docs/CURRENT_STATE.md`). **Nada está aplicado ni desplegado**: no se ejecutó `db push` real ni `functions deploy`, no hay credenciales de Meta cargadas y la Web no se publicó. El dry-run del 17/10/2026 propone únicamente `20261018000000_public_photo_orders.sql` y `20261018010000_whatsapp_notifications.sql` (la estabilización de Sprint 13 ya figura aplicada en el remoto).

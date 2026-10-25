@@ -8,7 +8,7 @@ export type PublicOrderStartPayload = {
   clientKey: string;
   customer: { name: string; phone: string; email?: string; notes?: string };
   whatsappOptIn: boolean;
-  items: { serviceId: string; quantity: number }[];
+  items: { serviceId: string; quantity: number; variantId?: string }[];
   /** What the customer saw. Never trusted: it only detects stale price lists. */
   expectedTotalCents?: number;
   /** Honeypot: real users never fill it. */
@@ -42,7 +42,7 @@ export type ParsedStart = {
   email: string | null;
   notes: string | null;
   whatsappOptIn: boolean;
-  items: { serviceId: string; quantity: number }[];
+  items: { serviceId: string; quantity: number; variantId?: string }[];
   expectedTotalCents: number | null;
 };
 
@@ -111,10 +111,19 @@ export function parseStartPayload(
       item.quantity > LIMITS.maxQuantityPerService
     )
       throw invalid('Revisá las cantidades.', 'invalid_items');
+    if (
+      item.variantId !== undefined &&
+      (typeof item.variantId !== 'string' || !UUID.test(item.variantId))
+    )
+      throw invalid('Revisá el tipo de papel.', 'invalid_items');
     const id = item.serviceId.toLowerCase();
     if (seen.has(id)) throw invalid('Revisá las cantidades.', 'invalid_items');
     seen.add(id);
-    return { serviceId: id, quantity: item.quantity };
+    return {
+      serviceId: id,
+      quantity: item.quantity,
+      variantId: item.variantId?.toLowerCase(),
+    };
   });
   if (
     input.expectedTotalCents !== undefined &&
@@ -140,6 +149,8 @@ export type PricedLine = {
   quantity: number;
   unitPriceCents: number;
   totalCents: number;
+  variantId?: string;
+  photoServiceId?: string;
 };
 
 /**
@@ -149,7 +160,7 @@ export type PricedLine = {
  */
 export function priceOrder(
   catalog: PublicServiceRow[],
-  items: { serviceId: string; quantity: number }[],
+  items: { serviceId: string; quantity: number; variantId?: string }[],
 ) {
   const byId = new Map(catalog.map((service) => [service.id, service]));
   const lines: PricedLine[] = [];
@@ -161,15 +172,35 @@ export function priceOrder(
         409,
         'service_unavailable',
       );
-    const totalCents = item.quantity * service.unit_price_cents;
+    if (item.variantId && service.variant_id !== item.variantId)
+      throw new ApiError(
+        'El papel ya no está disponible.',
+        409,
+        'service_unavailable',
+      );
+    const tier = service.tiers?.find(
+      (x) =>
+        x.min_quantity <= item.quantity &&
+        (x.max_quantity === null || x.max_quantity >= item.quantity),
+    );
+    if (service.tiers && !tier)
+      throw new ApiError(
+        'No hay precio disponible para esa cantidad de copias.',
+        409,
+        'service_unavailable',
+      );
+    const unitPriceCents = tier?.unit_price_cents ?? service.unit_price_cents;
+    const totalCents = item.quantity * unitPriceCents;
     if (!Number.isSafeInteger(totalCents))
       throw invalid('Revisá las cantidades.', 'invalid_items');
     lines.push({
       serviceId: service.id,
       name: service.name,
       quantity: item.quantity,
-      unitPriceCents: service.unit_price_cents,
+      unitPriceCents,
       totalCents,
+      variantId: item.variantId,
+      photoServiceId: service.photo_service_id,
     });
   }
   const order = new Map(catalog.map((service, index) => [service.id, index]));

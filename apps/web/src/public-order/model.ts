@@ -16,6 +16,12 @@ export type CatalogService = {
   widthMm: number | null;
   heightMm: number | null;
   unitPriceCents: number;
+  variantId?: string;
+  tiers?: Array<{
+    minQuantity: number;
+    maxQuantity: number | null;
+    unitPriceCents: number;
+  }>;
 };
 
 export type PhotoEntry = {
@@ -30,6 +36,7 @@ export type OrderLine = {
   files: number;
   copies: number;
   totalCents: number;
+  pricingAvailable?: boolean;
 };
 
 /** Alias de transferencia y regla comercial de DESIGN-02: se imprime una vez acreditado el pago. */
@@ -104,11 +111,19 @@ export function deriveLines(
     if (!selectedIds.includes(service.id)) continue;
     const own = entries.filter((x) => x.serviceId === service.id);
     const copies = own.reduce((sum, x) => sum + x.copies, 0);
+    const tier = service.tiers?.find(
+      (x) =>
+        x.minQuantity <= copies &&
+        (x.maxQuantity === null || copies <= x.maxQuantity),
+    );
+    const pricingAvailable = !service.tiers || Boolean(tier);
+    const unitPriceCents = tier?.unitPriceCents ?? service.unitPriceCents;
     lines.push({
       service,
       files: own.length,
       copies,
-      totalCents: copies * service.unitPriceCents,
+      totalCents: copies * unitPriceCents,
+      ...(service.tiers ? { pricingAvailable } : {}),
     });
   }
   return lines;
@@ -140,6 +155,10 @@ export function missingForConfirm(
   if (!selectedIds.length) missing.push('elegí al menos un tamaño');
   for (const line of lines)
     if (line.files === 0) missing.push(`agregá fotos de ${line.service.name}`);
+    else if (line.pricingAvailable === false)
+      missing.push(
+        `no hay precio para ${line.copies} copias de ${line.service.name}`,
+      );
   if (customer.name.trim().length < 2) missing.push('tu nombre');
   const phoneDigits = digits(customer.phone).length;
   if (phoneDigits < 8 || phoneDigits > 15) missing.push('tu WhatsApp');
@@ -169,6 +188,7 @@ export function startBody(
     items: lines.map((line) => ({
       serviceId: line.service.id,
       quantity: line.copies,
+      ...(line.service.variantId ? { variantId: line.service.variantId } : {}),
     })),
     expectedTotalCents: orderTotal(lines),
   };

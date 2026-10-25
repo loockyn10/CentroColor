@@ -42,6 +42,8 @@ export interface EventServiceItem {
   businessId: string;
   eventId: string;
   sourceServiceId: string | null;
+  priceListId?: string | null;
+  configSnapshot?: Record<string, unknown> | null;
   name: string;
   description: string | null;
   quantity: number;

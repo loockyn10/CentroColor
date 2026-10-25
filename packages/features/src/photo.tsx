@@ -15,6 +15,7 @@ import {
   type PhotoJobWhatsAppStatus,
   type PhotoJobSummary,
   type PhotoRepository,
+  type ServiceCatalogRepository,
   type PhotoFileIntakeAdminRepository,
   type UploadLinkView,
   type WorkPaymentRepository,
@@ -25,7 +26,12 @@ import {
   normalizePhotoServiceDetails,
   photoServiceTypes,
   photoWorkflowRoutes,
+  effectivePriceListId,
+  labUnitPrice,
   type Customer,
+  type PriceList,
+  type LabVariant,
+  type LabPriceTier,
   type PhotoJobStatus,
   type PhotoJobPriority,
   type PhotoService,
@@ -383,7 +389,8 @@ export function PhotoServicesPage({
               </label>
               <small>
                 Los pedidos directos requieren flujo Laboratorio y archivos del
-                cliente. El precio publicado es el precio unitario de arriba.
+                cliente. Papel y tramos públicos se configuran en Catálogo →
+                Servicios.
               </small>
               <label>
                 Nombre público
@@ -478,16 +485,19 @@ type DraftLine = {
   widthMm: number | null;
   heightMm: number | null;
   notes: string;
+  variantId?: string | null;
 };
 export function NewPhotoJobPage({
   repository,
   customerRepository,
+  serviceCatalogRepository,
   onMutation,
   refreshToken,
   initialCustomerId,
 }: {
   repository: PhotoRepository;
   customerRepository: CustomerRepository;
+  serviceCatalogRepository?: ServiceCatalogRepository;
   onMutation?: () => void;
   refreshToken?: number;
   /** Cliente preseleccionado (p. ej. desde su ficha). */
@@ -495,6 +505,9 @@ export function NewPhotoJobPage({
 }) {
   const c = useBusinessContext();
   const [services, setServices] = useState<PhotoService[]>([]),
+    [priceLists, setPriceLists] = useState<PriceList[]>([]),
+    [labVariants, setLabVariants] = useState<LabVariant[]>([]),
+    [labTiers, setLabTiers] = useState<LabPriceTier[]>([]),
     [customers, setCustomers] = useState<Customer[]>([]),
     [query, setQuery] = useState(''),
     [customerId, setCustomerId] = useState(initialCustomerId ?? ''),
@@ -513,6 +526,20 @@ export function NewPhotoJobPage({
       .then(setServices)
       .catch((x) => setMessage(errorText(x)));
   }, [repository, c.businessId, refreshToken]);
+  useEffect(() => {
+    if (!serviceCatalogRepository) return;
+    void Promise.all([
+      serviceCatalogRepository.listPriceLists(c.businessId),
+      serviceCatalogRepository.listLabVariants(c.businessId),
+      serviceCatalogRepository.listLabTiers(c.businessId),
+    ])
+      .then(([lists, variants, tiers]) => {
+        setPriceLists(lists);
+        setLabVariants(variants);
+        setLabTiers(tiers);
+      })
+      .catch((error) => setMessage(errorText(error)));
+  }, [serviceCatalogRepository, c.businessId, refreshToken]);
   useEffect(() => {
     const timer = window.setTimeout(
       () =>
@@ -534,8 +561,11 @@ export function NewPhotoJobPage({
     };
   }, [customerRepository, c.businessId, initialCustomerId]);
   function addService(id: string) {
-    const s = services.find((x) => x.id === id);
+    const variant = labVariants.find((x) => x.id === id);
+    const s = services.find((x) => x.id === (variant?.photoServiceId ?? id));
     if (!s) return;
+    if (s.workflowRoute === 'lab' && !variant && serviceCatalogRepository)
+      return;
     setLines((v) => [
       ...v,
       {
@@ -547,6 +577,7 @@ export function NewPhotoJobPage({
         widthMm: s.widthMm,
         heightMm: s.heightMm,
         notes: '',
+        variantId: variant?.id ?? null,
       },
     ]);
   }
@@ -567,6 +598,32 @@ export function NewPhotoJobPage({
   }
   function patchLine(key: string, p: Partial<DraftLine>) {
     setLines((v) => v.map((x) => (x.key === key ? { ...x, ...p } : x)));
+  }
+  const selectedCustomer =
+    customers.find((x) => x.id === customerId) ??
+    (preset?.id === customerId ? preset : null);
+  const selectedList = priceLists.length
+    ? (priceLists.find(
+        (x) => x.id === effectivePriceListId(selectedCustomer, priceLists),
+      ) ?? null)
+    : null;
+  function priceForLine(line: DraftLine) {
+    if (!line.variantId)
+      return Math.round(Number(line.price.replace(',', '.')) * 100);
+    const variant = labVariants.find((x) => x.id === line.variantId);
+    if (!variant || !selectedList)
+      throw new Error('No se pudo resolver la variante o la lista.');
+    return labUnitPrice(
+      variant,
+      labTiers,
+      selectedList.id,
+      Number(line.quantity),
+    );
+  }
+  function lineName(line: DraftLine) {
+    if (!line.variantId) return line.name;
+    const variant = labVariants.find((x) => x.id === line.variantId);
+    return `${line.name} · ${variant?.paper === 'matte' ? 'Mate' : 'Brillo'} · ${selectedList?.name ?? 'Público'}`;
   }
   async function quickCreate() {
     try {
@@ -609,9 +666,11 @@ export function NewPhotoJobPage({
           : 'not_required',
         items: lines.map((x) => ({
           photoServiceId: x.serviceId,
-          serviceNameSnapshot: x.name,
+          serviceNameSnapshot: lineName(x),
           quantity: Number(x.quantity),
-          unitPriceCents: Math.round(Number(x.price.replace(',', '.')) * 100),
+          unitPriceCents: priceForLine(x),
+          labVariantId: x.variantId ?? null,
+          priceListId: x.variantId ? (selectedList?.id ?? null) : null,
           notes: x.notes || null,
           widthMm: x.widthMm,
           heightMm: x.heightMm,
@@ -629,13 +688,13 @@ export function NewPhotoJobPage({
       setBusy(false);
     }
   }
-  const total = lines.reduce(
-    (s, x) =>
-      s +
-      (Number(x.quantity) || 0) *
-        Math.round((Number(x.price.replace(',', '.')) || 0) * 100),
-    0,
-  );
+  const total = lines.reduce((sum, line) => {
+    try {
+      return sum + Number(line.quantity) * priceForLine(line);
+    } catch {
+      return sum;
+    }
+  }, 0);
   return (
     <>
       <PageHeader title="Nuevo trabajo" />
@@ -670,6 +729,11 @@ export function NewPhotoJobPage({
               ))}
             </select>
           </label>
+          {selectedList && (
+            <p className="photo-wide meta">
+              Lista aplicada: {selectedList.name}
+            </p>
+          )}
           <div className="photo-wide">
             <button type="button" onClick={() => setShowQuick((v) => !v)}>
               + Crear cliente
@@ -718,15 +782,26 @@ export function NewPhotoJobPage({
               }}
             >
               <option value="">+ Agregar servicio</option>
-              {services.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                  {x.widthMm
-                    ? ` · ${x.widthMm / 10}×${x.heightMm! / 10} cm`
-                    : ''}{' '}
-                  · {money(x.defaultUnitPriceCents)}
-                </option>
-              ))}
+              {services.flatMap((x) =>
+                x.workflowRoute === 'lab' && serviceCatalogRepository
+                  ? labVariants
+                      .filter(
+                        (v) =>
+                          v.photoServiceId === x.id &&
+                          v.channel === 'laboratory' &&
+                          v.isActive,
+                      )
+                      .map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {x.name} · {v.paper === 'matte' ? 'Mate' : 'Brillo'}
+                        </option>
+                      ))
+                  : [
+                      <option key={x.id} value={x.id}>
+                        {x.name} · {money(x.defaultUnitPriceCents)}
+                      </option>,
+                    ],
+              )}
             </select>
             <button type="button" onClick={addCustom}>
               + Concepto personalizado
@@ -760,7 +835,18 @@ export function NewPhotoJobPage({
                 <input
                   required
                   inputMode="decimal"
-                  value={x.price}
+                  value={
+                    x.variantId
+                      ? (() => {
+                          try {
+                            return String(priceForLine(x) / 100);
+                          } catch {
+                            return 'Sin tarifa';
+                          }
+                        })()
+                      : x.price
+                  }
+                  readOnly={Boolean(x.variantId)}
                   onChange={(e) => patchLine(x.key, { price: e.target.value })}
                 />
               </label>

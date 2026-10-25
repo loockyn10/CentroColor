@@ -10,6 +10,7 @@ type Row = {
   email: string | null;
   document_number: string | null;
   notes: string | null;
+  price_list_id: string | null;
   is_active: number;
   created_at: string;
   updated_at: string;
@@ -24,6 +25,7 @@ function fromRow(row: Row): Customer {
     email: row.email,
     documentNumber: row.document_number,
     notes: row.notes,
+    priceListId: row.price_list_id ?? null,
     isActive: row.is_active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -74,8 +76,8 @@ export class SQLiteCustomerRepository implements CustomerRepository {
     const db = await database();
     await db.execute(
       `INSERT INTO customers
-       (id, business_id, full_name, phone, email, document_number, notes, is_active, created_at, updated_at, sync_origin, local_revision)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 1)`,
+       (id, business_id, full_name, phone, email, document_number, notes, price_list_id, is_active, created_at, updated_at, sync_origin, local_revision)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', 1)`,
       [
         customer.id,
         customer.businessId,
@@ -84,6 +86,7 @@ export class SQLiteCustomerRepository implements CustomerRepository {
         customer.email,
         customer.documentNumber,
         customer.notes,
+        customer.priceListId ?? null,
         customer.isActive ? 1 : 0,
         customer.createdAt,
         customer.updatedAt,
@@ -126,6 +129,26 @@ export class SQLiteCustomerRepository implements CustomerRepository {
     const result = await db.execute(
       "UPDATE customers SET is_active = ?, updated_at = ?, sync_origin = 'local', local_revision = local_revision + 1 WHERE business_id = ? AND id = ?",
       [isActive ? 1 : 0, new Date().toISOString(), businessId, id],
+    );
+    if (!result.rowsAffected) throw new Error('No se encontró el cliente.');
+    return (await this.get(businessId, id))!;
+  }
+
+  async assignPriceList(
+    businessId: string,
+    id: string,
+    priceListId: string | null,
+  ): Promise<Customer> {
+    const db = await database();
+    const rows = await db.select<{ role: string }[]>(
+      'SELECT role FROM authorized_context WHERE slot=1 AND business_id=? LIMIT 1',
+      [businessId],
+    );
+    if (!rows[0] || !['owner', 'admin'].includes(rows[0].role))
+      throw new Error('Sólo owner/admin puede asignar listas de precios.');
+    const result = await db.execute(
+      "UPDATE customers SET price_list_id=?,updated_at=?,sync_origin='local',local_revision=local_revision+1 WHERE business_id=? AND id=?",
+      [priceListId, new Date().toISOString(), businessId, id],
     );
     if (!result.rowsAffected) throw new Error('No se encontró el cliente.');
     return (await this.get(businessId, id))!;

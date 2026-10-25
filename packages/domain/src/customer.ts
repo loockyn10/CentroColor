@@ -6,6 +6,8 @@ export interface Customer {
   email: string | null;
   documentNumber: string | null;
   notes: string | null;
+  /** Null means the business default (Público). */
+  priceListId?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

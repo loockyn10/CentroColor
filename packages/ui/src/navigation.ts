@@ -65,7 +65,6 @@ export const navModules: NavModule[] = [
     subs: [
       { id: 'photo-jobs', label: 'Trabajos' },
       { id: 'new-photo-job', label: 'Nuevo trabajo' },
-      { id: 'photo-services', label: 'Servicios' },
     ],
   },
   {
@@ -88,6 +87,14 @@ export const navModules: NavModule[] = [
       { id: 'mouldings', label: 'Varillas' },
       { id: 'materials', label: 'Materiales' },
     ],
+  },
+  {
+    id: 'plotter',
+    label: 'Plotter',
+    short: 'Plotter',
+    icon: 'printer',
+    group: 'Taller',
+    subs: [{ id: 'plotter', label: 'Cotizaciones' }],
   },
   {
     id: 'calendar',
@@ -115,12 +122,15 @@ export const navModules: NavModule[] = [
   },
   {
     id: 'products',
-    label: 'Productos',
-    short: 'Stock',
+    label: 'Catálogo',
+    short: 'Catálogo',
     icon: 'box',
     group: 'Catálogo',
     subs: [
       { id: 'products', label: 'Productos' },
+      { id: 'services', label: 'Servicios' },
+      { id: 'price-lists', label: 'Listas de precios' },
+      { id: 'photo-services', label: 'Servicios fotográficos' },
       { id: 'stock', label: 'Stock' },
     ],
   },
@@ -134,13 +144,9 @@ export const navModules: NavModule[] = [
   },
 ];
 
-/**
- * Todas las vistas alcanzables, planas. `services` (Catálogo → Servicios) sigue siendo una ruta
- * válida —muestra la página «en preparación»— aunque ya no tenga entrada en el menú.
- */
+/** Todas las vistas alcanzables, planas. */
 export const navigation: NavigationItem[] = [
   ...navModules.flatMap((module) => module.subs),
-  { id: 'services', label: 'Servicios' },
 ];
 
 export const moduleFor = (viewId: string): NavModule | undefined =>

@@ -9,9 +9,10 @@ import {
   type CustomerRepository,
   type PhotoJobSummary,
   type PhotoRepository,
+  type ServiceCatalogRepository,
   type WorkPaymentRepository,
 } from '@centrocolor/application';
-import type { Customer, CustomerDetails } from '@centrocolor/domain';
+import type { Customer, CustomerDetails, PriceList } from '@centrocolor/domain';
 import { Button, Card, EmptyState, Icon, PageHeader } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { CustomerAccountPanel } from './payments';
@@ -61,6 +62,7 @@ export function CustomersPage({
   onLocalMutation,
   paymentRepository,
   photoRepository,
+  serviceCatalogRepository,
   initialCustomerId,
   onNewJob,
   onOpenJob,
@@ -72,23 +74,50 @@ export function CustomersPage({
   paymentRepository: WorkPaymentRepository;
   /** Opcional: habilita «Trabajos» en la ficha. */
   photoRepository?: PhotoRepository;
+  serviceCatalogRepository?: ServiceCatalogRepository;
   /** Abre la ficha de un cliente (p. ej. desde el buscador global). */
   initialCustomerId?: string | null;
   /** «Nuevo trabajo» con el cliente preseleccionado. */
   onNewJob?: (customerId: string) => void;
   onOpenJob?: (jobId: string) => void;
 }) {
-  const { businessId, branchId } = useBusinessContext();
+  const { businessId, branchId, role } = useBusinessContext();
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [mode, setMode] = useState<'idle' | 'new' | 'detail'>('idle');
   const [details, setDetails] = useState<CustomerDetails>(emptyDetails);
   const [jobs, setJobs] = useState<PhotoJobSummary[]>([]);
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    if (!serviceCatalogRepository) return;
+    void serviceCatalogRepository
+      .listPriceLists(businessId)
+      .then(setPriceLists)
+      .catch((e) => setError(errorMessage(e)));
+  }, [businessId, serviceCatalogRepository, refreshToken]);
+
+  async function assignPriceList(id: string | null) {
+    if (!selected || !repository.assignPriceList || role === 'staff') return;
+    try {
+      const updated = await repository.assignPriceList(
+        businessId,
+        selected.id,
+        id,
+      );
+      setSelected(updated);
+      setRefresh((current) => current + 1);
+      onLocalMutation?.();
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }
 
   useEffect(() => {
     let live = true;
@@ -351,6 +380,30 @@ export function CustomersPage({
                   </div>
                 )}
               </header>
+
+              {selected && serviceCatalogRepository && (
+                <div className="ficha-section">
+                  <label>
+                    Lista de precios
+                    <select
+                      value={selected.priceListId ?? ''}
+                      disabled={role === 'staff' || !repository.assignPriceList}
+                      onChange={(event) =>
+                        void assignPriceList(event.target.value || null)
+                      }
+                    >
+                      <option value="">Público (predeterminada)</option>
+                      {priceLists
+                        .filter((list) => list.isActive && !list.isDefault)
+                        .map((list) => (
+                          <option value={list.id} key={list.id}>
+                            {list.name}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                </div>
+              )}
 
               {selected && (
                 <div className="ficha-section">

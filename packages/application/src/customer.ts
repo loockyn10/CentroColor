@@ -19,6 +19,11 @@ export interface CustomerRepository {
     id: string,
     isActive: boolean,
   ): Promise<Customer>;
+  assignPriceList?(
+    businessId: string,
+    id: string,
+    priceListId: string | null,
+  ): Promise<Customer>;
 }
 
 export const customerListLimit = 100;

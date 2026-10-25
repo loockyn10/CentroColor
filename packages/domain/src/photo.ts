@@ -115,6 +115,9 @@ export interface PhotoJobItem {
   businessId: string;
   photoJobId: string;
   photoServiceId: string | null;
+  /** Applied catalog rule, preserved alongside the monetary snapshot. */
+  labVariantId?: string | null;
+  priceListId?: string | null;
   serviceNameSnapshot: string;
   quantity: number;
   unitPriceCents: number;
@@ -329,7 +332,8 @@ export function normalizePhotoJobItemDetails(
     | 'widthMm'
     | 'heightMm'
     | 'isActive'
-  >,
+  > &
+    Pick<PhotoJobItem, 'labVariantId' | 'priceListId'>,
 ) {
   const widthMm = optionalMillimeters(value.widthMm);
   const heightMm = optionalMillimeters(value.heightMm);
@@ -339,6 +343,8 @@ export function normalizePhotoJobItemDetails(
   const unitPriceCents = requireCents(value.unitPriceCents);
   return {
     photoServiceId: value.photoServiceId?.trim() || null,
+    labVariantId: value.labVariantId?.trim() || null,
+    priceListId: value.priceListId?.trim() || null,
     serviceNameSnapshot: cleanName(
       value.serviceNameSnapshot,
       'El concepto es obligatorio.',

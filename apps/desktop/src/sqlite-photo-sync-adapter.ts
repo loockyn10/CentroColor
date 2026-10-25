@@ -62,6 +62,8 @@ export const decodeLocalPhoto = (t: PhotoSyncType, r: any): any => {
     ...base,
     photoJobId: r.photo_job_id,
     photoServiceId: r.photo_service_id,
+    labVariantId: r.lab_variant_id ?? null,
+    priceListId: r.price_list_id ?? null,
     serviceNameSnapshot: r.service_name_snapshot,
     quantity: r.quantity,
     unitPriceCents: r.unit_price_cents,
@@ -195,12 +197,14 @@ export class SQLitePhotoSyncAdapter implements PhotoSyncLocalPort {
       );
     else
       await d.execute(
-        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET photo_service_id=excluded.photo_service_id,service_name_snapshot=excluded.service_name_snapshot,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,notes=excluded.notes,width_mm=excluded.width_mm,height_mm=excluded.height_mm,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
+        `INSERT INTO photo_job_items(id,business_id,photo_job_id,photo_service_id,lab_variant_id,price_list_id,service_name_snapshot,quantity,unit_price_cents,total_cents,notes,width_mm,height_mm,is_active,created_at,updated_at,sync_origin,local_revision,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'remote',0,?) ON CONFLICT(id) DO UPDATE SET photo_service_id=excluded.photo_service_id,lab_variant_id=excluded.lab_variant_id,price_list_id=excluded.price_list_id,service_name_snapshot=excluded.service_name_snapshot,quantity=excluded.quantity,unit_price_cents=excluded.unit_price_cents,total_cents=excluded.total_cents,notes=excluded.notes,width_mm=excluded.width_mm,height_mm=excluded.height_mm,is_active=excluded.is_active,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at`,
         [
           x.id,
           x.businessId,
           x.photoJobId,
           x.photoServiceId,
+          x.labVariantId ?? null,
+          x.priceListId ?? null,
           x.serviceNameSnapshot,
           x.quantity,
           x.unitPriceCents,

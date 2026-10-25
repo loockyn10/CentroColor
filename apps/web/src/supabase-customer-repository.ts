@@ -11,6 +11,7 @@ type Row = {
   email: string | null;
   document_number: string | null;
   notes: string | null;
+  price_list_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -25,6 +26,7 @@ function fromRow(row: Row): Customer {
     email: row.email,
     documentNumber: row.document_number,
     notes: row.notes,
+    priceListId: row.price_list_id ?? null,
     isActive: row.is_active,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -97,6 +99,7 @@ export class SupabaseCustomerRepository implements CustomerRepository {
         id: customer.id,
         business_id: customer.businessId,
         ...detailsToRow(customer),
+        price_list_id: customer.priceListId ?? null,
         is_active: customer.isActive,
         created_at: customer.createdAt,
         updated_at: customer.updatedAt,
@@ -131,6 +134,22 @@ export class SupabaseCustomerRepository implements CustomerRepository {
     const { data, error } = await this.client
       .from('customers')
       .update({ is_active: isActive })
+      .eq('business_id', businessId)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return fromRow(data as Row);
+  }
+
+  async assignPriceList(
+    businessId: string,
+    id: string,
+    priceListId: string | null,
+  ): Promise<Customer> {
+    const { data, error } = await this.client
+      .from('customers')
+      .update({ price_list_id: priceListId })
       .eq('business_id', businessId)
       .eq('id', id)
       .select('*')
