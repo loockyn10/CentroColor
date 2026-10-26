@@ -1,5 +1,9 @@
 # Estado actual
 
+## Auditoría de limpieza de datos operativos de prueba (26/10/2026)
+
+Se reconstruyó desde las migraciones el grafo FK de `customers` y `work_payments` y se dejó una propuesta no ejecutada en `docs/OPERATIONAL_TEST_DATA_CLEANUP.md`. `docs/sql/customer_test_data_audit.sql` es sólo lectura y obtiene inventario FK + conteos reales; `docs/sql/customer_test_data_cleanup.sql` contiene el orden transaccional y termina en `ROLLBACK`. No se consultó ni modificó la base remota, no se borraron datos y no se hizo commit/push. Los conteos siguen pendientes de ejecutar por el usuario. Riesgo operativo identificado: SQLite Desktop no recibe tombstones y sus outboxes podrían conservar o reinsertar datos; requiere un plan local separado antes de autorizar un COMMIT Cloud.
+
 ## SERVICIOS-01 — Listas de precios, Laboratorio, Plotter y Eventos/LED (24/10/2026)
 
 Implementado y verificado **en código**; **no aplicado ni desplegado** (ver `docs/HANDOFF.md`). Retomado tras un corte por límite: se auditó el árbol de trabajo en lugar de reimplementar.
