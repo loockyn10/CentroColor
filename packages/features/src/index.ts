@@ -25,6 +25,7 @@ export {
   ResourcesPage,
   ResourceCalendarPage,
 } from './events';
+export { ResourceCapacityPanel } from './resource-capacity';
 export {
   FramingCatalogPage,
   NewFrameQuotePage,

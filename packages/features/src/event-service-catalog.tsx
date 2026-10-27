@@ -3,15 +3,7 @@ import type {
   EventRepository,
   ServiceCatalogRepository,
 } from '@centrocolor/application';
-import type {
-  EventOffer,
-  EventOfferRate,
-  LedController,
-  LedPanelPool,
-  LedPreset,
-  PriceList,
-  Resource,
-} from '@centrocolor/domain';
+import type { EventOffer, EventOfferRate, Resource } from '@centrocolor/domain';
 import { Button, Card } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
@@ -38,31 +30,31 @@ function mm(value: string) {
 const offerKindLabel: Record<EventOffer['kind'], string> = {
   fabric_screen: 'Pantalla de tela',
   led_screen: 'Pantalla LED',
-  photo_booth: 'Cabina de fotos',
-  magic_mirror: 'Espejo mágico',
+  photo_booth: 'Cabina Fotográfica',
+  magic_mirror: 'Espejo Mágico',
   spin_360: 'Giro 360',
 };
 
 export function EventCatalogPanel({
   repository,
   eventRepository,
+  selectedListId,
+  family,
   onMutation,
 }: {
   repository: ServiceCatalogRepository;
   eventRepository: EventRepository;
+  selectedListId: string;
+  family: 'led' | 'fabric' | 'events';
   onMutation?: () => void;
 }) {
   const { businessId, role } = useBusinessContext();
   const admin = role !== 'staff';
-  const [lists, setLists] = useState<PriceList[]>([]),
-    [offers, setOffers] = useState<EventOffer[]>([]);
+  const [offers, setOffers] = useState<EventOffer[]>([]);
   const [rates, setRates] = useState<EventOfferRate[]>([]),
     [resources, setResources] = useState<Resource[]>([]);
-  const [pool, setPool] = useState<LedPanelPool | null>(null),
-    [presets, setPresets] = useState<LedPreset[]>([]);
-  const [controllers, setControllers] = useState<LedController[]>([]);
-  const [listId, setListId] = useState(''),
-    [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [showFabricForm, setShowFabricForm] = useState(false);
   const [fabricName, setFabricName] = useState(''),
     [fabricWidth, setFabricWidth] = useState(''),
     [fabricHeight, setFabricHeight] = useState('');
@@ -71,67 +63,47 @@ export function EventCatalogPanel({
   );
   const [fabricPrimary, setFabricPrimary] = useState(''),
     [fabricProjector, setFabricProjector] = useState('');
-  const [controllerResource, setControllerResource] = useState(''),
-    [controllerPixels, setControllerPixels] = useState('');
-  const [totalPanels, setTotalPanels] = useState(''),
-    [panelArea, setPanelArea] = useState(''),
-    [pixelsPerPanel, setPixelsPerPanel] = useState('');
-  const [presetName, setPresetName] = useState(''),
-    [presetWidth, setPresetWidth] = useState(''),
-    [presetHeight, setPresetHeight] = useState('');
   const reload = async () => {
-    const [a, b, c, d, e, f, g] = await Promise.all([
-      repository.listPriceLists(businessId),
+    const [nextOffers, nextRates, nextResources] = await Promise.all([
       repository.listEventOffers(businessId),
       repository.listEventOfferRates(businessId),
       eventRepository.listResources(businessId, true),
-      repository.getLedPanelPool(businessId),
-      repository.listLedPresets(businessId),
-      repository.listLedControllers(businessId),
     ]);
-    setLists(a);
-    setOffers(b);
-    setRates(c);
-    setResources(d);
-    setPool(e);
-    setPresets(f);
-    setControllers(g);
-    setListId((old) => old || a.find((x) => x.isDefault)?.id || '');
-    if (e) {
-      setTotalPanels(String(e.totalPanels));
-      setPanelArea(String(e.panelAreaMm2 / 1_000_000));
-      setPixelsPerPanel(String(e.pixelsPerPanel));
-    }
+    setOffers(nextOffers);
+    setRates(nextRates);
+    setResources(nextResources);
   };
   useEffect(() => {
     void reload().catch((e) => setNotice(errorText(e)));
   }, [businessId, repository, eventRepository]);
-  async function persist(work: () => Promise<unknown>) {
+  async function persist(work: () => Promise<unknown>): Promise<boolean> {
     try {
       await work();
       await reload();
       setNotice(null);
       onMutation?.();
+      return true;
     } catch (e) {
       setNotice(errorText(e));
+      return false;
     }
   }
-  async function rate(offer: EventOffer, value: string) {
+  async function rate(offer: EventOffer, value: string): Promise<boolean> {
     const existing = rates.find(
-      (x) => x.offerId === offer.id && x.priceListId === listId,
+      (x) => x.offerId === offer.id && x.priceListId === selectedListId,
     );
-    await persist(() =>
+    return persist(() =>
       repository.saveEventOfferRate({
         id: existing?.id ?? crypto.randomUUID(),
         businessId,
         offerId: offer.id,
-        priceListId: listId,
+        priceListId: selectedListId,
         amountCents: cents(value),
       }),
     );
   }
   async function fabric() {
-    await persist(() =>
+    const saved = await persist(() =>
       repository.saveEventOffer({
         id: crypto.randomUUID(),
         businessId,
@@ -146,110 +118,66 @@ export function EventCatalogPanel({
         isActive: true,
       }),
     );
+    if (!saved) return;
     setFabricName('');
     setFabricWidth('');
     setFabricHeight('');
-  }
-  async function savePool() {
-    const area = Number(panelArea.trim().replace(',', '.')) * 1_000_000;
-    const total = Number(totalPanels),
-      pixels = Number(pixelsPerPanel);
-    if (
-      !Number.isSafeInteger(area) ||
-      area <= 0 ||
-      !Number.isSafeInteger(total) ||
-      total <= 0 ||
-      !Number.isSafeInteger(pixels) ||
-      pixels <= 0
-    )
-      return setNotice('Revisá cantidad, área y píxeles.');
-    await persist(() =>
-      repository.saveLedPanelPool({
-        id: pool?.id ?? crypto.randomUUID(),
-        businessId,
-        totalPanels: total,
-        panelAreaMm2: area,
-        pixelsPerPanel: pixels,
-        isActive: pool?.isActive ?? true,
-      }),
-    );
-  }
-  async function saveController() {
-    const value = controllerPixels.trim() ? Number(controllerPixels) : null;
-    if (value !== null && (!Number.isSafeInteger(value) || value <= 0))
-      return setNotice('Píxeles inválidos.');
-    const existing = controllers.find(
-      (x) => x.resourceId === controllerResource,
-    );
-    await persist(() =>
-      repository.saveLedController({
-        id: existing?.id ?? crypto.randomUUID(),
-        businessId,
-        resourceId: controllerResource,
-        maxPixels: value,
-      }),
-    );
-  }
-  async function savePreset() {
-    await persist(() =>
-      repository.saveLedPreset({
-        id: crypto.randomUUID(),
-        businessId,
-        name: presetName.trim(),
-        widthMm: mm(presetWidth),
-        heightMm: mm(presetHeight),
-        isActive: true,
-      }),
-    );
-    setPresetName('');
-    setPresetWidth('');
-    setPresetHeight('');
+    setShowFabricForm(false);
   }
   return (
     <>
       {notice && <p role="alert">{notice}</p>}
       <Card>
-        <label>
-          Lista de precios
-          <select value={listId} onChange={(e) => setListId(e.target.value)}>
-            {lists
-              .filter((x) => x.isActive)
-              .map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-          </select>
-        </label>
-      </Card>
-      <Card>
-        <h2>Servicios y tarifas</h2>
-        <div className="rows">
-          {offers.map((offer) => {
-            const rateValue = rates.find(
-              (x) => x.offerId === offer.id && x.priceListId === listId,
-            );
-            return (
-              <OfferRow
-                key={`${offer.id}:${listId}`}
-                offer={offer}
-                rate={rateValue}
-                admin={admin}
-                resources={resources}
-                onRate={(value) => void rate(offer, value)}
-                onOffer={(next) =>
-                  void persist(() => repository.saveEventOffer(next))
-                }
-              />
-            );
-          })}
+        <div className="pricing-card-heading">
+          <div>
+            <h2>Servicios y tarifas</h2>
+            <p className="meta">
+              {family === 'led'
+                ? 'Precio por m². La capacidad técnica se administra en Recursos.'
+                : family === 'fabric'
+                  ? 'Tamaños, proyección, equipos requeridos y precio fijo.'
+                  : 'Precio fijo por lista; los equipos físicos se reservan por separado.'}
+            </p>
+          </div>
+          {admin && family === 'fabric' && !showFabricForm && (
+            <Button variant="secondary" onClick={() => setShowFabricForm(true)}>
+              + Nueva pantalla
+            </Button>
+          )}
         </div>
-        <p className="meta">
-          LED usa precio por m². Los demás servicios usan precio fijo. Viáticos
-          se cargan en cada evento.
-        </p>
+        <div className="rows">
+          {offers
+            .filter((offer) =>
+              family === 'led'
+                ? offer.kind === 'led_screen'
+                : family === 'fabric'
+                  ? offer.kind === 'fabric_screen'
+                  : ['photo_booth', 'magic_mirror', 'spin_360'].includes(
+                      offer.kind,
+                    ),
+            )
+            .map((offer) => {
+              const rateValue = rates.find(
+                (x) =>
+                  x.offerId === offer.id && x.priceListId === selectedListId,
+              );
+              return (
+                <OfferRow
+                  key={`${offer.id}:${selectedListId}`}
+                  offer={offer}
+                  rate={rateValue}
+                  admin={admin}
+                  resources={resources}
+                  onRate={(value) => rate(offer, value)}
+                  onOffer={(next) =>
+                    persist(() => repository.saveEventOffer(next))
+                  }
+                />
+              );
+            })}
+        </div>
       </Card>
-      {admin && (
+      {admin && family === 'fabric' && showFabricForm && (
         <Card>
           <h2>Nueva pantalla de tela</h2>
           <div className="form-row">
@@ -326,151 +254,12 @@ export function EventCatalogPanel({
             >
               Crear pantalla
             </Button>
+            <Button variant="ghost" onClick={() => setShowFabricForm(false)}>
+              Cancelar
+            </Button>
           </div>
         </Card>
       )}
-      <Card>
-        <h2>Pool LED</h2>
-        <div className="form-row">
-          <label>
-            Paneles totales
-            <input
-              inputMode="numeric"
-              value={totalPanels}
-              disabled={!admin}
-              onChange={(e) => setTotalPanels(e.target.value)}
-            />
-          </label>
-          <label>
-            Área por panel (m²)
-            <input
-              inputMode="decimal"
-              value={panelArea}
-              disabled={!admin}
-              onChange={(e) => setPanelArea(e.target.value)}
-            />
-          </label>
-          <label>
-            Píxeles por panel
-            <input
-              inputMode="numeric"
-              value={pixelsPerPanel}
-              disabled={!admin}
-              onChange={(e) => setPixelsPerPanel(e.target.value)}
-            />
-          </label>
-          {admin && (
-            <Button onClick={() => void savePool()}>Guardar pool</Button>
-          )}
-        </div>
-      </Card>
-      <Card>
-        <h2>Controladores LED</h2>
-        <div className="rows">
-          {controllers.map((c) => {
-            const resource = resources.find((x) => x.id === c.resourceId);
-            return (
-              <div className="oprow" key={c.id}>
-                <strong>{resource?.name ?? c.resourceId}</strong>
-                <span className="meta">
-                  {c.maxPixels === null
-                    ? 'Capacidad pendiente'
-                    : `${c.maxPixels.toLocaleString('es-AR')} px`}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        {admin && (
-          <div className="form-row">
-            <label>
-              Recurso
-              <select
-                value={controllerResource}
-                onChange={(e) => setControllerResource(e.target.value)}
-              >
-                <option value="">Seleccionar</option>
-                {resources.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Máximo píxeles
-              <input
-                inputMode="numeric"
-                value={controllerPixels}
-                onChange={(e) => setControllerPixels(e.target.value)}
-                placeholder="Pendiente si no se conoce"
-              />
-            </label>
-            <Button
-              disabled={!controllerResource}
-              onClick={() => void saveController()}
-            >
-              Guardar controlador
-            </Button>
-          </div>
-        )}
-      </Card>
-      <Card>
-        <h2>Tamaños LED</h2>
-        <div className="rows">
-          {presets.map((p) => (
-            <div className="oprow" key={p.id}>
-              <strong>{p.name}</strong>
-              <span className="meta">
-                {p.widthMm / 1000} × {p.heightMm / 1000} m
-              </span>
-              {admin && (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    void persist(() =>
-                      repository.saveLedPreset({ ...p, isActive: !p.isActive }),
-                    )
-                  }
-                >
-                  {p.isActive ? 'Desactivar' : 'Activar'}
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-        {admin && (
-          <div className="form-row">
-            <label>
-              Nombre
-              <input
-                value={presetName}
-                onChange={(e) => setPresetName(e.target.value)}
-              />
-            </label>
-            <label>
-              Ancho cm
-              <input
-                value={presetWidth}
-                onChange={(e) => setPresetWidth(e.target.value)}
-              />
-            </label>
-            <label>
-              Alto cm
-              <input
-                value={presetHeight}
-                onChange={(e) => setPresetHeight(e.target.value)}
-              />
-            </label>
-            <Button
-              disabled={!presetName.trim()}
-              onClick={() => void savePreset()}
-            >
-              Agregar tamaño
-            </Button>
-          </div>
-        )}
-      </Card>
     </>
   );
 }
@@ -487,19 +276,21 @@ function OfferRow({
   rate?: EventOfferRate;
   resources: Resource[];
   admin: boolean;
-  onRate: (v: string) => void;
-  onOffer: (x: EventOffer) => void;
+  onRate: (v: string) => Promise<boolean>;
+  onOffer: (x: EventOffer) => Promise<boolean>;
 }) {
   const [value, setValue] = useState(
     rate ? (rate.amountCents / 100).toFixed(2).replace('.', ',') : '',
   );
   const [editing, setEditing] = useState(false),
     [draft, setDraft] = useState(offer);
+  const displayName =
+    offer.kind === 'fabric_screen'
+      ? `${offerKindLabel[offer.kind]} · ${offer.name}`
+      : offerKindLabel[offer.kind];
   return (
     <div className="oprow">
-      <span className="who">
-        {offerKindLabel[offer.kind]} · {offer.name}
-      </span>
+      <span className="who">{displayName}</span>
       {offer.kind === 'fabric_screen' && (
         <span className="meta">
           {offer.widthMm! / 10}×{offer.heightMm! / 10} cm ·{' '}
@@ -513,128 +304,147 @@ function OfferRow({
             'Recurso faltante')
           : ''}
       </span>
-      {admin ? (
-        <>
-          <input
-            aria-label={`Tarifa ${offer.name}`}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="Sin tarifa"
-          />
-          <Button variant="ghost" onClick={() => onRate(value)}>
-            Guardar tarifa
+      <span>{rate ? money(rate.amountCents) : 'Sin tarifa'}</span>
+      <span className="meta">{offer.isActive ? 'Activo' : 'Inactivo'}</span>
+      {admin && (
+        <div className="pricing-row-actions">
+          <Button variant="ghost" onClick={() => setEditing(!editing)}>
+            {editing ? 'Cerrar' : 'Editar'}
           </Button>
-          {offer.kind === 'fabric_screen' && (
-            <Button variant="ghost" onClick={() => setEditing(!editing)}>
-              {editing ? 'Cerrar' : 'Configurar'}
-            </Button>
-          )}
           <Button
             variant="ghost"
-            onClick={() => onOffer({ ...offer, isActive: !offer.isActive })}
+            onClick={() =>
+              void onOffer({ ...offer, isActive: !offer.isActive })
+            }
           >
             {offer.isActive ? 'Desactivar' : 'Activar'}
           </Button>
-        </>
-      ) : (
-        <span>{rate ? money(rate.amountCents) : 'Sin tarifa'}</span>
+        </div>
       )}
       {editing && (
         <div className="form-row">
           <label>
-            Nombre
+            Tarifa en la lista seleccionada
             <input
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              aria-label={`Tarifa ${displayName}`}
+              inputMode="decimal"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              placeholder="Sin tarifa"
             />
-          </label>
-          <label>
-            Ancho cm
-            <input
-              value={String((draft.widthMm ?? 0) / 10)}
-              onChange={(e) => {
-                try {
-                  setDraft({ ...draft, widthMm: mm(e.target.value) });
-                } catch {
-                  /* Keep last valid value */
-                }
-              }}
-            />
-          </label>
-          <label>
-            Alto cm
-            <input
-              value={String((draft.heightMm ?? 0) / 10)}
-              onChange={(e) => {
-                try {
-                  setDraft({ ...draft, heightMm: mm(e.target.value) });
-                } catch {
-                  /* Keep last valid value */
-                }
-              }}
-            />
-          </label>
-          <label>
-            Proyección
-            <select
-              value={draft.projection ?? 'front'}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  projection: e.target.value as 'front' | 'rear',
-                })
-              }
-            >
-              <option value="front">Delantera</option>
-              <option value="rear">Trasera</option>
-            </select>
-          </label>
-          <label>
-            Pantalla física
-            <select
-              value={draft.primaryResourceId ?? ''}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  primaryResourceId: e.target.value || null,
-                })
-              }
-            >
-              <option value="">Seleccionar</option>
-              {resources.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Proyector
-            <select
-              value={draft.projectorResourceId ?? ''}
-              onChange={(e) =>
-                setDraft({
-                  ...draft,
-                  projectorResourceId: e.target.value || null,
-                  withProjector: Boolean(e.target.value),
-                })
-              }
-            >
-              <option value="">Sin proyector</option>
-              {resources.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-            </select>
           </label>
           <Button
-            onClick={() => {
-              onOffer(draft);
-              setEditing(false);
-            }}
+            disabled={!value.trim()}
+            onClick={() =>
+              void onRate(value).then((saved) => {
+                if (saved && offer.kind !== 'fabric_screen') setEditing(false);
+              })
+            }
           >
-            Guardar pantalla
+            Guardar tarifa
+          </Button>
+          {offer.kind === 'fabric_screen' && (
+            <>
+              <label>
+                Nombre
+                <input
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </label>
+              <label>
+                Ancho cm
+                <input
+                  value={String((draft.widthMm ?? 0) / 10)}
+                  onChange={(e) => {
+                    try {
+                      setDraft({ ...draft, widthMm: mm(e.target.value) });
+                    } catch {
+                      /* Keep last valid value */
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Alto cm
+                <input
+                  value={String((draft.heightMm ?? 0) / 10)}
+                  onChange={(e) => {
+                    try {
+                      setDraft({ ...draft, heightMm: mm(e.target.value) });
+                    } catch {
+                      /* Keep last valid value */
+                    }
+                  }}
+                />
+              </label>
+              <label>
+                Proyección
+                <select
+                  value={draft.projection ?? 'front'}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      projection: e.target.value as 'front' | 'rear',
+                    })
+                  }
+                >
+                  <option value="front">Delantera</option>
+                  <option value="rear">Trasera</option>
+                </select>
+              </label>
+              <label>
+                Pantalla física
+                <select
+                  value={draft.primaryResourceId ?? ''}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      primaryResourceId: e.target.value || null,
+                    })
+                  }
+                >
+                  <option value="">Seleccionar</option>
+                  {resources.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Proyector
+                <select
+                  value={draft.projectorResourceId ?? ''}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      projectorResourceId: e.target.value || null,
+                      withProjector: Boolean(e.target.value),
+                    })
+                  }
+                >
+                  <option value="">Sin proyector</option>
+                  {resources.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                onClick={() =>
+                  void onOffer(draft).then((saved) => {
+                    if (saved) setEditing(false);
+                  })
+                }
+              >
+                Guardar pantalla
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" onClick={() => setEditing(false)}>
+            Cancelar
           </Button>
         </div>
       )}

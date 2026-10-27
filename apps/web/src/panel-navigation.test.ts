@@ -78,8 +78,7 @@ describe('navegación funcional del panel', () => {
       'Plotter',
       'Marquetería',
       'Productos',
-      'Servicios y precios',
-      'Listas de precios',
+      'Precios',
       'Materiales',
       'Recursos',
       'Tipos y parámetros',
@@ -100,7 +99,7 @@ describe('navegación funcional del panel', () => {
   it('redistribuye operación y configuración sin cambiar IDs', () => {
     expect(moduleFor('photo-services')?.id).toBe('services');
     expect(moduleFor('services')?.id).toBe('services');
-    expect(moduleFor('price-lists')?.id).toBe('price-lists');
+    expect(moduleFor('price-lists')?.id).toBe('services');
     expect(moduleFor('plotter')?.id).toBe('plotter');
     expect(moduleFor('new-photo-job')?.id).toBe('new-photo-job');
     expect(moduleFor('plotter-materials')?.id).toBe('plotter-materials');
@@ -127,7 +126,7 @@ describe('shell responsive', () => {
       'Marquetería',
       'Agenda',
       'Presupuestos y reservas',
-      'Servicios y precios',
+      'Precios',
       'Integraciones',
     ])
       expect(html).toContain(label);

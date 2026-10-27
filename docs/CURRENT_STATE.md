@@ -1,5 +1,18 @@
 # Estado actual
 
+## Configuración → Precios — Fases A/B (27/10/2026)
+
+Implementada en Web y Desktop la fachada única de precios aprobada, sin tablas, migraciones, SQL remoto, cambios de dominio ni cambios de sincronización. Configuración muestra una sola entrada **Precios**; los IDs históricos `services`, `price-lists` y `photo-services` continúan resolviendo para no romper enlaces internos, pero Listas de precios y Servicios y precios ya no compiten como entradas visibles.
+
+- La lista seleccionada es global a toda la pantalla. **Administrar listas** abre una hoja lateral para ver, crear, renombrar, activar y desactivar listas; no se cambió la semántica Pública/Profesional/Convenio existente.
+- La portada presenta las familias Laboratorio, Plotter, Pantalla LED, Pantallas de tela, Servicios para eventos, Fotografía/Video y Marquetería. Sólo se monta el editor de la familia elegida. Marquetería deriva a su configuración especializada y Fotografía/Video queda rotulada como pendiente de Fase C: no se inventó un catálogo temporal.
+- Laboratorio, Plotter, LED comercial, pantallas de tela y Cabina Fotográfica/Espejo Mágico/Giro 360 reutilizan `ServiceCatalogRepository` y la misma lista global. La capacidad técnica LED (pool, paneles, controladores y presets) pasó visualmente a Recursos.
+- Servicios fotográficos y Recursos son catálogo primero: los formularios aparecen sólo al crear o editar. Recursos se presenta como equipamiento físico reservable y ya no expone precio; `defaultPriceCents` se conserva internamente por compatibilidad.
+
+Descripción visual verificada contra la composición compartida: encabezado y selector de lista arriba, grilla responsiva de familias debajo, detalle de una sola familia con acción Volver, y hojas laterales para listas/altas; Web y Desktop consumen los mismos componentes y CSS. No se hizo una prueba manual con datos reales en navegador o ventana Tauri.
+
+Verificación local: `git diff --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test` (**563/563**), `pnpm build` y `pnpm build:desktop` pasan. Se generó `apps/desktop/src-tauri/target/release/bundle/nsis/CentroColor_0.1.0_x64-setup.exe`; persisten sólo los avisos conocidos de chunks mayores a 500 kB y del linker de Windows. `pnpm format:check` no se declara verde hasta resolver el formato previo de `docs/OPERATIONAL_TEST_DATA_CLEANUP.md`. No se ejecutó SQL remoto, no se hizo commit ni push.
+
 ## Reorganización funcional de navegación (26/10/2026)
 
 Implementadas las etapas 1–3 aprobadas en Web y Desktop, sin tablas nuevas, migraciones, SQL remoto, cambios de reglas ni cambios de sync/outbox. `packages/ui/src/navigation.ts` conserva todos los IDs históricos y organiza la aplicación en Inicio; Mostrador; Laboratorio; Servicios; Taller; y Configuración. El único ID nuevo es `plotter-materials`, una vista sobre `ServiceCatalogRepository`.

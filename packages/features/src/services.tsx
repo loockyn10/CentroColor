@@ -11,6 +11,8 @@ import {
   labPortalStatus,
   quotePlotter,
   type Customer,
+  type EventOffer,
+  type EventOfferRate,
   type LabPriceTier,
   type LabVariant,
   type PhotoService,
@@ -18,7 +20,7 @@ import {
   type PlotterRate,
   type PriceList,
 } from '@centrocolor/domain';
-import { Button, Card, PageHeader, Segmented } from '@centrocolor/ui';
+import { Button, Card, PageHeader, Sheet } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { EventCatalogPanel } from './event-service-catalog';
 
@@ -72,10 +74,31 @@ export function PriceListsPage({
   repository: ServiceCatalogRepository;
   onMutation?: () => void;
 }) {
+  return (
+    <>
+      <PageHeader
+        title="Listas de precios"
+        description="Esta ruta se conserva por compatibilidad. La administración principal está dentro de Precios."
+      />
+      <PriceListManager repository={repository} onMutation={onMutation} />
+    </>
+  );
+}
+
+function PriceListManager({
+  repository,
+  onMutation,
+}: {
+  repository: ServiceCatalogRepository;
+  onMutation?: () => void;
+}) {
   const { businessId, role } = useBusinessContext();
   const admin = role !== 'staff';
   const [lists, setLists] = useState<PriceList[]>([]);
   const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const reload = () =>
     repository
@@ -99,6 +122,7 @@ export function PriceListsPage({
         updatedAt: now,
       });
       setName('');
+      setCreating(false);
       setNotice(null);
       await reload();
       onMutation?.();
@@ -115,12 +139,21 @@ export function PriceListsPage({
       setNotice(errorText(error));
     }
   }
+  async function rename(list: PriceList) {
+    try {
+      const clean = editingName.trim();
+      if (!clean) throw new Error('Ingresá un nombre para la lista.');
+      await repository.savePriceList({ ...list, name: clean });
+      setEditingId(null);
+      setEditingName('');
+      await reload();
+      onMutation?.();
+    } catch (error) {
+      setNotice(errorText(error));
+    }
+  }
   return (
     <>
-      <PageHeader
-        title="Listas de precios"
-        description="Cada lista tiene tarifas propias por servicio."
-      />
       {notice && <p role="alert">{notice}</p>}
       <Card>
         <div className="rows">
@@ -135,32 +168,78 @@ export function PriceListsPage({
                     : 'Convenio'}{' '}
                 · {list.isActive ? 'Activa' : 'Inactiva'}
               </span>
-              {admin && !list.isDefault && (
-                <Button variant="ghost" onClick={() => void toggle(list)}>
-                  {list.isActive ? 'Desactivar' : 'Activar'}
-                </Button>
+              {admin && editingId === list.id ? (
+                <div className="pricing-inline-edit">
+                  <input
+                    aria-label={`Nombre de ${list.name}`}
+                    value={editingName}
+                    maxLength={80}
+                    onChange={(event) => setEditingName(event.target.value)}
+                  />
+                  <Button
+                    variant="ghost"
+                    onClick={() => void rename(list)}
+                    disabled={!editingName.trim()}
+                  >
+                    Guardar
+                  </Button>
+                  <Button variant="ghost" onClick={() => setEditingId(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                admin && (
+                  <div className="pricing-row-actions">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingId(list.id);
+                        setEditingName(list.name);
+                      }}
+                    >
+                      Renombrar
+                    </Button>
+                    {!list.isDefault && (
+                      <Button variant="ghost" onClick={() => void toggle(list)}>
+                        {list.isActive ? 'Desactivar' : 'Activar'}
+                      </Button>
+                    )}
+                  </div>
+                )
               )}
             </div>
           ))}
         </div>
       </Card>
       {admin && (
-        <Card>
-          <h2>Nueva lista / convenio</h2>
-          <div className="form-row">
-            <label>
-              Nombre
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={80}
-              />
-            </label>
-            <Button onClick={() => void add()} disabled={!name.trim()}>
-              Crear lista
+        <>
+          {!creating && (
+            <Button variant="secondary" onClick={() => setCreating(true)}>
+              + Nueva lista
             </Button>
-          </div>
-        </Card>
+          )}
+          {creating && (
+            <Card>
+              <h2>Nueva lista / convenio</h2>
+              <div className="form-row">
+                <label>
+                  Nombre
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    maxLength={80}
+                  />
+                </label>
+                <Button onClick={() => void add()} disabled={!name.trim()}>
+                  Crear lista
+                </Button>
+                <Button variant="ghost" onClick={() => setCreating(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </Card>
+          )}
+        </>
       )}
     </>
   );
@@ -170,39 +249,56 @@ export function ServiceCatalogPage({
   repository,
   photoRepository,
   eventRepository,
+  onNavigate,
   onMutation,
 }: {
   repository: ServiceCatalogRepository;
   photoRepository: PhotoRepository;
   eventRepository: EventRepository;
+  onNavigate?: (id: string) => void;
   onMutation?: () => void;
 }) {
   const { businessId, role } = useBusinessContext();
   const admin = role !== 'staff';
-  const [tab, setTab] = useState<'lab' | 'plotter' | 'events'>('lab');
+  const [section, setSection] = useState<
+    'lab' | 'plotter' | 'led' | 'fabric' | 'events' | null
+  >(null);
+  const [listsOpen, setListsOpen] = useState(false);
   const [lists, setLists] = useState<PriceList[]>([]);
   const [services, setServices] = useState<PhotoService[]>([]);
   const [variants, setVariants] = useState<LabVariant[]>([]);
   const [tiers, setTiers] = useState<LabPriceTier[]>([]);
   const [rates, setRates] = useState<PlotterRate[]>([]);
+  const [eventOffers, setEventOffers] = useState<EventOffer[]>([]);
+  const [eventRates, setEventRates] = useState<EventOfferRate[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [listId, setListId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const reload = async () => {
     try {
-      const [a, b, c, d, e] = await Promise.all([
+      const [a, b, c, d, e, f, g] = await Promise.all([
         repository.listPriceLists(businessId),
         photoRepository.listServices(businessId, true),
         repository.listLabVariants(businessId),
         repository.listLabTiers(businessId),
         repository.listPlotterRates(businessId),
+        repository.listEventOffers(businessId),
+        repository.listEventOfferRates(businessId),
       ]);
       setLists(a);
       setServices(b);
       setVariants(c);
       setTiers(d);
       setRates(e);
-      setListId((old) => old || a.find((x) => x.isDefault)?.id || '');
+      setEventOffers(f);
+      setEventRates(g);
+      setListId((old) =>
+        a.some((list) => list.id === old && list.isActive)
+          ? old
+          : (a.find((x) => x.isDefault && x.isActive)?.id ??
+            a.find((x) => x.isActive)?.id ??
+            ''),
+      );
       setServiceId(
         (old) => old || b.find((x) => x.workflowRoute === 'lab')?.id || '',
       );
@@ -212,7 +308,7 @@ export function ServiceCatalogPage({
   };
   useEffect(() => {
     void reload();
-  }, [businessId, repository, photoRepository]);
+  }, [businessId, repository, photoRepository, eventRepository]);
   async function saveVariant(
     paper: 'glossy' | 'matte',
     channel: 'laboratory' | 'kiosk',
@@ -337,24 +433,126 @@ export function ServiceCatalogPage({
       setNotice(errorText(error));
     }
   }
+  const selectedList = lists.find((list) => list.id === listId) ?? null;
+  const labServices = services.filter(
+    (service) => service.workflowRoute === 'lab',
+  );
+  const listLabTiers = tiers.filter((tier) => tier.priceListId === listId);
+  const listPlotterRates = rates.filter((rate) => rate.priceListId === listId);
+  const eventServiceOffers = eventOffers.filter((offer) =>
+    ['photo_booth', 'magic_mirror', 'spin_360'].includes(offer.kind),
+  );
+  const offersFor = (kinds: EventOffer['kind'][]) =>
+    eventOffers.filter((offer) => kinds.includes(offer.kind));
+  const pricedOffers = (offers: EventOffer[]) =>
+    offers.filter((offer) =>
+      eventRates.some(
+        (rate) => rate.offerId === offer.id && rate.priceListId === listId,
+      ),
+    ).length;
+  const sectionTitle =
+    section === 'lab'
+      ? 'Laboratorio'
+      : section === 'plotter'
+        ? 'Plotter'
+        : section === 'led'
+          ? 'Pantalla LED'
+          : section === 'fabric'
+            ? 'Pantallas de tela'
+            : section === 'events'
+              ? 'Servicios para eventos'
+              : null;
   return (
     <>
       <PageHeader
-        title="Servicios y precios"
-        description="Tarifas y disponibilidad por área."
-      />
-      <Segmented
-        options={[
-          { value: 'lab', label: 'Laboratorio' },
-          { value: 'plotter', label: 'Plotter' },
-          { value: 'events', label: 'Servicios / alquileres' },
-        ]}
-        value={tab}
-        onChange={(value) => setTab(value as typeof tab)}
-        label="Familia de servicio"
+        title="Precios"
+        description="Una lista activa para todas las familias comerciales."
       />
       {notice && <p role="alert">{notice}</p>}
-      {tab === 'lab' && (
+      <Card className="pricing-context">
+        <label>
+          Lista de precios
+          <select
+            value={listId}
+            onChange={(event) => setListId(event.target.value)}
+          >
+            {lists
+              .filter((list) => list.isActive)
+              .map((list) => (
+                <option key={list.id} value={list.id}>
+                  {list.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <div>
+          <span className="meta">
+            Todo lo que configures debajo corresponde a{' '}
+            <strong>{selectedList?.name ?? 'la lista seleccionada'}</strong>.
+          </span>
+          <Button variant="secondary" onClick={() => setListsOpen(true)}>
+            Administrar listas
+          </Button>
+        </div>
+      </Card>
+      {section === null && (
+        <div className="pricing-family-grid">
+          <PricingFamilyCard
+            title="Laboratorio"
+            summary={`${labServices.length} tamaños · ${variants.filter((variant) => variant.isActive).length} variantes`}
+            detail={`${listLabTiers.length} tramos en ${selectedList?.name ?? 'esta lista'}`}
+            onConfigure={() => setSection('lab')}
+          />
+          <PricingFamilyCard
+            title="Plotter"
+            summary={`${listPlotterRates.length} tarifas configuradas`}
+            detail="Materiales, precio por m² y reglas especiales"
+            onConfigure={() => setSection('plotter')}
+          />
+          <PricingFamilyCard
+            title="Pantalla LED"
+            summary={`${pricedOffers(offersFor(['led_screen']))}/${offersFor(['led_screen']).length} servicios con tarifa`}
+            detail="Configuración comercial por m²"
+            onConfigure={() => setSection('led')}
+          />
+          <PricingFamilyCard
+            title="Pantallas de tela"
+            summary={`${offersFor(['fabric_screen']).length} ofertas configuradas`}
+            detail={`${pricedOffers(offersFor(['fabric_screen']))} con tarifa en esta lista`}
+            onConfigure={() => setSection('fabric')}
+          />
+          <PricingFamilyCard
+            title="Servicios para eventos"
+            summary="Cabina · Espejo mágico · Giro 360"
+            detail={`${pricedOffers(eventServiceOffers)}/${eventServiceOffers.length} con tarifa en esta lista`}
+            onConfigure={() => setSection('events')}
+          />
+          <PricingFamilyCard
+            title="Fotografía / Video"
+            summary="Pendiente de catálogo extensible"
+            detail="No se crean servicios temporales ni enums nuevos en esta fase."
+            disabled
+          />
+          <PricingFamilyCard
+            title="Marquetería"
+            summary="Configuración especializada"
+            detail="Costos, markup, merma, mano de obra y componentes"
+            onConfigure={() => onNavigate?.('mouldings')}
+          />
+        </div>
+      )}
+      {section !== null && (
+        <div className="pricing-section-heading">
+          <Button variant="ghost" onClick={() => setSection(null)}>
+            ← Todas las familias
+          </Button>
+          <div>
+            <h2>{sectionTitle}</h2>
+            <span className="meta">Lista: {selectedList?.name}</span>
+          </div>
+        </div>
+      )}
+      {section === 'lab' && (
         <>
           <Card>
             <div className="form-row">
@@ -373,21 +571,12 @@ export function ServiceCatalogPage({
                     ))}
                 </select>
               </label>
-              <label>
-                Lista
-                <select
-                  value={listId}
-                  onChange={(e) => setListId(e.target.value)}
-                >
-                  {lists
-                    .filter((x) => x.isActive)
-                    .map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              <Button
+                variant="secondary"
+                onClick={() => onNavigate?.('photo-services')}
+              >
+                Administrar tamaños y servicios
+              </Button>
             </div>
             {!serviceId && (
               <p className="meta">
@@ -485,25 +674,8 @@ export function ServiceCatalogPage({
           ))}
         </>
       )}
-      {tab === 'plotter' && (
+      {section === 'plotter' && (
         <>
-          <Card>
-            <label>
-              Lista de precios
-              <select
-                value={listId}
-                onChange={(e) => setListId(e.target.value)}
-              >
-                {lists
-                  .filter((x) => x.isActive)
-                  .map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-          </Card>
           <Card>
             <h2>Tarifas</h2>
             <div className="rows">
@@ -563,14 +735,68 @@ export function ServiceCatalogPage({
           </Card>
         </>
       )}
-      {tab === 'events' && (
+      {(section === 'led' || section === 'fabric' || section === 'events') && (
         <EventCatalogPanel
           repository={repository}
           eventRepository={eventRepository}
-          onMutation={onMutation}
+          selectedListId={listId}
+          family={section}
+          onMutation={() => {
+            void reload();
+            onMutation?.();
+          }}
         />
       )}
+      <Sheet
+        open={listsOpen}
+        onClose={() => setListsOpen(false)}
+        title="Administrar listas"
+        variant="side"
+      >
+        <p className="meta">
+          Pública es la lista predeterminada. Profesional y convenios pueden
+          activarse o desactivarse sin borrar historial.
+        </p>
+        <PriceListManager
+          repository={repository}
+          onMutation={() => {
+            void reload();
+            onMutation?.();
+          }}
+        />
+      </Sheet>
     </>
+  );
+}
+
+function PricingFamilyCard({
+  title,
+  summary,
+  detail,
+  onConfigure,
+  disabled = false,
+}: {
+  title: string;
+  summary: string;
+  detail: string;
+  onConfigure?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Card className="pricing-family-card">
+      <div>
+        <h2>{title}</h2>
+        <strong>{summary}</strong>
+        <p className="meta">{detail}</p>
+      </div>
+      <Button
+        variant={disabled ? 'ghost' : 'secondary'}
+        disabled={disabled || !onConfigure}
+        onClick={onConfigure}
+      >
+        {disabled ? 'Pendiente Fase C' : 'Configurar'}
+      </Button>
+    </Card>
   );
 }
 

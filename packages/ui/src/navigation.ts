@@ -142,22 +142,11 @@ export const navModules: NavModule[] = [
   },
   {
     id: 'services',
-    label: 'Servicios y precios',
-    short: 'Servicios',
-    icon: 'camera',
-    group: 'Configuración',
-    subs: [
-      { id: 'services', label: 'Tarifas' },
-      { id: 'photo-services', label: 'Servicios fotográficos' },
-    ],
-  },
-  {
-    id: 'price-lists',
-    label: 'Listas de precios',
-    short: 'Listas',
+    label: 'Precios',
+    short: 'Precios',
     icon: 'wallet',
     group: 'Configuración',
-    subs: [{ id: 'price-lists', label: 'Listas de precios' }],
+    subs: [{ id: 'services', label: 'Precios' }],
   },
   {
     id: 'plotter-materials',
@@ -200,10 +189,20 @@ export const navModules: NavModule[] = [
 /** Todas las vistas alcanzables, planas. */
 export const navigation: NavigationItem[] = [
   ...navModules.flatMap((module) => module.subs),
+  // Rutas históricas: siguen siendo resolubles pero no generan entradas visibles.
+  { id: 'photo-services', label: 'Servicios fotográficos' },
+  { id: 'price-lists', label: 'Listas de precios' },
 ];
 
-export const moduleFor = (viewId: string): NavModule | undefined =>
-  navModules.find((module) => module.subs.some((sub) => sub.id === viewId));
+export const moduleFor = (viewId: string): NavModule | undefined => {
+  const direct = navModules.find((module) =>
+    module.subs.some((sub) => sub.id === viewId),
+  );
+  if (direct) return direct;
+  if (viewId === 'photo-services' || viewId === 'price-lists')
+    return navModules.find((module) => module.id === 'services');
+  return undefined;
+};
 
 export const navGroups = [...new Set(navModules.map((module) => module.group))];
 

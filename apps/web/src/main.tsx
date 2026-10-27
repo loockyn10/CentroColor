@@ -29,7 +29,6 @@ import {
   NewPhotoJobPage,
   PhotoJobsPage,
   PhotoProductionPage,
-  PriceListsPage,
   ServiceCatalogPage,
   PlotterMaterialsPage,
   PlotterPage,
@@ -323,7 +322,10 @@ function App() {
             paymentRepository={paymentRepository}
           />
         ) : activeId === 'resources' ? (
-          <ResourcesPage repository={eventRepository} />
+          <ResourcesPage
+            repository={eventRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
+          />
         ) : activeId === 'resource-calendar' ? (
           <ResourceCalendarPage repository={eventRepository} />
         ) : activeId === 'new-quote' ? (
@@ -361,14 +363,13 @@ function App() {
           />
         ) : activeId === 'photo-services' ? (
           <PhotoServicesPage repository={photoRepository} />
-        ) : activeId === 'services' ? (
+        ) : activeId === 'services' || activeId === 'price-lists' ? (
           <ServiceCatalogPage
             repository={serviceCatalogRepository}
             photoRepository={photoRepository}
             eventRepository={eventRepository}
+            onNavigate={navigateTo}
           />
-        ) : activeId === 'price-lists' ? (
-          <PriceListsPage repository={serviceCatalogRepository} />
         ) : activeId === 'plotter' ? (
           <PlotterPage
             repository={serviceCatalogRepository}

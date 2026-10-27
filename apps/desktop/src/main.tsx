@@ -40,7 +40,6 @@ import {
   NewPhotoJobPage,
   PhotoJobsPage,
   PhotoProductionPage,
-  PriceListsPage,
   ServiceCatalogPage,
   PlotterMaterialsPage,
   PlotterPage,
@@ -1166,6 +1165,7 @@ function App() {
         ) : activeId === 'resources' ? (
           <ResourcesPage
             repository={eventRepository}
+            serviceCatalogRepository={serviceCatalogRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
               void refreshSyncSummary(context.businessId);
@@ -1235,19 +1235,12 @@ function App() {
               if (cloudSessionReady) void runSync(context);
             }}
           />
-        ) : activeId === 'services' ? (
+        ) : activeId === 'services' || activeId === 'price-lists' ? (
           <ServiceCatalogPage
             repository={serviceCatalogRepository}
             photoRepository={photoRepository}
             eventRepository={eventRepository}
-            onMutation={() => {
-              setDataRefresh((x) => x + 1);
-              if (cloudSessionReady) void runSync(context);
-            }}
-          />
-        ) : activeId === 'price-lists' ? (
-          <PriceListsPage
-            repository={serviceCatalogRepository}
+            onNavigate={navigateTo}
             onMutation={() => {
               setDataRefresh((x) => x + 1);
               if (cloudSessionReady) void runSync(context);

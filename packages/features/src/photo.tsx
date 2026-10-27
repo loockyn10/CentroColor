@@ -184,6 +184,7 @@ export function PhotoServicesPage({
     canEdit = c.role !== 'staff';
   const [rows, setRows] = useState<PhotoService[]>([]),
     [editing, setEditing] = useState<PhotoService | null>(null),
+    [editorOpen, setEditorOpen] = useState(false),
     [message, setMessage] = useState<string | null>(null);
   const [code, setCode] = useState(''),
     [name, setName] = useState(''),
@@ -221,6 +222,7 @@ export function PhotoServicesPage({
     setPublicDescription(x.publicDescription ?? '');
     setPublicSortOrder(String(x.publicSortOrder));
     setPublicOrder(x.publicOrderEnabled);
+    setEditorOpen(true);
   }
   function clear() {
     setEditing(null);
@@ -237,6 +239,7 @@ export function PhotoServicesPage({
     setPublicDescription('');
     setPublicSortOrder('0');
     setPublicOrder(false);
+    setEditorOpen(false);
   }
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -285,10 +288,30 @@ export function PhotoServicesPage({
     <>
       <PageHeader
         title="Servicios fotográficos"
-        description="Cambiar un precio no modifica los pedidos ya cargados."
+        description="Catálogo operativo de Laboratorio, archivos y publicación web."
+        actions={
+          canEdit ? (
+            <button
+              className="customer-primary"
+              onClick={() => {
+                clear();
+                setEditorOpen(true);
+              }}
+            >
+              + Nuevo servicio
+            </button>
+          ) : undefined
+        }
       />
       {message && <p className="appointment-error">{message}</p>}
-      {canEdit ? (
+      <Sheet
+        open={canEdit && editorOpen}
+        onClose={clear}
+        title={
+          editing ? 'Editar servicio fotográfico' : 'Nuevo servicio fotográfico'
+        }
+        variant="side"
+      >
         <Card>
           <form className="photo-service-form" onSubmit={save}>
             <label>
@@ -332,14 +355,21 @@ export function PhotoServicesPage({
                 onChange={(e) => setHeight(e.target.value)}
               />
             </label>
-            <label>
-              Precio unitario
-              <input
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-              />
-            </label>
+            {workflowRoute === 'lab' ? (
+              <p className="meta">
+                El precio se configura por Brillo/Mate, tramo y lista dentro de
+                Configuración → Precios → Laboratorio.
+              </p>
+            ) : (
+              <label>
+                Precio unitario legado
+                <input
+                  inputMode="decimal"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+              </label>
+            )}
             <label>
               Flujo operativo
               <select
@@ -390,7 +420,7 @@ export function PhotoServicesPage({
               <small>
                 Los pedidos directos requieren flujo Laboratorio y archivos del
                 cliente. Papel y tramos públicos se configuran en Configuración
-                → Servicios y precios → Tarifas.
+                → Precios → Laboratorio.
               </small>
               <label>
                 Nombre público
@@ -422,15 +452,14 @@ export function PhotoServicesPage({
               <button className="customer-primary" type="submit">
                 {editing ? 'Guardar cambios' : 'Crear servicio'}
               </button>
-              {editing && (
-                <button type="button" onClick={clear}>
-                  Cancelar
-                </button>
-              )}
+              <button type="button" onClick={clear}>
+                Cancelar
+              </button>
             </div>
           </form>
         </Card>
-      ) : (
+      </Sheet>
+      {!canEdit && (
         <p className="identity-summary">
           Tu rol puede consultar el catálogo, pero no administrar precios.
         </p>
@@ -446,7 +475,11 @@ export function PhotoServicesPage({
               {typeLabel[x.serviceType]}
               {x.widthMm ? ` · ${x.widthMm / 10} × ${x.heightMm! / 10} cm` : ''}
             </span>
-            <b>{money(x.defaultUnitPriceCents)}</b>
+            <b>
+              {x.workflowRoute === 'lab'
+                ? 'Precios por variante y lista'
+                : money(x.defaultUnitPriceCents)}
+            </b>
             <span>
               {routeLabel[x.workflowRoute]} ·{' '}
               {x.requiresCustomerFiles

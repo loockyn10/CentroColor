@@ -37,10 +37,12 @@ import {
   Icon,
   PageHeader,
   Segmented,
+  Sheet,
 } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 import { EventServiceComposer } from './event-service-composer';
+import { ResourceCapacityPanel } from './resource-capacity';
 
 const statusLabels: Record<EventStatus, string> = {
   inquiry: 'Consulta',
@@ -1196,10 +1198,12 @@ export function EventsPage({
 
 export function ResourcesPage({
   repository,
+  serviceCatalogRepository,
   refreshToken,
   onMutation,
 }: {
   repository: EventRepository;
+  serviceCatalogRepository?: ServiceCatalogRepository;
   refreshToken?: number;
   onMutation?: () => void;
 }) {
@@ -1207,9 +1211,9 @@ export function ResourcesPage({
   const canManage = ['owner', 'admin'].includes(context.role);
   const [rows, setRows] = useState<Resource[]>([]);
   const [editing, setEditing] = useState<Resource | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('0,00');
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -1224,7 +1228,9 @@ export function ResourcesPage({
       const details = {
         name,
         description: description || null,
-        defaultPriceCents: price.trim() ? parseMoney(price) : null,
+        // El precio del recurso es legado. Se preserva al editar y los equipos
+        // nuevos nacen sin precio comercial; las tarifas pertenecen al servicio.
+        defaultPriceCents: editing?.defaultPriceCents ?? null,
       };
       if (editing)
         await updateResource(
@@ -1235,9 +1241,9 @@ export function ResourcesPage({
         );
       else await createResource(repository, context.businessId, details);
       setEditing(null);
+      setEditorOpen(false);
       setName('');
       setDescription('');
-      setPrice('0,00');
       setRefresh((x) => x + 1);
       onMutation?.();
     } catch (err) {
@@ -1246,13 +1252,35 @@ export function ResourcesPage({
   }
   return (
     <>
-      <PageHeader title="Recursos" />
+      <PageHeader
+        title="Recursos físicos"
+        description="Equipos reservables para evitar superposiciones. Los precios se configuran por servicio."
+        actions={
+          canManage ? (
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setName('');
+                setDescription('');
+                setEditorOpen(true);
+              }}
+            >
+              + Nuevo equipo
+            </Button>
+          ) : undefined
+        }
+      />
       {error && (
         <p role="alert" className="appointment-error">
           {error}
         </p>
       )}
-      {canManage && (
+      <Sheet
+        open={canManage && editorOpen}
+        onClose={() => setEditorOpen(false)}
+        title={editing ? 'Editar equipo físico' : 'Nuevo equipo físico'}
+        variant="side"
+      >
         <Card className="resource-form">
           <form onSubmit={(e) => void save(e)}>
             <label>
@@ -1270,29 +1298,17 @@ export function ResourcesPage({
                 onChange={(e) => setDescription(e.target.value)}
               />
             </label>
-            <label>
-              Precio predeterminado
-              <input
-                inputMode="decimal"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-              />
-            </label>
             <button className="customer-primary">
-              {editing ? 'Guardar cambios' : 'Crear recurso'}
+              {editing ? 'Guardar cambios' : 'Crear equipo'}
             </button>
           </form>
         </Card>
-      )}
+      </Sheet>
       <Card className="resource-list">
         {rows.map((x) => (
           <div className="event-config-row" key={x.id}>
             <strong>{x.name}</strong>
-            <span>
-              {x.defaultPriceCents === null
-                ? 'Sin precio'
-                : money(x.defaultPriceCents)}
-            </span>
+            <span className="meta">Equipo físico reservable</span>
             <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
             {canManage && (
               <>
@@ -1301,11 +1317,7 @@ export function ResourcesPage({
                     setEditing(x);
                     setName(x.name);
                     setDescription(x.description ?? '');
-                    setPrice(
-                      x.defaultPriceCents === null
-                        ? ''
-                        : (x.defaultPriceCents / 100).toFixed(2),
-                    );
+                    setEditorOpen(true);
                   }}
                 >
                   Editar
@@ -1328,6 +1340,13 @@ export function ResourcesPage({
           </div>
         ))}
       </Card>
+      {serviceCatalogRepository && (
+        <ResourceCapacityPanel
+          repository={serviceCatalogRepository}
+          eventRepository={repository}
+          onMutation={onMutation}
+        />
+      )}
     </>
   );
 }
