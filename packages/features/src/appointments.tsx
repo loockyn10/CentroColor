@@ -856,10 +856,12 @@ export function AppointmentTypesPage({
   repository,
   refreshToken,
   onMutation,
+  embedded = false,
 }: {
   repository: AppointmentRepository;
   refreshToken?: number;
   onMutation?: () => void;
+  embedded?: boolean;
 }) {
   const context = useBusinessContext();
   const canManage = context.role === 'owner' || context.role === 'admin';
@@ -919,7 +921,8 @@ export function AppointmentTypesPage({
   }
   return (
     <>
-      <PageHeader title="Tipos de turno" />
+      {!embedded && <PageHeader title="Tipos de turno" />}
+      {embedded && <h2>Tipos de turno</h2>}
       {error && (
         <p role="alert" className="appointment-error">
           {error}

@@ -184,27 +184,24 @@ export function ServiceCatalogPage({
   const [services, setServices] = useState<PhotoService[]>([]);
   const [variants, setVariants] = useState<LabVariant[]>([]);
   const [tiers, setTiers] = useState<LabPriceTier[]>([]);
-  const [materials, setMaterials] = useState<PlotterMaterial[]>([]);
   const [rates, setRates] = useState<PlotterRate[]>([]);
   const [serviceId, setServiceId] = useState('');
   const [listId, setListId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const reload = async () => {
     try {
-      const [a, b, c, d, e, f] = await Promise.all([
+      const [a, b, c, d, e] = await Promise.all([
         repository.listPriceLists(businessId),
         photoRepository.listServices(businessId, true),
         repository.listLabVariants(businessId),
         repository.listLabTiers(businessId),
-        repository.listPlotterMaterials(businessId),
         repository.listPlotterRates(businessId),
       ]);
       setLists(a);
       setServices(b);
       setVariants(c);
       setTiers(d);
-      setMaterials(e);
-      setRates(f);
+      setRates(e);
       setListId((old) => old || a.find((x) => x.isDefault)?.id || '');
       setServiceId(
         (old) => old || b.find((x) => x.workflowRoute === 'lab')?.id || '',
@@ -278,24 +275,6 @@ export function ServiceCatalogPage({
       setNotice(errorText(error));
     }
   }
-  async function saveMaterial(
-    material: PlotterMaterial,
-    roll: string,
-    active: boolean,
-  ) {
-    try {
-      await repository.savePlotterMaterial({
-        ...material,
-        rollWidthMm: roll.trim() ? mm(roll) : null,
-        isActive: active,
-      });
-      await reload();
-      onMutation?.();
-      setNotice(null);
-    } catch (error) {
-      setNotice(errorText(error));
-    }
-  }
   async function saveRate(
     code: string,
     price: string,
@@ -361,14 +340,14 @@ export function ServiceCatalogPage({
   return (
     <>
       <PageHeader
-        title="Servicios"
-        description="Configuración de tarifas y disponibilidad."
+        title="Servicios y precios"
+        description="Tarifas y disponibilidad por área."
       />
       <Segmented
         options={[
           { value: 'lab', label: 'Laboratorio' },
           { value: 'plotter', label: 'Plotter' },
-          { value: 'events', label: 'Eventos / alquileres' },
+          { value: 'events', label: 'Servicios / alquileres' },
         ]}
         value={tab}
         onChange={(value) => setTab(value as typeof tab)}
@@ -524,19 +503,6 @@ export function ServiceCatalogPage({
                   ))}
               </select>
             </label>
-          </Card>
-          <Card>
-            <h2>Materiales</h2>
-            <div className="rows">
-              {materials.map((material) => (
-                <MaterialRow
-                  key={material.id}
-                  material={material}
-                  admin={admin}
-                  onSave={saveMaterial}
-                />
-              ))}
-            </div>
           </Card>
           <Card>
             <h2>Tarifas</h2>
@@ -751,6 +717,66 @@ function MaterialRow({
     </div>
   );
 }
+
+export function PlotterMaterialsPage({
+  repository,
+  onMutation,
+}: {
+  repository: ServiceCatalogRepository;
+  onMutation?: () => void;
+}) {
+  const { businessId, role } = useBusinessContext();
+  const admin = role !== 'staff';
+  const [materials, setMaterials] = useState<PlotterMaterial[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+  const reload = async () => {
+    try {
+      setMaterials(await repository.listPlotterMaterials(businessId));
+      setNotice(null);
+    } catch (error) {
+      setNotice(errorText(error));
+    }
+  };
+  useEffect(() => {
+    void reload();
+  }, [businessId, repository]);
+  async function saveMaterial(
+    material: PlotterMaterial,
+    roll: string,
+    active: boolean,
+  ) {
+    try {
+      await repository.savePlotterMaterial({
+        ...material,
+        rollWidthMm: roll.trim() ? mm(roll) : null,
+        isActive: active,
+      });
+      await reload();
+      onMutation?.();
+    } catch (error) {
+      setNotice(errorText(error));
+    }
+  }
+  return (
+    <>
+      <PageHeader title="Materiales de Plotter" />
+      {notice && <p role="alert">{notice}</p>}
+      <Card>
+        <div className="rows">
+          {materials.map((material) => (
+            <MaterialRow
+              key={material.id}
+              material={material}
+              admin={admin}
+              onSave={saveMaterial}
+            />
+          ))}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 function RateRow({
   label,
   rate,
@@ -919,7 +945,7 @@ export function PlotterPage({
   }
   return (
     <>
-      <PageHeader title="Plotter" description="Cotizaciones y trabajos" />
+      <PageHeader title="Plotter" description="Cotizaciones" />
       {notice && <p role="status">{notice}</p>}
       <Card>
         <div className="form-row">

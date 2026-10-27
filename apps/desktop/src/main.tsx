@@ -12,7 +12,7 @@ import {
   syncWorkPayments,
   type BusinessContext,
 } from '@centrocolor/application';
-import { navigation } from '@centrocolor/ui';
+import { navigation, PageHeader } from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -30,6 +30,7 @@ import {
   SalesPage,
   StockPage,
   EventsPage,
+  EventTypesPage,
   ResourcesPage,
   ResourceCalendarPage,
   FramingCatalogPage,
@@ -41,6 +42,7 @@ import {
   PhotoProductionPage,
   PriceListsPage,
   ServiceCatalogPage,
+  PlotterMaterialsPage,
   PlotterPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
@@ -993,7 +995,7 @@ function App() {
                       <strong>
                         {item.kind === 'availability'
                           ? 'Reserva de recurso en conflicto'
-                          : 'Evento/recursos'}
+                          : 'Servicios y recursos'}
                         : {item.label}
                       </strong>
                       <small>Este equipo: {item.localSummary}</small>
@@ -1006,7 +1008,7 @@ function App() {
                             setShowConflicts(false);
                           }}
                         >
-                          Abrir Eventos para resolver
+                          Abrir Presupuestos y reservas
                         </button>
                       ) : (
                         <>
@@ -1123,14 +1125,32 @@ function App() {
             }}
           />
         ) : activeId === 'appointment-types' ? (
-          <AppointmentTypesPage
-            repository={appointmentRepository}
-            refreshToken={dataRefresh}
-            onMutation={() => {
-              void refreshSyncSummary(context.businessId);
-              if (cloudSessionReady) void runSync(context);
-            }}
-          />
+          <>
+            <PageHeader title="Tipos y parámetros" />
+            <div className="settings-grid">
+              <section>
+                <AppointmentTypesPage
+                  repository={appointmentRepository}
+                  refreshToken={dataRefresh}
+                  embedded
+                  onMutation={() => {
+                    void refreshSyncSummary(context.businessId);
+                    if (cloudSessionReady) void runSync(context);
+                  }}
+                />
+              </section>
+              <section>
+                <EventTypesPage
+                  repository={eventRepository}
+                  embedded
+                  onMutation={() => {
+                    void refreshSyncSummary(context.businessId);
+                    if (cloudSessionReady) void runSync(context);
+                  }}
+                />
+              </section>
+            </div>
+          </>
         ) : activeId === 'events' ? (
           <EventsPage
             repository={eventRepository}
@@ -1242,6 +1262,14 @@ function App() {
               if (cloudSessionReady) void runSync(context);
             }}
           />
+        ) : activeId === 'plotter-materials' ? (
+          <PlotterMaterialsPage
+            repository={serviceCatalogRepository}
+            onMutation={() => {
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
         ) : activeId === 'materials' ? (
           <FramingCatalogPage
             repository={framingRepository}
@@ -1279,7 +1307,7 @@ function App() {
           />
         ) : activeId === 'settings' ? (
           <PlaceholderPage
-            title="Configuración"
+            title="Integraciones"
             message="Google Drive y WhatsApp se configuran desde la versión Web."
           />
         ) : activeId === 'products' ? (

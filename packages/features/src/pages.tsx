@@ -243,7 +243,7 @@ export function HomePage({
         severity: 'high',
         icon: 'clock',
         what: `Atrasado · ${row.customerName}`,
-        why: `${row.itemSummary || 'Trabajo'} · debía entregarse ${dueText(row.job.promisedAt).toLowerCase()}`,
+        why: `${row.itemSummary || 'Pedido'} · debía entregarse ${dueText(row.job.promisedAt).toLowerCase()}`,
         action: { label: 'Abrir', run: () => openJob(row.job.id) },
       }),
     );
@@ -253,7 +253,7 @@ export function HomePage({
         severity: 'high',
         icon: 'bolt',
         what: `Urgente · ${row.customerName}`,
-        why: `${row.itemSummary || 'Trabajo'} · entrega ${dueText(row.job.promisedAt).toLowerCase()}`,
+        why: `${row.itemSummary || 'Pedido'} · entrega ${dueText(row.job.promisedAt).toLowerCase()}`,
         action: { label: 'Abrir', run: () => openJob(row.job.id) },
       }),
     );
@@ -266,8 +266,8 @@ export function HomePage({
         what: `Listo para entregar · ${row.customerName}`,
         why:
           balance > 0
-            ? `${row.itemSummary || 'Trabajo'} · saldo a cobrar ${money(balance)}`
-            : row.itemSummary || 'Trabajo',
+            ? `${row.itemSummary || 'Pedido'} · saldo a cobrar ${money(balance)}`
+            : row.itemSummary || 'Pedido',
         action: { label: 'Entregar', run: () => openJob(row.job.id) },
       });
     });
@@ -305,7 +305,7 @@ export function HomePage({
               Nueva venta
             </Button>
             <Button icon="camera" onClick={() => go('new-photo-job')}>
-              Nuevo trabajo
+              Nuevo pedido
             </Button>
           </>
         }
@@ -341,7 +341,7 @@ export function HomePage({
         )}
         {photoRepository && (
           <Metric
-            label="Trabajos pendientes"
+            label="Pedidos pendientes"
             value={data.jobs ? view.open.length : '—'}
             hint={
               view.late.length
@@ -464,7 +464,7 @@ export function HomePage({
                 <button type="button" onClick={() => go('events')}>
                   <Icon name="star" />
                   <span className="gl">
-                    Próximos eventos
+                    Próximas reservas
                     {data.events?.next && (
                       <span className="gs">
                         {data.events.next.title} ·{' '}

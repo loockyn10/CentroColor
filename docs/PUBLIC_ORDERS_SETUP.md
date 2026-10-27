@@ -1,6 +1,6 @@
 # Puesta en marcha de pedidos públicos — Sprint 14
 
-`/imprimir` es un portal público sin login: el cliente elige tamaños, sube fotos, indica copias, deja nombre y WhatsApp y confirma. El backend crea Customer + PhotoJob + items, recibe los archivos en Google Drive (infraestructura de Sprint 13) y el trabajo entra solo a **Laboratorio**. El flujo manual «Trabajo → Generar link» sigue existiendo para casos excepcionales.
+`/imprimir` es un portal público sin login: el cliente elige tamaños, sube fotos, indica copias, deja nombre y WhatsApp y confirma. El backend crea Customer + PhotoJob + items, recibe los archivos en Google Drive (infraestructura de Sprint 13) y el pedido entra solo a **Laboratorio**. El flujo manual «Pedido → Generar link» sigue existiendo para casos excepcionales.
 
 Requisito previo: Google Drive conectado y las migraciones/funciones de Sprint 13 vigentes (ver `docs/GOOGLE_DRIVE_SETUP.md`). WhatsApp es opcional: ver `docs/WHATSAPP_SETUP.md`.
 
@@ -50,7 +50,7 @@ No hay variables nuevas. `apps/web/vercel.json` ya reescribe cualquier ruta a `i
 
 ## 3. Configurar la lista de precios pública
 
-**Fotografía → Servicios → Editar**, sección _Catálogo público_:
+**Configuración → Servicios y precios → Servicios fotográficos → Editar**, sección _Catálogo público_:
 
 - **Mostrar en la web**: aparece en la lista de precios.
 - **Aceptar pedidos directos**: se puede pedir online. Sólo disponible si el servicio es **Laboratorio** y **requiere archivos del cliente**.
@@ -60,8 +60,8 @@ No hay variables nuevas. `apps/web/vercel.json` ya reescribe cualquier ruta a `i
 
 ## 4. Operación
 
-- Un pedido confirmado aparece solo en **Fotografía → Producción → Laboratorio** con `ORIGEN: WEB`, sin acción administrativa intermedia. No tiene fecha prometida: se define a mano cuando corresponda («Te avisaremos cuando esté listo»).
-- **Pedidos abandonados**: al iniciar la subida se crea un _borrador_ invisible para Producción, Trabajos, Dashboard y Desktop (RLS). Si el cliente no confirma, el borrador queda inactivo y su link de subida vence a los 14 días. Nada se borra automáticamente. Para marcar como `abandoned` los borradores sin actividad (revoca sus links, conserva todo) ejecutar en el SQL Editor la política que se decida, por ejemplo: `select public.cc_public_order_mark_abandoned(interval '30 days');`. No está programada: elegir el período de retención con el negocio y, si se quiere, programarla con `pg_cron`.
+- Un pedido confirmado aparece solo en **Laboratorio → Producción → Laboratorio** con `ORIGEN: WEB`, sin acción administrativa intermedia. No tiene fecha prometida: se define a mano cuando corresponda («Te avisaremos cuando esté listo»).
+- **Pedidos abandonados**: al iniciar la subida se crea un _borrador_ invisible para Producción, Pedidos, Inicio y Desktop (RLS). Si el cliente no confirma, el borrador queda inactivo y su link de subida vence a los 14 días. Nada se borra automáticamente. Para marcar como `abandoned` los borradores sin actividad (revoca sus links, conserva todo) ejecutar en el SQL Editor la política que se decida, por ejemplo: `select public.cc_public_order_mark_abandoned(interval '30 days');`. No está programada: elegir el período de retención con el negocio y, si se quiere, programarla con `pg_cron`.
 - Un cliente que reintenta (recarga, doble clic, cambia de celular) con la misma clave del navegador retoma el mismo pedido y obtiene un link de subida nuevo (el anterior se revoca).
 - El seguimiento `/pedido/:token` usa un link **de sólo lectura** distinto del de subida; sigue funcionando aunque el equipo regenere o revoque el link de subida de un trabajo.
 - El flujo manual (Generar link) y su portal `/enviar/:token` no cambian.

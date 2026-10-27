@@ -95,7 +95,7 @@ export class ScanCoordinator {
         if (this.deps.activePage() !== POS_PAGE) this.deps.navigate(POS_PAGE);
       } else if (found.kind === 'inactive') {
         this.notify(
-          `El producto ${found.product.name} está inactivo. Reactivalo en Catálogo.`,
+          `El producto ${found.product.name} está inactivo. Reactivalo en Configuración → Productos.`,
         );
       } else {
         const returnTo = this.deps.activePage();

@@ -129,7 +129,7 @@ function WhatsAppNoticePanel({
         <p>
           {jobStatus === 'ready'
             ? 'El aviso quedó pendiente de envío.'
-            : 'Se avisará automáticamente cuando el trabajo esté listo.'}
+            : 'Se avisará automáticamente cuando el pedido esté listo.'}
         </p>
       )}
       {latest && (
@@ -284,8 +284,8 @@ export function PhotoServicesPage({
   return (
     <>
       <PageHeader
-        title="Servicios"
-        description="Cambiar un precio no modifica los trabajos ya cargados."
+        title="Servicios fotográficos"
+        description="Cambiar un precio no modifica los pedidos ya cargados."
       />
       {message && <p className="appointment-error">{message}</p>}
       {canEdit ? (
@@ -389,8 +389,8 @@ export function PhotoServicesPage({
               </label>
               <small>
                 Los pedidos directos requieren flujo Laboratorio y archivos del
-                cliente. Papel y tramos públicos se configuran en Catálogo →
-                Servicios.
+                cliente. Papel y tramos públicos se configuran en Configuración
+                → Servicios y precios → Tarifas.
               </small>
               <label>
                 Nombre público
@@ -680,7 +680,7 @@ export function NewPhotoJobPage({
       setLines([]);
       setNotes('');
       setPromised('');
-      setMessage('Trabajo creado como Recibido.');
+      setMessage('Pedido creado como Recibido.');
       onMutation?.();
     } catch (x) {
       setMessage(errorText(x));
@@ -697,7 +697,7 @@ export function NewPhotoJobPage({
   }, 0);
   return (
     <>
-      <PageHeader title="Nuevo trabajo" />
+      <PageHeader title="Nuevo pedido" />
       {message && <p className="appointment-error">{message}</p>}
       <Card>
         <form className="photo-job-form" onSubmit={save}>
@@ -913,7 +913,7 @@ export function NewPhotoJobPage({
               disabled={busy || !lines.length}
               type="submit"
             >
-              Guardar trabajo
+              Guardar pedido
             </button>
           </div>
         </form>
@@ -1130,7 +1130,7 @@ export function PhotoJobsPage({
     if (!selected) return;
     if (
       next === 'cancelled' &&
-      !window.confirm('¿Cancelar este trabajo? Quedará en el historial.')
+      !window.confirm('¿Cancelar este pedido? Quedará en el historial.')
     )
       return;
     try {
@@ -1163,7 +1163,7 @@ export function PhotoJobsPage({
   return (
     <>
       <PageHeader
-        title="Trabajos"
+        title="Pedidos"
         actions={
           <Segmented
             label="Vista"
@@ -1182,7 +1182,7 @@ export function PhotoJobsPage({
           <Icon name="search" />
           <input
             type="search"
-            aria-label="Buscar trabajos"
+            aria-label="Buscar pedidos"
             placeholder="Cliente, teléfono, servicio o notas"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -1205,15 +1205,12 @@ export function PhotoJobsPage({
       {view === 'list' ? (
         <Card className="card--flush">
           {rows.length === 0 ? (
-            <EmptyState
-              icon="camera"
-              title="No hay trabajos para este filtro"
-            />
+            <EmptyState icon="camera" title="No hay pedidos para este filtro" />
           ) : (
             <div className="rows">
               <div className="rows-head oprow job-row" aria-hidden="true">
                 <span>Cliente</span>
-                <span>Trabajo</span>
+                <span>Pedido</span>
                 <span>Entrega</span>
                 <span>Estado</span>
               </div>
@@ -1259,7 +1256,7 @@ export function PhotoJobsPage({
       <Sheet
         open={selected !== null}
         onClose={() => setSelected(null)}
-        title={selected?.customerName ?? 'Trabajo'}
+        title={selected?.customerName ?? 'Pedido'}
         variant="side"
       >
         {selected && (
@@ -1790,7 +1787,10 @@ export function PhotoProductionPage({
 
   return (
     <div className="production">
-      <PageHeader title="Producción" />
+      <PageHeader
+        title="Producción"
+        description="Vista operativa de los pedidos de laboratorio y edición."
+      />
       {message && <p className="appointment-error">{message}</p>}
       {(['lab', 'editing'] as const).map((route) => {
         const jobs = queue(route);
@@ -1817,7 +1817,7 @@ export function PhotoProductionPage({
             {!loaded ? (
               <p className="pad meta">Cargando cola…</p>
             ) : jobs.length === 0 ? (
-              <EmptyState icon="printer" title="No hay trabajos en esta cola" />
+              <EmptyState icon="printer" title="No hay pedidos en esta cola" />
             ) : (
               <div className="rows">
                 {jobs.map((job) => {

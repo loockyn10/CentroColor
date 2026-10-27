@@ -688,7 +688,7 @@ export function NewSalePage({
       if (found.kind === 'found') add(found.product);
       else if (found.kind === 'inactive') {
         setError(
-          `El producto ${found.product.name} está inactivo. Reactivalo en Catálogo.`,
+          `El producto ${found.product.name} está inactivo. Reactivalo en Configuración → Productos.`,
         );
         setEntry('');
         focusScanner();

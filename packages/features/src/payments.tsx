@@ -36,7 +36,7 @@ const methodLabel: Record<string, string> = {
   other: 'Otro',
 };
 const sourceLabel: Record<string, string> = {
-  event: 'Evento',
+  event: 'Servicio',
   frame_job: 'Marquetería',
   photo_job: 'Fotografía',
 };
@@ -488,7 +488,7 @@ export function CobrosPage({
         </header>
         <Card>
           <EmptyState icon="lock" title="Sólo owner y admin ven los cobros">
-            Registrá pagos desde la ficha de cada trabajo.
+            Registrá pagos desde cada pedido, reserva o trabajo de taller.
           </EmptyState>
         </Card>
       </>
@@ -503,7 +503,7 @@ export function CobrosPage({
     ],
     ['photo_job', 'Fotografía', count((r) => r.sourceType === 'photo_job')],
     ['frame_job', 'Marquetería', count((r) => r.sourceType === 'frame_job')],
-    ['event', 'Eventos', count((r) => r.sourceType === 'event')],
+    ['event', 'Servicios', count((r) => r.sourceType === 'event')],
   ];
 
   return (

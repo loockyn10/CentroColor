@@ -448,7 +448,7 @@ a.kpi:hover {
   color: var(--red-700);
 }
 
-/* ───────── Filas operacionales (Cobros, Trabajos, Producción, Eventos) ───────── */
+/* ───────── Filas operacionales (Cobros, Pedidos, Producción, Reservas) ───────── */
 .rows {
   display: grid;
 }

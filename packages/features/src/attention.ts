@@ -93,7 +93,7 @@ export function useNavAttention({
               (product) => (quantity.get(product.id) ?? 0) <= 0,
             ).length;
             if (out)
-              next.products = {
+              next.stock = {
                 count: out,
                 tone: 'attention',
                 label: 'sin stock',

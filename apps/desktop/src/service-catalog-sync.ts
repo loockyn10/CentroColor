@@ -138,8 +138,8 @@ export async function catalogSyncIssues(
       last_error: string | null;
     }>
   >(
-    `SELECT id,'Catálogo' source,entity_type,entity_id,status,last_error FROM service_catalog_outbox WHERE business_id=?
-     UNION ALL SELECT id,'Eventos/LED' source,entity_type,entity_id,status,last_error FROM event_service_outbox WHERE business_id=?`,
+    `SELECT id,'Servicios y precios' source,entity_type,entity_id,status,last_error FROM service_catalog_outbox WHERE business_id=?
+     UNION ALL SELECT id,'Servicios/LED' source,entity_type,entity_id,status,last_error FROM event_service_outbox WHERE business_id=?`,
     [businessId, businessId],
   );
   return rows.map((r) => ({

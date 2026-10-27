@@ -9,7 +9,7 @@ import type { Customer } from '@centrocolor/domain';
 import { Icon } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
-/** Buscador global del encabezado: clientes y trabajos fotográficos. `/` enfoca el campo. */
+/** Buscador global del encabezado: clientes y pedidos de laboratorio. `/` enfoca el campo. */
 export function GlobalSearch({
   customerRepository,
   photoRepository,
@@ -94,7 +94,7 @@ export function GlobalSearch({
         ref={input}
         className="input"
         type="search"
-        placeholder="Buscar cliente o trabajo…"
+        placeholder="Buscar cliente o pedido…"
         aria-label="Buscar en todo el panel"
         value={query}
         onChange={(event) => {
@@ -120,7 +120,7 @@ export function GlobalSearch({
               <span className="muted mono">{customer.phone ?? ''}</span>
             </button>
           ))}
-          {jobs.length > 0 && <div className="grp-label">Trabajos</div>}
+          {jobs.length > 0 && <div className="grp-label">Pedidos</div>}
           {jobs.map((row) => (
             <button
               key={row.job.id}

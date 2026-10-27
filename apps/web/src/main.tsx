@@ -19,6 +19,7 @@ import {
   SalesPage,
   StockPage,
   EventsPage,
+  EventTypesPage,
   ResourcesPage,
   ResourceCalendarPage,
   FramingCatalogPage,
@@ -30,6 +31,7 @@ import {
   PhotoProductionPage,
   PriceListsPage,
   ServiceCatalogPage,
+  PlotterMaterialsPage,
   PlotterPage,
 } from '@centrocolor/features';
 import '@centrocolor/ui/styles.css';
@@ -299,7 +301,20 @@ function App() {
             customerRepository={customerRepository}
           />
         ) : activeId === 'appointment-types' ? (
-          <AppointmentTypesPage repository={appointmentRepository} />
+          <>
+            <PageHeader title="Tipos y parámetros" />
+            <div className="settings-grid">
+              <section>
+                <AppointmentTypesPage
+                  repository={appointmentRepository}
+                  embedded
+                />
+              </section>
+              <section>
+                <EventTypesPage repository={eventRepository} embedded />
+              </section>
+            </div>
+          </>
         ) : activeId === 'events' ? (
           <EventsPage
             repository={eventRepository}
@@ -359,6 +374,8 @@ function App() {
             repository={serviceCatalogRepository}
             customerRepository={customerRepository}
           />
+        ) : activeId === 'plotter-materials' ? (
+          <PlotterMaterialsPage repository={serviceCatalogRepository} />
         ) : activeId === 'customers' ? (
           <CustomersPage
             repository={customerRepository}
@@ -390,7 +407,7 @@ function App() {
           />
         ) : activeId === 'settings' ? (
           <>
-            <PageHeader title="Configuración" />
+            <PageHeader title="Integraciones" />
             <div className="settings-grid">
               <DriveSettingsPage
                 context={context}

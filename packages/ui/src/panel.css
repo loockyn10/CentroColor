@@ -400,7 +400,7 @@
   font-size: var(--fs-sm);
 }
 
-/* ───────── Trabajos: lista y tablero ───────── */
+/* ───────── Pedidos: lista y tablero ───────── */
 .job-row {
   --cols: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 0.9fr) minmax(0, 1.2fr);
   min-height: 68px;
@@ -683,7 +683,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ───────── Eventos y recursos ───────── */
+/* ───────── Presupuestos, reservas y recursos ───────── */
 .matrix-scroll {
   overflow-x: auto;
 }

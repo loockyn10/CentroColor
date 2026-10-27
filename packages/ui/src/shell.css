@@ -446,6 +446,18 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
+.more-sections {
+  display: grid;
+  gap: 20px;
+}
+.more-section h3 {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
 .more-grid button {
   position: relative;
   display: grid;

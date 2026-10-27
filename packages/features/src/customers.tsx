@@ -72,12 +72,12 @@ export function CustomersPage({
   refreshToken?: number;
   onLocalMutation?: () => void;
   paymentRepository: WorkPaymentRepository;
-  /** Opcional: habilita «Trabajos» en la ficha. */
+  /** Opcional: habilita «Pedidos» en la ficha. */
   photoRepository?: PhotoRepository;
   serviceCatalogRepository?: ServiceCatalogRepository;
   /** Abre la ficha de un cliente (p. ej. desde el buscador global). */
   initialCustomerId?: string | null;
-  /** «Nuevo trabajo» con el cliente preseleccionado. */
+  /** «Nuevo pedido» con el cliente preseleccionado. */
   onNewJob?: (customerId: string) => void;
   onOpenJob?: (jobId: string) => void;
 }) {
@@ -356,7 +356,7 @@ export function CustomersPage({
                         icon="camera"
                         onClick={() => onNewJob(selected.id)}
                       >
-                        Nuevo trabajo
+                        Nuevo pedido
                       </Button>
                     )}
                     {selected.phone && (
@@ -417,9 +417,9 @@ export function CustomersPage({
 
               {selected && photoRepository && (
                 <div className="ficha-section">
-                  <h3>Trabajos</h3>
+                  <h3>Pedidos de laboratorio</h3>
                   {jobs.length === 0 ? (
-                    <p className="meta">Sin trabajos fotográficos.</p>
+                    <p className="meta">Sin pedidos de laboratorio.</p>
                   ) : (
                     <div className="rows">
                       {jobs.slice(0, 8).map((row) => (
@@ -434,7 +434,7 @@ export function CustomersPage({
                           onClick={() => onOpenJob?.(row.job.id)}
                         >
                           <span className="what">
-                            {row.itemSummary || 'Trabajo'}
+                            {row.itemSummary || 'Pedido'}
                           </span>
                           <span className="meta">
                             {dueText(row.job.promisedAt)}

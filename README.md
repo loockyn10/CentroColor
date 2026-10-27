@@ -1,6 +1,6 @@
 # CentroColor
 
-Fundación técnica, identidad, acceso, Clientes, POS, inventario, Agenda/Turnos, Eventos/Recursos, Marquetería, Trabajos fotográficos y pagos de trabajos Desktop/Web. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda la operación en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud posteriores a POS siguen pendientes de aplicación y validación operativa real.
+Aplicación operativa Desktop/Web para Mostrador, Laboratorio, Servicios y Taller. La navegación usa el vocabulario del negocio —Pedidos, Producción, Presupuestos y reservas, Agenda, Plotter y Marquetería— mientras las entidades especializadas permanecen separadas. Desktop (Tauri/SQLite) y Web (PWA/Supabase) comparten dominio, contratos y UI. Desktop guarda la operación en SQLite y sincroniza con Supabase tras validar una sesión Cloud; Web usa Supabase directamente. Desktop conserva operación sin Internet. Las migraciones Cloud posteriores a POS siguen pendientes de aplicación y validación operativa real.
 
 ## Requisitos
 

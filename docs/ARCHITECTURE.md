@@ -128,3 +128,11 @@ Capas nuevas en `supabase/functions/_shared`: `public-order-plan.ts` (validació
 El cliente Web agrupa la pantalla pública en `apps/web/src/public-order/` (`model.ts` reglas puras, `client.ts` transporte y cola de subida con reintentos, `print-order-portal.tsx`, `order-tracking.tsx`); la administración de WhatsApp en `whatsapp-admin.ts` y `whatsapp-settings.tsx`. `packages/application/src/whatsapp.ts` define los puertos y `packages/features/src/photo.tsx` consume sólo puertos opcionales (Desktop no los implementa).
 
 Aviso de «listo»: el trigger `photo_job_ready_notification` (migración 20261018010000) inserta la notificación; `private.kick_whatsapp_dispatch` despierta a `whatsapp-dispatch` vía `pg_net` si hay secretos en Vault. Cualquier cliente que cambie el estado (Web o el push de Desktop) pasa por el mismo trigger: la notificación depende del estado Cloud, no del dispositivo.
+
+## Arquitectura funcional de navegación — 26/10/2026
+
+El shell compartido organiza las vistas por tareas del negocio, no por nombres de tablas: Inicio; Mostrador (Nueva venta, Ventas, Clientes, Cobros, Stock); Laboratorio (Pedidos, Nuevo pedido, Producción); Servicios (Presupuestos y reservas, Agenda); Taller (Plotter, Marquetería); y Configuración (Productos, Servicios y precios, Listas de precios, Materiales, Recursos, Tipos y parámetros, Integraciones). Sistema no se muestra mientras no tenga contenido propio.
+
+La reorganización es de presentación y composición. `PhotoJob`, `Event`, `Appointment`, `FrameJob`, `PlotterQuote`, sus repositorios, tablas, RLS, SQLite, outboxes y orden de sincronización no cambian. Los IDs anteriores (`photo-jobs`, `events`, `calendar`, `mouldings`, etc.) se conservan; `plotter-materials` es una vista nueva sobre el repositorio existente, no una entidad nueva.
+
+Agenda agrupa por ahora `CalendarPage`, `AppointmentsPage` y `ResourceCalendarPage`. La proyección temporal que combine Appointment y Event queda como trabajo posterior. Tipos de turno y de reserva se administran juntos en Configuración; las ofertas de Event continúan cerradas a los tipos de SERVICIOS-01. Producción continúa siendo una vista operativa de PhotoJob. Plotter conserva cotizaciones y no se presenta como un workflow productivo completo hasta que exista un PlotterJob.

@@ -67,7 +67,7 @@ pnpm exec supabase functions deploy photo-upload-finalize --no-verify-jwt
 pnpm exec supabase functions deploy photo-upload-submit --no-verify-jwt
 ```
 
-Después, iniciar sesión como owner/admin en CentroColor, abrir **Configuración → Google Drive**, conectar la cuenta y verificar que se cree/abra la carpeta raíz `CentroColor`.
+Después, iniciar sesión como owner/admin en CentroColor, abrir **Configuración → Integraciones → Google Drive**, conectar la cuenta y verificar que se cree/abra la carpeta raíz `CentroColor`.
 
 ## Vercel
 

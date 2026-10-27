@@ -268,7 +268,7 @@ function EventEditor({
     if (
       next === 'cancelled' &&
       !window.confirm(
-        '¿Cancelar este evento? Las reservas futuras dejarán de bloquear disponibilidad.',
+        '¿Cancelar este presupuesto o reserva? Los recursos dejarán de bloquear disponibilidad.',
       )
     )
       return;
@@ -442,7 +442,11 @@ function EventEditor({
         <div className="appointment-editor-heading">
           <div>
             <small>EVENTOS · {context.branchName}</small>
-            <h2>{eventId ? 'Ficha de evento' : 'Crear evento'}</h2>
+            <h2>
+              {eventId
+                ? 'Detalle del presupuesto o reserva'
+                : 'Nuevo presupuesto o reserva'}
+            </h2>
           </div>
           <button type="button" onClick={onClose}>
             ✕
@@ -815,13 +819,12 @@ function EventEditor({
               Subtotal recursos <strong>{money(resourceSubtotal)}</strong>
             </span>
             <span>
-              Total evento{' '}
-              <strong>{money(serviceSubtotal + resourceSubtotal)}</strong>
+              Total <strong>{money(serviceSubtotal + resourceSubtotal)}</strong>
             </span>
           </div>
           <div className="event-wide appointment-editor-actions">
             <button className="customer-primary" disabled={busy} type="submit">
-              {busy ? 'Guardando…' : 'Guardar evento'}
+              {busy ? 'Guardando…' : 'Guardar presupuesto o reserva'}
             </button>
             <button type="button" onClick={onClose}>
               Volver
@@ -873,7 +876,7 @@ function EventEditor({
                   disabled={busy}
                   onClick={() => void quickStatus('cancelled')}
                 >
-                  Cancelar evento
+                  Cancelar presupuesto o reserva
                 </button>
               )}
             </div>
@@ -884,12 +887,14 @@ function EventEditor({
   );
 }
 
-function EventTypesManager({
+export function EventTypesPage({
   repository,
   onMutation,
+  embedded = false,
 }: {
   repository: EventRepository;
   onMutation?: () => void;
+  embedded?: boolean;
 }) {
   const context = useBusinessContext();
   const canManage = ['owner', 'admin'].includes(context.role);
@@ -921,54 +926,57 @@ function EventTypesManager({
     }
   }
   return (
-    <Card className="event-config-card">
-      <h2>Tipos de evento</h2>
-      {error && <p role="alert">{error}</p>}
-      {canManage && (
-        <form onSubmit={(e) => void save(e)}>
-          <input
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Nombre del tipo"
-          />
-          <button className="customer-primary">
-            {editing ? 'Guardar' : 'Crear tipo'}
-          </button>
-        </form>
-      )}
-      {types.map((x) => (
-        <div className="event-config-row" key={x.id}>
-          <strong>{x.name}</strong>
-          <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
-          {canManage && (
-            <>
-              <button
-                onClick={() => {
-                  setEditing(x);
-                  setName(x.name);
-                }}
-              >
-                Editar
-              </button>
-              <button
-                onClick={() =>
-                  void repository
-                    .setTypeActive(context.businessId, x.id, !x.isActive)
-                    .then(() => {
-                      setRefresh((n) => n + 1);
-                      onMutation?.();
-                    })
-                    .catch((e) => setError(errorText(e)))
-                }
-              >
-                {x.isActive ? 'Desactivar' : 'Activar'}
-              </button>
-            </>
-          )}
-        </div>
-      ))}
-    </Card>
+    <>
+      {!embedded && <PageHeader title="Tipos de servicio y reserva" />}
+      <Card className="event-config-card">
+        <h2>Tipos de servicio y reserva</h2>
+        {error && <p role="alert">{error}</p>}
+        {canManage && (
+          <form onSubmit={(e) => void save(e)}>
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nombre del tipo"
+            />
+            <button className="customer-primary">
+              {editing ? 'Guardar' : 'Crear tipo'}
+            </button>
+          </form>
+        )}
+        {types.map((x) => (
+          <div className="event-config-row" key={x.id}>
+            <strong>{x.name}</strong>
+            <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
+            {canManage && (
+              <>
+                <button
+                  onClick={() => {
+                    setEditing(x);
+                    setName(x.name);
+                  }}
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() =>
+                    void repository
+                      .setTypeActive(context.businessId, x.id, !x.isActive)
+                      .then(() => {
+                        setRefresh((n) => n + 1);
+                        onMutation?.();
+                      })
+                      .catch((e) => setError(errorText(e)))
+                  }
+                >
+                  {x.isActive ? 'Desactivar' : 'Activar'}
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </Card>
+    </>
   );
 }
 
@@ -988,7 +996,6 @@ export function EventsPage({
   onMutation?: () => void;
 }) {
   const context = useBusinessContext();
-  const [mode, setMode] = useState<'events' | 'types'>('events');
   const [layout, setLayout] = useState<'board' | 'list'>('board');
   const [filter, setFilter] = useState<'upcoming' | EventStatus>('upcoming');
   const [query, setQuery] = useState('');
@@ -997,7 +1004,6 @@ export function EventsPage({
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (mode !== 'events') return;
     let live = true;
     const timer = window.setTimeout(() => {
       const statuses =
@@ -1028,7 +1034,6 @@ export function EventsPage({
     query,
     refresh,
     refreshToken,
-    mode,
   ]);
   function saved() {
     setEditor(null);
@@ -1079,74 +1084,59 @@ export function EventsPage({
   return (
     <>
       <PageHeader
-        title="Eventos"
+        title="Presupuestos y reservas"
         actions={
-          mode === 'events' ? (
-            <Button
-              variant="primary"
-              icon="plus"
-              onClick={() => setEditor(true)}
-            >
-              Crear evento
-            </Button>
-          ) : undefined
+          <Button variant="primary" icon="plus" onClick={() => setEditor(true)}>
+            Nuevo presupuesto
+          </Button>
         }
       />
       <div className="events-toolbar">
-        <Segmented
-          label="Sección"
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'events', label: 'Eventos' },
-            { value: 'types', label: 'Tipos' },
-          ]}
-        />
-        {mode === 'events' && (
-          <>
-            <div className="search-field">
-              <Icon name="search" />
-              <input
-                type="search"
-                aria-label="Buscar eventos"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Cliente, título o lugar"
-              />
-            </div>
-            <div className="chips" role="group" aria-label="Filtrar eventos">
-              <button
-                type="button"
-                className="chip"
-                aria-pressed={filter === 'upcoming'}
-                onClick={() => setFilter('upcoming')}
-              >
-                Próximos
-              </button>
-              {eventStatuses.map((x) => (
-                <button
-                  key={x}
-                  type="button"
-                  className="chip"
-                  aria-pressed={filter === x}
-                  onClick={() => setFilter(x)}
-                >
-                  {statusLabels[x]}
-                </button>
-              ))}
-            </div>
-            {filter === 'upcoming' && (
-              <Segmented
-                label="Vista"
-                value={layout}
-                onChange={setLayout}
-                options={[
-                  { value: 'board', label: 'Tablero' },
-                  { value: 'list', label: 'Lista' },
-                ]}
-              />
-            )}
-          </>
+        <div className="search-field">
+          <Icon name="search" />
+          <input
+            type="search"
+            aria-label="Buscar presupuestos y reservas"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Cliente, título o lugar"
+          />
+        </div>
+        <div
+          className="chips"
+          role="group"
+          aria-label="Filtrar presupuestos y reservas"
+        >
+          <button
+            type="button"
+            className="chip"
+            aria-pressed={filter === 'upcoming'}
+            onClick={() => setFilter('upcoming')}
+          >
+            Próximos
+          </button>
+          {eventStatuses.map((x) => (
+            <button
+              key={x}
+              type="button"
+              className="chip"
+              aria-pressed={filter === x}
+              onClick={() => setFilter(x)}
+            >
+              {statusLabels[x]}
+            </button>
+          ))}
+        </div>
+        {filter === 'upcoming' && (
+          <Segmented
+            label="Vista"
+            value={layout}
+            onChange={setLayout}
+            options={[
+              { value: 'board', label: 'Tablero' },
+              { value: 'list', label: 'Lista' },
+            ]}
+          />
         )}
       </div>
       {error && (
@@ -1154,9 +1144,7 @@ export function EventsPage({
           {error}
         </p>
       )}
-      {mode === 'types' ? (
-        <EventTypesManager repository={repository} onMutation={onMutation} />
-      ) : asBoard ? (
+      {asBoard ? (
         <div className="board board--events">
           {boardStatuses.map((status) => {
             const column = rows.filter((x) => x.status === status);
@@ -1172,7 +1160,7 @@ export function EventsPage({
                 </header>
                 {column.map(card)}
                 {column.length === 0 && (
-                  <p className="meta pad">Sin eventos.</p>
+                  <p className="meta pad">Sin reservas.</p>
                 )}
               </section>
             );
@@ -1181,7 +1169,10 @@ export function EventsPage({
       ) : (
         <Card className="card--flush">
           {rows.length === 0 ? (
-            <EmptyState icon="star" title="No hay eventos para este filtro" />
+            <EmptyState
+              icon="star"
+              title="No hay presupuestos ni reservas para este filtro"
+            />
           ) : (
             <div className="rows">{rows.map(card)}</div>
           )}

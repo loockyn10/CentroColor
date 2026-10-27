@@ -9,7 +9,7 @@ import {
   navigation,
 } from '@centrocolor/ui';
 
-/** Rutas del panel antes de DESIGN-02 (sidebar plana de 22 entradas). Ninguna se puede perder. */
+/** IDs internos históricos. La reorganización funcional no puede perder ninguno. */
 const legacyViews = [
   'home',
   'new-sale',
@@ -47,35 +47,43 @@ const render = (activeId: string, extra = {}) =>
     }),
   );
 
-describe('navegación del panel (DESIGN-02)', () => {
+describe('navegación funcional del panel', () => {
   it('conserva todas las vistas que existían', () => {
     const reachable = new Set(navigation.map((item) => item.id));
     for (const id of legacyViews) expect(reachable.has(id)).toBe(true);
     expect(reachable.has('payments')).toBe(true);
   });
 
-  it('agrupa los módulos como en la preview aprobada', () => {
+  it('agrupa las tareas por área del negocio', () => {
     expect(navGroups).toEqual([
-      'Hoy',
+      'Inicio',
       'Mostrador',
+      'Laboratorio',
+      'Servicios',
       'Taller',
-      'Agenda',
-      'Catálogo',
-      'Sistema',
+      'Configuración',
     ]);
     expect(navModules.map((module) => module.label)).toEqual([
       'Inicio',
-      'Cobrar · POS',
+      'Nueva venta',
+      'Ventas',
       'Clientes',
       'Cobros',
-      'Trabajos',
+      'Stock',
+      'Pedidos',
+      'Nuevo pedido',
       'Producción',
-      'Marquetería',
+      'Presupuestos y reservas',
+      'Agenda',
       'Plotter',
-      'Agenda y turnos',
-      'Eventos y recursos',
-      'Catálogo',
-      'Configuración',
+      'Marquetería',
+      'Productos',
+      'Servicios y precios',
+      'Listas de precios',
+      'Materiales',
+      'Recursos',
+      'Tipos y parámetros',
+      'Integraciones',
     ]);
   });
 
@@ -89,16 +97,20 @@ describe('navegación del panel (DESIGN-02)', () => {
       }
   });
 
-  it('las sub-vistas (Servicios, Nuevo trabajo, Varillas…) cuelgan de su módulo', () => {
-    expect(moduleFor('photo-services')?.id).toBe('products');
-    expect(moduleFor('services')?.id).toBe('products');
-    expect(moduleFor('price-lists')?.id).toBe('products');
+  it('redistribuye operación y configuración sin cambiar IDs', () => {
+    expect(moduleFor('photo-services')?.id).toBe('services');
+    expect(moduleFor('services')?.id).toBe('services');
+    expect(moduleFor('price-lists')?.id).toBe('price-lists');
     expect(moduleFor('plotter')?.id).toBe('plotter');
-    expect(moduleFor('new-photo-job')?.id).toBe('photo-jobs');
-    expect(moduleFor('mouldings')?.id).toBe('frame-jobs');
-    expect(moduleFor('resources')?.id).toBe('events');
-    expect(moduleFor('stock')?.id).toBe('products');
-    expect(moduleFor('sales')?.id).toBe('new-sale');
+    expect(moduleFor('new-photo-job')?.id).toBe('new-photo-job');
+    expect(moduleFor('plotter-materials')?.id).toBe('plotter-materials');
+    expect(moduleFor('mouldings')?.id).toBe('plotter-materials');
+    expect(moduleFor('materials')?.id).toBe('plotter-materials');
+    expect(moduleFor('resources')?.id).toBe('resources');
+    expect(moduleFor('stock')?.id).toBe('stock');
+    expect(moduleFor('sales')?.id).toBe('sales');
+    expect(moduleFor('resource-calendar')?.id).toBe('calendar');
+    expect(moduleFor('appointment-types')?.id).toBe('appointment-types');
   });
 });
 
@@ -106,14 +118,17 @@ describe('shell responsive', () => {
   it('renderiza barra lateral, tab bar de 5 y contenido', () => {
     const html = render('home');
     for (const label of [
-      'Cobrar · POS',
+      'Nueva venta',
+      'Ventas',
       'Clientes',
       'Cobros',
+      'Pedidos',
       'Producción',
       'Marquetería',
-      'Agenda y turnos',
-      'Eventos y recursos',
-      'Configuración',
+      'Agenda',
+      'Presupuestos y reservas',
+      'Servicios y precios',
+      'Integraciones',
     ])
       expect(html).toContain(label);
     expect(html).toContain('class="tabbar"');
@@ -124,9 +139,9 @@ describe('shell responsive', () => {
 
   it('marca el módulo activo y muestra sus pestañas', () => {
     const html = render('mouldings');
-    expect(html).toContain('aria-label="Marquetería"');
+    expect(html).toContain('aria-label="Materiales"');
     expect(html).toContain('Varillas');
-    expect(html).toContain('Nueva cotización');
+    expect(html).toContain('Otros materiales');
     expect(html).toMatch(/aria-current="page"[^>]*>Varillas/);
   });
 

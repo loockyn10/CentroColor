@@ -379,7 +379,7 @@ export function FrameJobsPage({
   }
   return (
     <>
-      <PageHeader title="Trabajos de marquetería" />
+      <PageHeader title="Marquetería" />
       {message && <p className="appointment-error">{message}</p>}
       {quotes.length > 0 && (
         <Card className="card--flush">

@@ -17,10 +17,10 @@ import { Sheet } from './sheet';
 
 const createItems: Array<{ id: string; label: string; icon: IconName }> = [
   { id: 'new-sale', label: 'Venta', icon: 'cart' },
-  { id: 'new-photo-job', label: 'Trabajo fotográfico', icon: 'camera' },
-  { id: 'new-quote', label: 'Cotización de marco', icon: 'frame' },
+  { id: 'new-photo-job', label: 'Pedido de laboratorio', icon: 'camera' },
+  { id: 'new-quote', label: 'Cotización de marquetería', icon: 'frame' },
   { id: 'appointments', label: 'Turno', icon: 'calendar' },
-  { id: 'events', label: 'Evento', icon: 'star' },
+  { id: 'events', label: 'Presupuesto o reserva', icon: 'star' },
   { id: 'customers', label: 'Cliente', icon: 'users' },
 ];
 
@@ -228,18 +228,27 @@ export function AppShell({
         onClose={() => setMore(false)}
         title="Todos los módulos"
       >
-        <div className="more-grid">
-          {navModules.map((module) => (
-            <button
-              key={module.id}
-              type="button"
-              aria-current={isActive(module) ? 'page' : undefined}
-              onClick={() => go(module.id)}
-            >
-              <Icon name={module.icon} size={28} />
-              {module.short}
-              {renderBadge(module)}
-            </button>
+        <div className="more-sections">
+          {navGroups.map((group) => (
+            <section className="more-section" key={group}>
+              <h3>{group}</h3>
+              <div className="more-grid">
+                {navModules
+                  .filter((module) => module.group === group)
+                  .map((module) => (
+                    <button
+                      key={module.id}
+                      type="button"
+                      aria-current={isActive(module) ? 'page' : undefined}
+                      onClick={() => go(module.id)}
+                    >
+                      <Icon name={module.icon} size={28} />
+                      {module.short}
+                      {renderBadge(module)}
+                    </button>
+                  ))}
+              </div>
+            </section>
           ))}
         </div>
         <Button
