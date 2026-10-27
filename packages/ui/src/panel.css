@@ -1183,6 +1183,7 @@ button.danger-action:hover {
 
 .config-list-selector {
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--s-4);
 }
 
@@ -1190,11 +1191,24 @@ button.danger-action:hover {
   min-width: min(100%, 300px);
 }
 
-.config-list-selector__help {
-  display: grid;
-  justify-items: end;
+.config-list-selector__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: var(--s-2);
+  margin-left: auto;
+}
+
+.config-inline-alert {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: var(--fs-sm);
   text-align: right;
+}
+
+.config-list-selector + .config-section > .config-section-heading {
+  margin-top: var(--s-4);
 }
 
 .config-row {
@@ -1321,8 +1335,17 @@ button.danger-action:hover {
     flex-direction: column;
   }
 
-  .config-list-selector__help {
-    justify-items: stretch;
+  .config-list-selector__actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
+
+  .config-list-selector__actions > button {
+    flex: 1 1 auto;
+  }
+
+  .config-inline-alert {
     text-align: left;
   }
 

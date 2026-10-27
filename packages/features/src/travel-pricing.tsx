@@ -3,7 +3,7 @@ import type { ServiceCatalogRepository } from '@centrocolor/application';
 import { quoteTravel, type TravelPricingSettings } from '@centrocolor/domain';
 import { Button, Sheet } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
-import { ConfigurationCard, MoneyField } from './configuration-ui';
+import { MoneyField } from './configuration-ui';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'No se pudo guardar.';
@@ -34,7 +34,7 @@ function scaledInteger(value: string, digits: number, label: string) {
   return result;
 }
 
-export function TravelPricingCard({
+export function TravelPricingButton({
   repository,
   onMutation,
 }: {
@@ -110,23 +110,14 @@ export function TravelPricingCard({
 
   return (
     <>
-      {notice && <p role="alert">{notice}</p>}
-      <ConfigurationCard
-        title="Viáticos"
-        summary={
-          settings
-            ? `${money(settings.fuelPriceCentsPerLiter)}/l · ${decimal(settings.efficiencyMilliKmPerLiter, 3)} km/l`
-            : 'Sin configurar'
-        }
-        detail={
-          settings
-            ? `Margen adicional: ${decimal(settings.marginBasisPoints, 2)}%`
-            : 'Configuración global del negocio, independiente de la lista de precios.'
-        }
-        actionLabel={settings ? 'Editar' : 'Configurar'}
-        onAction={admin ? edit : undefined}
-        disabled={!admin}
-      />
+      {notice && !open && (
+        <span className="config-inline-alert" role="alert">
+          {notice}
+        </span>
+      )}
+      <Button variant="secondary" disabled={!admin} onClick={edit}>
+        Viáticos
+      </Button>
       <Sheet
         open={open}
         onClose={() => setOpen(false)}

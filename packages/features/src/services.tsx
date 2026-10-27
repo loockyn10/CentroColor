@@ -30,7 +30,7 @@ import {
   ConfigurationSection,
   MoneyField,
 } from './configuration-ui';
-import { TravelPricingCard } from './travel-pricing';
+import { TravelPricingButton } from './travel-pricing';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'Ocurrió un error.';
@@ -493,28 +493,18 @@ export function ServiceCatalogPage({
               ))}
           </select>
         </label>
-        <div className="config-list-selector__help">
-          <span className="meta">
-            Todo lo que configures debajo corresponde a{' '}
-            <strong>{selectedList?.name ?? 'la lista seleccionada'}</strong>.
-          </span>
+        <div className="config-list-selector__actions">
           <Button variant="secondary" onClick={() => setListsOpen(true)}>
             Administrar listas
           </Button>
+          <TravelPricingButton
+            repository={repository}
+            onMutation={onMutation}
+          />
         </div>
       </Card>
       {section === null && (
         <>
-          <ConfigurationSection
-            eyebrow="CONFIGURACIÓN GLOBAL"
-            description="Valores del negocio que no cambian con la lista seleccionada."
-          />
-          <div className="config-card-grid">
-            <TravelPricingCard
-              repository={repository}
-              onMutation={onMutation}
-            />
-          </div>
           <ConfigurationSection
             eyebrow="PRECIOS POR FAMILIA"
             description={`Tarifas correspondientes a ${selectedList?.name ?? 'la lista seleccionada'}.`}
