@@ -11,6 +11,7 @@ import type {
   LedPreset,
   LedController,
   LedPanelReservation,
+  TravelPricingSettings,
 } from '@centrocolor/domain';
 
 export type PlotterQuoteStatus =
@@ -32,6 +33,12 @@ export interface PlotterQuote {
 
 /** Implemented by each app. No UI, SQL or Supabase dependency crosses this boundary. */
 export interface ServiceCatalogRepository {
+  getTravelPricingSettings(
+    businessId: string,
+  ): Promise<TravelPricingSettings | null>;
+  saveTravelPricingSettings(
+    settings: TravelPricingSettings,
+  ): Promise<TravelPricingSettings>;
   listPriceLists(businessId: string): Promise<PriceList[]>;
   savePriceList(list: PriceList): Promise<PriceList>;
   listLabVariants(businessId: string): Promise<LabVariant[]>;

@@ -226,6 +226,7 @@ function App() {
     try {
       // Price lists are a Customer FK and must arrive before Customer pull.
       await syncServiceCatalog('price_list', target.businessId);
+      await syncServiceCatalog('travel_pricing_setting', target.businessId);
       await syncAuthenticatedCustomers(
         target,
         getSupabaseClient(),

@@ -9,8 +9,9 @@ import type {
   LedPreset,
   Resource,
 } from '@centrocolor/domain';
-import { Button, Card, Sheet } from '@centrocolor/ui';
+import { Button, Sheet } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
+import { ConfigurationRow, ConfigurationSection } from './configuration-ui';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'No se pudo guardar.';
@@ -40,6 +41,7 @@ export function ResourceCapacityPanel({
   const [totalPanels, setTotalPanels] = useState('');
   const [panelArea, setPanelArea] = useState('');
   const [pixelsPerPanel, setPixelsPerPanel] = useState('');
+  const [poolOpen, setPoolOpen] = useState(false);
   const [controllerOpen, setControllerOpen] = useState(false);
   const [controllerResource, setControllerResource] = useState('');
   const [controllerPixels, setControllerPixels] = useState('');
@@ -94,7 +96,7 @@ export function ResourceCapacityPanel({
       setNotice('Revisá cantidad, área y píxeles.');
       return;
     }
-    await persist(() =>
+    const saved = await persist(() =>
       repository.saveLedPanelPool({
         id: pool?.id ?? crypto.randomUUID(),
         businessId,
@@ -104,6 +106,7 @@ export function ResourceCapacityPanel({
         isActive: pool?.isActive ?? true,
       }),
     );
+    if (saved) setPoolOpen(false);
   }
   async function saveController() {
     const maxPixels = controllerPixels.trim() ? Number(controllerPixels) : null;
@@ -149,18 +152,125 @@ export function ResourceCapacityPanel({
   return (
     <>
       {notice && <p role="alert">{notice}</p>}
-      <Card>
-        <h2>Capacidad técnica LED</h2>
-        <p className="meta">
-          Determina disponibilidad. No interviene en el precio comercial.
-        </p>
-        <div className="form-row">
+      <ConfigurationSection
+        eyebrow="CAPACIDAD TÉCNICA"
+        title="Inventario LED"
+        description="Determina disponibilidad y compatibilidad. No interviene en el precio comercial."
+      >
+        <div className="rows">
+          <ConfigurationRow
+            title="Pool de paneles"
+            values={
+              pool
+                ? `${pool.totalPanels} paneles · ${pool.panelAreaMm2 / 1_000_000} m² por panel · ${pool.pixelsPerPanel.toLocaleString('es-AR')} px`
+                : 'Capacidad pendiente de configurar'
+            }
+            active={pool?.isActive ?? false}
+            onEdit={admin ? () => setPoolOpen(true) : undefined}
+          />
+        </div>
+      </ConfigurationSection>
+      <ConfigurationSection
+        eyebrow="EQUIPOS"
+        title="Controladores LED"
+        description="Recursos físicos vinculados y su capacidad máxima."
+        actions={
+          admin ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setControllerResource('');
+                setControllerPixels('');
+                setControllerOpen(true);
+              }}
+            >
+              Vincular controlador
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="rows">
+          {controllers.map((controller) => (
+            <ConfigurationRow
+              key={controller.id}
+              title={
+                resources.find(
+                  (resource) => resource.id === controller.resourceId,
+                )?.name ?? controller.resourceId
+              }
+              values={
+                controller.maxPixels === null
+                  ? 'Capacidad pendiente'
+                  : `${controller.maxPixels.toLocaleString('es-AR')} px`
+              }
+              active={
+                resources.find(
+                  (resource) => resource.id === controller.resourceId,
+                )?.isActive ?? false
+              }
+              onEdit={
+                admin
+                  ? () => {
+                      setControllerResource(controller.resourceId);
+                      setControllerPixels(
+                        controller.maxPixels === null
+                          ? ''
+                          : String(controller.maxPixels),
+                      );
+                      setControllerOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      </ConfigurationSection>
+      <ConfigurationSection
+        eyebrow="ATAJOS"
+        title="Tamaños LED habituales"
+        description="Medidas técnicas reutilizables para calcular paneles."
+        actions={
+          admin ? (
+            <Button variant="secondary" onClick={() => setPresetOpen(true)}>
+              + Nuevo tamaño
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="rows">
+          {presets.map((preset) => (
+            <ConfigurationRow
+              key={preset.id}
+              title={preset.name}
+              values={`${preset.widthMm / 1000} × ${preset.heightMm / 1000} m`}
+              active={preset.isActive}
+              onToggle={
+                admin
+                  ? () =>
+                      void persist(() =>
+                        repository.saveLedPreset({
+                          ...preset,
+                          isActive: !preset.isActive,
+                        }),
+                      )
+                  : undefined
+              }
+            />
+          ))}
+        </div>
+      </ConfigurationSection>
+      <Sheet
+        open={poolOpen}
+        onClose={() => setPoolOpen(false)}
+        title="Capacidad del pool LED"
+        variant="side"
+      >
+        <div className="config-editor-form">
           <label>
             Paneles totales
             <input
               inputMode="numeric"
               value={totalPanels}
-              disabled={!admin}
               onChange={(event) => setTotalPanels(event.target.value)}
             />
           </label>
@@ -169,7 +279,6 @@ export function ResourceCapacityPanel({
             <input
               inputMode="decimal"
               value={panelArea}
-              disabled={!admin}
               onChange={(event) => setPanelArea(event.target.value)}
             />
           </label>
@@ -178,89 +287,19 @@ export function ResourceCapacityPanel({
             <input
               inputMode="numeric"
               value={pixelsPerPanel}
-              disabled={!admin}
               onChange={(event) => setPixelsPerPanel(event.target.value)}
             />
           </label>
-          {admin && (
-            <Button onClick={() => void savePool()}>Guardar capacidad</Button>
-          )}
+          <Button onClick={() => void savePool()}>Guardar capacidad</Button>
         </div>
-      </Card>
-      <Card>
-        <div className="pricing-card-heading">
-          <div>
-            <h2>Controladores LED</h2>
-            <p className="meta">Equipos físicos y capacidad máxima.</p>
-          </div>
-          {admin && (
-            <Button variant="secondary" onClick={() => setControllerOpen(true)}>
-              Vincular controlador
-            </Button>
-          )}
-        </div>
-        <div className="rows">
-          {controllers.map((controller) => (
-            <div className="oprow" key={controller.id}>
-              <strong>
-                {resources.find(
-                  (resource) => resource.id === controller.resourceId,
-                )?.name ?? controller.resourceId}
-              </strong>
-              <span className="meta">
-                {controller.maxPixels === null
-                  ? 'Capacidad pendiente'
-                  : `${controller.maxPixels.toLocaleString('es-AR')} px`}
-              </span>
-            </div>
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <div className="pricing-card-heading">
-          <div>
-            <h2>Tamaños LED habituales</h2>
-            <p className="meta">Atajos técnicos para calcular paneles.</p>
-          </div>
-          {admin && (
-            <Button variant="secondary" onClick={() => setPresetOpen(true)}>
-              + Nuevo tamaño
-            </Button>
-          )}
-        </div>
-        <div className="rows">
-          {presets.map((preset) => (
-            <div className="oprow" key={preset.id}>
-              <strong>{preset.name}</strong>
-              <span className="meta">
-                {preset.widthMm / 1000} × {preset.heightMm / 1000} m
-              </span>
-              {admin && (
-                <Button
-                  variant="ghost"
-                  onClick={() =>
-                    void persist(() =>
-                      repository.saveLedPreset({
-                        ...preset,
-                        isActive: !preset.isActive,
-                      }),
-                    )
-                  }
-                >
-                  {preset.isActive ? 'Desactivar' : 'Activar'}
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      </Card>
+      </Sheet>
       <Sheet
         open={controllerOpen}
         onClose={() => setControllerOpen(false)}
         title="Vincular controlador"
         variant="side"
       >
-        <div className="pricing-sheet-form">
+        <div className="config-editor-form">
           <label>
             Equipo físico
             <select
@@ -297,7 +336,7 @@ export function ResourceCapacityPanel({
         title="Nuevo tamaño LED"
         variant="side"
       >
-        <div className="pricing-sheet-form">
+        <div className="config-editor-form">
           <label>
             Nombre
             <input

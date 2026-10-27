@@ -22,7 +22,15 @@ import {
 } from '@centrocolor/domain';
 import { Button, Card, PageHeader, Sheet } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
-import { EventCatalogPanel } from './event-service-catalog';
+import { EventPricingCatalog } from './event-pricing-catalog';
+import {
+  ConfigurationCard,
+  ConfigurationDetailHeader,
+  ConfigurationRow,
+  ConfigurationSection,
+  MoneyField,
+} from './configuration-ui';
+import { TravelPricingCard } from './travel-pricing';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'Ocurrió un error.';
@@ -169,7 +177,7 @@ function PriceListManager({
                 · {list.isActive ? 'Activa' : 'Inactiva'}
               </span>
               {admin && editingId === list.id ? (
-                <div className="pricing-inline-edit">
+                <div className="config-actions">
                   <input
                     aria-label={`Nombre de ${list.name}`}
                     value={editingName}
@@ -189,7 +197,7 @@ function PriceListManager({
                 </div>
               ) : (
                 admin && (
-                  <div className="pricing-row-actions">
+                  <div className="config-actions">
                     <Button
                       variant="ghost"
                       onClick={() => {
@@ -469,7 +477,7 @@ export function ServiceCatalogPage({
         description="Una lista activa para todas las familias comerciales."
       />
       {notice && <p role="alert">{notice}</p>}
-      <Card className="pricing-context">
+      <Card className="config-list-selector">
         <label>
           Lista de precios
           <select
@@ -485,7 +493,7 @@ export function ServiceCatalogPage({
               ))}
           </select>
         </label>
-        <div>
+        <div className="config-list-selector__help">
           <span className="meta">
             Todo lo que configures debajo corresponde a{' '}
             <strong>{selectedList?.name ?? 'la lista seleccionada'}</strong>.
@@ -496,61 +504,83 @@ export function ServiceCatalogPage({
         </div>
       </Card>
       {section === null && (
-        <div className="pricing-family-grid">
-          <PricingFamilyCard
-            title="Laboratorio"
-            summary={`${labServices.length} tamaños · ${variants.filter((variant) => variant.isActive).length} variantes`}
-            detail={`${listLabTiers.length} tramos en ${selectedList?.name ?? 'esta lista'}`}
-            onConfigure={() => setSection('lab')}
+        <>
+          <ConfigurationSection
+            eyebrow="CONFIGURACIÓN GLOBAL"
+            description="Valores del negocio que no cambian con la lista seleccionada."
           />
-          <PricingFamilyCard
-            title="Plotter"
-            summary={`${listPlotterRates.length} tarifas configuradas`}
-            detail="Materiales, precio por m² y reglas especiales"
-            onConfigure={() => setSection('plotter')}
+          <div className="config-card-grid">
+            <TravelPricingCard
+              repository={repository}
+              onMutation={onMutation}
+            />
+          </div>
+          <ConfigurationSection
+            eyebrow="PRECIOS POR FAMILIA"
+            description={`Tarifas correspondientes a ${selectedList?.name ?? 'la lista seleccionada'}.`}
           />
-          <PricingFamilyCard
-            title="Pantalla LED"
-            summary={`${pricedOffers(offersFor(['led_screen']))}/${offersFor(['led_screen']).length} servicios con tarifa`}
-            detail="Configuración comercial por m²"
-            onConfigure={() => setSection('led')}
-          />
-          <PricingFamilyCard
-            title="Pantallas de tela"
-            summary={`${offersFor(['fabric_screen']).length} ofertas configuradas`}
-            detail={`${pricedOffers(offersFor(['fabric_screen']))} con tarifa en esta lista`}
-            onConfigure={() => setSection('fabric')}
-          />
-          <PricingFamilyCard
-            title="Servicios para eventos"
-            summary="Cabina · Espejo mágico · Giro 360"
-            detail={`${pricedOffers(eventServiceOffers)}/${eventServiceOffers.length} con tarifa en esta lista`}
-            onConfigure={() => setSection('events')}
-          />
-          <PricingFamilyCard
-            title="Fotografía / Video"
-            summary="Pendiente de catálogo extensible"
-            detail="No se crean servicios temporales ni enums nuevos en esta fase."
-            disabled
-          />
-          <PricingFamilyCard
-            title="Marquetería"
-            summary="Configuración especializada"
-            detail="Costos, markup, merma, mano de obra y componentes"
-            onConfigure={() => onNavigate?.('mouldings')}
-          />
-        </div>
+          <div className="config-card-grid">
+            <ConfigurationCard
+              title="Laboratorio"
+              summary={`${labServices.length} tamaños · ${variants.filter((variant) => variant.isActive).length} variantes`}
+              detail={`${listLabTiers.length} tramos en ${selectedList?.name ?? 'esta lista'}`}
+              onAction={() => setSection('lab')}
+            />
+            <ConfigurationCard
+              title="Plotter"
+              summary={`${listPlotterRates.length} tarifas configuradas`}
+              detail="Materiales, precio por m² y reglas especiales"
+              onAction={() => setSection('plotter')}
+            />
+            <ConfigurationCard
+              title="Pantalla LED"
+              summary="Precio por m² + operador"
+              detail={`${pricedOffers(offersFor(['led_screen']))} tarifas configuradas`}
+              onAction={() => setSection('led')}
+            />
+            <ConfigurationCard
+              title="Pantallas de tela"
+              summary="Precio sin proyector + con proyector"
+              detail={`${offersFor(['fabric_screen']).length} tamaños · ${pricedOffers(offersFor(['fabric_screen']))} con precio`}
+              onAction={() => setSection('fabric')}
+            />
+            <ConfigurationCard
+              title="Servicios para eventos"
+              summary="Cabina · Espejo Mágico · Giro 360"
+              detail={`${pricedOffers(eventServiceOffers)}/${eventServiceOffers.length} con tarifa en esta lista`}
+              onAction={() => setSection('events')}
+            />
+            <ConfigurationCard
+              title="Fotografía / Video"
+              summary="Pendiente de catálogo extensible"
+              detail="No se crean servicios temporales ni enums nuevos en esta fase."
+              disabled
+              actionLabel="Pendiente Fase C"
+            />
+            <ConfigurationCard
+              title="Marquetería"
+              summary="Configuración especializada"
+              detail="Costos, markup, merma, mano de obra y componentes"
+              onAction={() => onNavigate?.('mouldings')}
+            />
+          </div>
+        </>
       )}
       {section !== null && (
-        <div className="pricing-section-heading">
-          <Button variant="ghost" onClick={() => setSection(null)}>
-            ← Todas las familias
-          </Button>
-          <div>
-            <h2>{sectionTitle}</h2>
-            <span className="meta">Lista: {selectedList?.name}</span>
-          </div>
-        </div>
+        <ConfigurationDetailHeader
+          title={sectionTitle ?? ''}
+          listName={selectedList?.name ?? 'Sin lista activa'}
+          description={
+            section === 'led'
+              ? 'Precio por superficie y componente fijo de operador.'
+              : section === 'fabric'
+                ? 'Precios finales por tamaño, con y sin proyector.'
+                : section === 'events'
+                  ? 'Precios fijos de cada servicio.'
+                  : undefined
+          }
+          onBack={() => setSection(null)}
+        />
       )}
       {section === 'lab' && (
         <>
@@ -736,7 +766,7 @@ export function ServiceCatalogPage({
         </>
       )}
       {(section === 'led' || section === 'fabric' || section === 'events') && (
-        <EventCatalogPanel
+        <EventPricingCatalog
           repository={repository}
           eventRepository={eventRepository}
           selectedListId={listId}
@@ -769,37 +799,6 @@ export function ServiceCatalogPage({
   );
 }
 
-function PricingFamilyCard({
-  title,
-  summary,
-  detail,
-  onConfigure,
-  disabled = false,
-}: {
-  title: string;
-  summary: string;
-  detail: string;
-  onConfigure?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <Card className="pricing-family-card">
-      <div>
-        <h2>{title}</h2>
-        <strong>{summary}</strong>
-        <p className="meta">{detail}</p>
-      </div>
-      <Button
-        variant={disabled ? 'ghost' : 'secondary'}
-        disabled={disabled || !onConfigure}
-        onClick={onConfigure}
-      >
-        {disabled ? 'Pendiente Fase C' : 'Configurar'}
-      </Button>
-    </Card>
-  );
-}
-
 function LabTierCard({
   variant,
   tiers,
@@ -820,6 +819,7 @@ function LabTierCard({
   const [min, setMin] = useState('1');
   const [max, setMax] = useState('');
   const [price, setPrice] = useState('');
+  const [editing, setEditing] = useState(false);
   return (
     <Card>
       <h2>
@@ -831,27 +831,43 @@ function LabTierCard({
         {tiers
           .sort((a, b) => a.minQuantity - b.minQuantity)
           .map((tier) => (
-            <div className="oprow" key={tier.id}>
-              <span>
-                {tier.minQuantity}–{tier.maxQuantity ?? '∞'} copias
-              </span>
-              <span>{money(tier.unitPriceCents)} / copia</span>
-              {admin && (
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setMin(String(tier.minQuantity));
-                    setMax(tier.maxQuantity?.toString() ?? '');
-                    setPrice(pesos(tier.unitPriceCents));
-                  }}
-                >
-                  Editar
-                </Button>
-              )}
-            </div>
+            <ConfigurationRow
+              key={tier.id}
+              title={`${tier.minQuantity}–${tier.maxQuantity ?? '∞'} copias`}
+              values={
+                <span className="config-value">
+                  <small>Precio por copia</small>
+                  <strong>{money(tier.unitPriceCents)}</strong>
+                </span>
+              }
+              active={variant.isActive}
+              onEdit={
+                admin
+                  ? () => {
+                      setMin(String(tier.minQuantity));
+                      setMax(tier.maxQuantity?.toString() ?? '');
+                      setPrice(pesos(tier.unitPriceCents));
+                      setEditing(true);
+                    }
+                  : undefined
+              }
+            />
           ))}
       </div>
-      {admin && (
+      {admin && !editing && (
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setMin('1');
+            setMax('');
+            setPrice('');
+            setEditing(true);
+          }}
+        >
+          + Nuevo tramo
+        </Button>
+      )}
+      {admin && editing && (
         <div className="form-row">
           <label>
             Desde
@@ -871,26 +887,26 @@ function LabTierCard({
               onChange={(e) => setMax(e.target.value)}
             />
           </label>
-          <label>
-            Precio por copia ($)
-            <input
-              inputMode="decimal"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-            />
-          </label>
+          <MoneyField
+            label="Precio por copia"
+            value={price}
+            onChange={setPrice}
+          />
           <Button
-            onClick={() =>
+            onClick={() => {
               void onSave(
                 variant.id,
                 min,
                 max,
                 price,
                 tiers.find((x) => x.minQuantity === Number(min)),
-              )
-            }
+              ).then(() => setEditing(false));
+            }}
           >
             Guardar tramo
+          </Button>
+          <Button variant="ghost" onClick={() => setEditing(false)}>
+            Cancelar
           </Button>
         </div>
       )}
@@ -1015,29 +1031,42 @@ function RateRow({
   onSave: (value: string) => void;
 }) {
   const [value, setValue] = useState(rate ? pesos(rate.amountCents) : '');
+  const [editing, setEditing] = useState(false);
   return (
-    <div className="oprow">
-      <span>{label}</span>
-      <label>
-        Precio ($)
-        <input
-          inputMode="decimal"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          disabled={!admin}
-          placeholder="Pendiente"
-        />
-      </label>
-      {admin && (
-        <Button
-          variant="ghost"
-          onClick={() => onSave(value)}
-          disabled={!value.trim()}
-        >
-          Guardar
-        </Button>
+    <>
+      <ConfigurationRow
+        title={label}
+        values={
+          <span className="config-value">
+            <small>Precio</small>
+            <strong>{rate ? money(rate.amountCents) : 'Sin configurar'}</strong>
+          </span>
+        }
+        active={Boolean(rate)}
+        onEdit={admin ? () => setEditing(true) : undefined}
+      />
+      {admin && editing && (
+        <div className="form-row">
+          <MoneyField
+            label={`Precio · ${label}`}
+            value={value}
+            onChange={setValue}
+          />
+          <Button
+            onClick={() => {
+              onSave(value);
+              setEditing(false);
+            }}
+            disabled={!value.trim()}
+          >
+            Guardar cambios
+          </Button>
+          <Button variant="ghost" onClick={() => setEditing(false)}>
+            Cancelar
+          </Button>
+        </div>
       )}
-    </div>
+    </>
   );
 }
 

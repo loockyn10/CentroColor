@@ -11,6 +11,7 @@ import {
   ledAvailability,
   ledOfferBasePrice,
   quoteEventService,
+  quoteTravel,
   windowsOverlap,
   type EventOffer,
   type EventOfferRate,
@@ -22,6 +23,8 @@ import {
   type PriceList,
   type Resource,
   type ResourceReservation,
+  type TravelPricingSettings,
+  type TravelQuote,
 } from '@centrocolor/domain';
 import { Button, Card } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
@@ -38,11 +41,16 @@ const mm = (cm: string) => {
     throw new Error('Ingresá medidas en cm.');
   return n;
 };
-const cents = (v: string) => {
-  const n = v.trim().replaceAll('.', '').replace(',', '.');
-  if (!/^\d+(?:\.\d{1,2})?$/.test(n)) throw new Error('Viáticos inválidos.');
-  const [a, b = ''] = n.split('.');
-  return Number(a) * 100 + Number(b.padEnd(2, '0'));
+const distanceMeters = (value: string) => {
+  const normalized = value.trim().replace(',', '.');
+  if (!/^\d+(?:\.\d{1,3})?$/.test(normalized))
+    throw new Error('Ingresá la distancia de ida en km, con hasta tres decimales.');
+  const [kilometers, meters = ''] = normalized.split('.');
+  const result =
+    Number(kilometers) * 1_000 + Number(meters.padEnd(3, '0'));
+  if (!Number.isSafeInteger(result))
+    throw new Error('La distancia está fuera de rango.');
+  return result;
 };
 
 type Prepared = {
@@ -50,6 +58,8 @@ type Prepared = {
   priceListId: string;
   baseCents: number;
   travelCents: number;
+  travelQuote: TravelQuote | null;
+  travelSettings: TravelPricingSettings | null;
   window: { startsAt: string; endsAt: string };
   widthMm: number | null;
   heightMm: number | null;
@@ -58,6 +68,7 @@ type Prepared = {
   controllerId: string | null;
   availableControllerIds: string[];
   resources: string[];
+  includeProjector: boolean;
 };
 
 export function EventServiceComposer({
@@ -96,14 +107,17 @@ export function EventServiceComposer({
   const [pool, setPool] = useState<LedPanelPool | null>(null),
     [presets, setPresets] = useState<LedPreset[]>([]);
   const [controllers, setControllers] = useState<LedController[]>([]);
+  const [travelSettings, setTravelSettings] =
+    useState<TravelPricingSettings | null>(null);
   const [customerListId, setCustomerListId] = useState<string | null>(null);
   const [offerId, setOfferId] = useState(''),
     [presetId, setPresetId] = useState('');
   const [width, setWidth] = useState(''),
     [height, setHeight] = useState('');
-  const [travel, setTravel] = useState('0'),
+  const [oneWayDistance, setOneWayDistance] = useState('0'),
     [before, setBefore] = useState('0'),
     [after, setAfter] = useState('0');
+  const [includeProjector, setIncludeProjector] = useState(false);
   const [controllerId, setControllerId] = useState(''),
     [prepared, setPrepared] = useState<Prepared | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -117,8 +131,9 @@ export function EventServiceComposer({
       catalog.getLedPanelPool(businessId),
       catalog.listLedPresets(businessId),
       catalog.listLedControllers(businessId),
+      catalog.getTravelPricingSettings(businessId),
     ])
-      .then(([a, b, c, d, e, f, g]) => {
+      .then(([a, b, c, d, e, f, g, h]) => {
         if (live) {
           setLists(a);
           setOffers(b);
@@ -127,6 +142,7 @@ export function EventServiceComposer({
           setPool(e);
           setPresets(f);
           setControllers(g);
+          setTravelSettings(h);
         }
       })
       .catch((e) => live && setNotice(errorText(e)));
@@ -158,13 +174,18 @@ export function EventServiceComposer({
     presetId,
     width,
     height,
-    travel,
+    oneWayDistance,
     before,
     after,
     startsAt,
     endsAt,
     customerListId,
+    includeProjector,
+    travelSettings,
   ]);
+  useEffect(() => {
+    setIncludeProjector(false);
+  }, [offerId]);
   const offer = offers.find((x) => x.id === offerId);
   const selectedPreset = presets.find((x) => x.id === presetId);
   async function check() {
@@ -273,11 +294,11 @@ export function EventServiceComposer({
           );
         availableControllers = availability.controllers.map((x) => x.id);
       } else {
-        baseCents = eventOfferBasePrice(offer, rate);
+        baseCents = eventOfferBasePrice(offer, rate, includeProjector);
         if (!offer.primaryResourceId)
           throw new Error('Configurá el recurso físico del servicio.');
         neededResources.push(offer.primaryResourceId);
-        if (offer.withProjector) {
+        if (includeProjector) {
           if (!offer.projectorResourceId)
             throw new Error('Configurá el proyector.');
           neededResources.push(offer.projectorResourceId);
@@ -306,14 +327,22 @@ export function EventServiceComposer({
         widthMm = offer.widthMm;
         heightMm = offer.heightMm;
       }
-      const travelCents = cents(travel);
-      if (!Number.isSafeInteger(travelCents))
-        throw new Error('Viáticos fuera de rango.');
+      const oneWayDistanceMeters = distanceMeters(oneWayDistance);
+      if (oneWayDistanceMeters > 0 && !travelSettings)
+        throw new Error(
+          'Configurá Viáticos en Configuración → Precios antes de cotizar un traslado.',
+        );
+      const travelQuote = travelSettings
+        ? quoteTravel(travelSettings, oneWayDistanceMeters)
+        : null;
+      const travelCents = travelQuote?.totalCents ?? 0;
       setPrepared({
         offer,
         priceListId,
         baseCents,
         travelCents,
+        travelQuote,
+        travelSettings,
         window,
         widthMm,
         heightMm,
@@ -322,6 +351,7 @@ export function EventServiceComposer({
         controllerId: availableControllers[0] ?? null,
         availableControllerIds: availableControllers,
         resources: neededResources,
+        includeProjector,
       });
       setControllerId(availableControllers[0] ?? '');
       setNotice(null);
@@ -351,13 +381,28 @@ export function EventServiceComposer({
       widthMm: prepared.widthMm,
       heightMm: prepared.heightMm,
       projection: prepared.offer.projection,
-      withProjector: prepared.offer.withProjector,
+      withProjector: prepared.includeProjector,
       window: prepared.window,
       panels: prepared.panels,
       pixels: prepared.pixels,
       controllerResourceId: controllerId || null,
       baseCents: prepared.baseCents,
       travelCents: prepared.travelCents,
+      travel: prepared.travelQuote
+        ? {
+            oneWayDistanceMeters:
+              prepared.travelQuote.oneWayDistanceMeters,
+            totalDistanceMeters: prepared.travelQuote.totalDistanceMeters,
+            fuelMilliLiters: prepared.travelQuote.fuelMilliLiters,
+            fuelPriceCentsPerLiter:
+              prepared.travelSettings!.fuelPriceCentsPerLiter,
+            efficiencyMilliKmPerLiter:
+              prepared.travelSettings!.efficiencyMilliKmPerLiter,
+            marginBasisPoints: prepared.travelSettings!.marginBasisPoints,
+            baseCostCents: prepared.travelQuote.baseCostCents,
+            totalCents: prepared.travelQuote.totalCents,
+          }
+        : null,
       totalCents: quote.totalCents,
     };
     const service: EventServiceItem = {
@@ -391,6 +436,7 @@ export function EventServiceComposer({
             parentServiceItemId: id,
             priceListId: prepared.priceListId,
             travelCents: prepared.travelCents,
+            travel: snapshot.travel,
           },
         }
       : null;
@@ -431,6 +477,7 @@ export function EventServiceComposer({
     onAdd(service, travelLine, reservations, led);
     setPrepared(null);
     setOfferId('');
+    setOneWayDistance('0');
     setNotice(null);
   }
   return (
@@ -489,12 +536,26 @@ export function EventServiceComposer({
             )}
           </>
         )}
+        {offer?.kind === 'fabric_screen' && offer.withProjector && (
+          <label>
+            Variante
+            <select
+              value={includeProjector ? 'with' : 'without'}
+              onChange={(event) =>
+                setIncludeProjector(event.target.value === 'with')
+              }
+            >
+              <option value="without">Sin proyector</option>
+              <option value="with">Con proyector</option>
+            </select>
+          </label>
+        )}
         <label>
-          Viáticos $
+          Distancia de ida (km)
           <input
             inputMode="decimal"
-            value={travel}
-            onChange={(e) => setTravel(e.target.value)}
+            value={oneWayDistance}
+            onChange={(e) => setOneWayDistance(e.target.value)}
           />
         </label>
         <label>
@@ -525,6 +586,15 @@ export function EventServiceComposer({
           <span>
             Viáticos <strong>{money(prepared.travelCents)}</strong>
           </span>
+          {prepared.travelQuote && prepared.travelQuote.totalDistanceMeters > 0 && (
+            <span className="meta">
+              {prepared.travelQuote.totalDistanceMeters / 1_000} km totales ·{' '}
+              {(prepared.travelQuote.fuelMilliLiters / 1_000)
+                .toFixed(3)
+                .replace('.', ',')}{' '}
+              litros · combustible {money(prepared.travelQuote.baseCostCents)}
+            </span>
+          )}
           {prepared.panels && (
             <span>
               {prepared.panels} paneles ·{' '}

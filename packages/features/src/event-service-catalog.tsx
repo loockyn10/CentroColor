@@ -99,6 +99,8 @@ export function EventCatalogPanel({
         offerId: offer.id,
         priceListId: selectedListId,
         amountCents: cents(value),
+        operatorAmountCents: existing?.operatorAmountCents ?? 0,
+        withProjectorAmountCents: existing?.withProjectorAmountCents ?? null,
       }),
     );
   }

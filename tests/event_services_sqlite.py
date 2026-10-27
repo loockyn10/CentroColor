@@ -16,6 +16,27 @@ def main() -> None:
         db.executescript(path.read_text(encoding='utf8'))
     db.execute('insert into authorized_context values(1,?,?,?,?,?,?,?,?)',
                ('owner', 'Owner', BUSINESS, 'CentroColor', 'branch', 'Principal', 'owner', NOW))
+    offer_rate_columns = {
+        row[1] for row in db.execute('pragma table_info(event_offer_rates)')
+    }
+    assert {'operator_amount_cents', 'with_projector_amount_cents'} <= offer_rate_columns
+    db.execute(
+        '''insert into travel_pricing_settings(
+           id,business_id,fuel_price_cents_per_liter,efficiency_milli_km_per_liter,
+           margin_basis_points,created_at,updated_at)
+           values('travel',?,160000,10000,2000,?,?)''',
+        (BUSINESS, NOW, NOW),
+    )
+    assert db.execute(
+        "select count(*) from pricing_settings_outbox where entity_type='travel_pricing_setting'"
+    ).fetchone()[0] == 1
+    db.execute(
+        "update travel_pricing_settings set margin_basis_points=2500,local_revision=local_revision+1 where id='travel'"
+    )
+    travel_outbox = db.execute(
+        "select local_revision,status from pricing_settings_outbox where entity_type='travel_pricing_setting'"
+    ).fetchone()
+    assert travel_outbox == (1, 'pending')
     db.execute("insert into customers(id,business_id,full_name,is_active,created_at,updated_at,sync_origin) values('customer',?,'Cliente',1,?,?,'remote')",
                (BUSINESS, NOW, NOW))
     db.execute("insert into price_lists(id,business_id,name,kind,is_default,is_active,created_at,updated_at,sync_origin) values('public',?,'Público','public',1,1,?,?,'remote')",

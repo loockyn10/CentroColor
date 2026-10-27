@@ -14,6 +14,80 @@ export interface PriceList {
   updatedAt: string;
 }
 
+/** Global business configuration. Decimal UI values are stored as scaled integers. */
+export interface TravelPricingSettings {
+  id: string;
+  businessId: string;
+  fuelPriceCentsPerLiter: number;
+  /** 10 km/l is stored as 10_000. */
+  efficiencyMilliKmPerLiter: number;
+  /** 20% is stored as 2_000 basis points. */
+  marginBasisPoints: number;
+}
+
+export interface TravelQuote {
+  oneWayDistanceMeters: number;
+  totalDistanceMeters: number;
+  fuelMilliLiters: number;
+  baseCostCents: number;
+  totalCents: number;
+}
+
+const roundedRatio = (numerator: bigint, denominator: bigint): bigint => {
+  if (denominator <= 0n) throw new Error('El divisor debe ser positivo.');
+  return (numerator + denominator / 2n) / denominator;
+};
+
+/** Calculates round-trip travel with integer arithmetic; no binary floats enter money. */
+export function quoteTravel(
+  settings: TravelPricingSettings,
+  oneWayDistanceMeters: number,
+): TravelQuote {
+  if (!Number.isSafeInteger(oneWayDistanceMeters) || oneWayDistanceMeters < 0)
+    throw new Error('La distancia debe expresarse en metros enteros.');
+  if (
+    !Number.isSafeInteger(settings.fuelPriceCentsPerLiter) ||
+    settings.fuelPriceCentsPerLiter <= 0
+  )
+    throw new Error('El precio del combustible es inválido.');
+  if (
+    !Number.isSafeInteger(settings.efficiencyMilliKmPerLiter) ||
+    settings.efficiencyMilliKmPerLiter <= 0
+  )
+    throw new Error('El rendimiento del vehículo es inválido.');
+  if (
+    !Number.isSafeInteger(settings.marginBasisPoints) ||
+    settings.marginBasisPoints < 0 ||
+    settings.marginBasisPoints > 100_000
+  )
+    throw new Error('El margen adicional es inválido.');
+  const totalDistanceMeters = oneWayDistanceMeters * 2;
+  if (!Number.isSafeInteger(totalDistanceMeters))
+    throw new Error('La distancia está fuera de rango.');
+  const distance = BigInt(totalDistanceMeters);
+  const efficiency = BigInt(settings.efficiencyMilliKmPerLiter);
+  const fuelPrice = BigInt(settings.fuelPriceCentsPerLiter);
+  const baseCost = roundedRatio(distance * fuelPrice, efficiency);
+  const total = roundedRatio(
+    distance * fuelPrice * BigInt(10_000 + settings.marginBasisPoints),
+    efficiency * 10_000n,
+  );
+  const fuelMilliLiters = roundedRatio(distance * 1_000n, efficiency);
+  if (
+    [baseCost, total, fuelMilliLiters].some(
+      (value) => value > BigInt(Number.MAX_SAFE_INTEGER),
+    )
+  )
+    throw new Error('El cálculo de viáticos está fuera de rango.');
+  return {
+    oneWayDistanceMeters,
+    totalDistanceMeters,
+    fuelMilliLiters: Number(fuelMilliLiters),
+    baseCostCents: Number(baseCost),
+    totalCents: Number(total),
+  };
+}
+
 export function effectivePriceListId(
   customer: { priceListId?: string | null } | null,
   lists: PriceList[],
@@ -497,6 +571,10 @@ export interface EventOfferRate {
   priceListId: string;
   /** LED is cents/m²; every other offer is a fixed service price. */
   amountCents: number;
+  /** Fixed operator component, currently used by LED. */
+  operatorAmountCents: number;
+  /** Total fixed price when a fabric screen includes its projector. */
+  withProjectorAmountCents: number | null;
 }
 export interface LedPanelPool {
   id: string;
@@ -535,11 +613,17 @@ export interface LedPanelReservation {
 export function eventOfferBasePrice(
   offer: EventOffer,
   rate: EventOfferRate,
+  includeProjector = offer.withProjector,
 ): number {
   if (!offer.isActive || offer.id !== rate.offerId)
     throw new Error('Servicio no disponible.');
   if (offer.kind === 'led_screen')
     throw new Error('LED requiere las medidas de la pantalla.');
+  if (offer.kind === 'fabric_screen' && includeProjector) {
+    if (rate.withProjectorAmountCents === null)
+      throw new Error('Falta configurar el precio con proyector.');
+    return requireCents(rate.withProjectorAmountCents);
+  }
   return requireCents(rate.amountCents);
 }
 export function ledOfferBasePrice(
@@ -547,5 +631,8 @@ export function ledOfferBasePrice(
   widthMm: number,
   heightMm: number,
 ): number {
-  return areaPriceCents(widthMm, heightMm, rate.amountCents);
+  const areaCents = areaPriceCents(widthMm, heightMm, rate.amountCents);
+  const total = areaCents + requireCents(rate.operatorAmountCents);
+  if (!Number.isSafeInteger(total)) throw new Error('Precio fuera de rango.');
+  return total;
 }

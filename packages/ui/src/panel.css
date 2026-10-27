@@ -1099,6 +1099,245 @@ button.danger-action:hover {
   display: grid;
   gap: var(--s-3);
 }
+
+/* Shared grammar for configuration catalogues (Precios and Recursos). */
+.config-section-heading,
+.config-detail-heading,
+.config-card__title,
+.config-actions,
+.config-row,
+.config-row__values,
+.config-list-selector,
+.money-input {
+  display: flex;
+  align-items: center;
+}
+
+.config-section-heading {
+  justify-content: space-between;
+  gap: var(--s-4);
+  margin: var(--s-6) 0 var(--s-3);
+}
+
+.config-section-heading h2,
+.config-detail-heading h2,
+.config-card h2 {
+  margin: 0;
+}
+
+.config-section-heading .meta,
+.config-detail-heading .meta,
+.config-card .meta {
+  margin: var(--s-2) 0 0;
+}
+
+.config-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.config-card {
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--s-5);
+}
+
+.config-card__body {
+  display: grid;
+  gap: var(--s-2);
+}
+
+.config-card__title {
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+.config-card__summary {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: 1.12;
+}
+
+.config-detail-heading {
+  align-items: flex-start;
+  gap: var(--s-4);
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--s-4);
+}
+
+.config-list-context {
+  display: inline-block;
+  margin-top: var(--s-3);
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  background: var(--ink-900);
+  color: var(--paper-0);
+  font: 500 var(--fs-xs) / 1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.config-list-selector {
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+
+.config-list-selector > label {
+  min-width: min(100%, 300px);
+}
+
+.config-list-selector__help {
+  display: grid;
+  justify-items: end;
+  gap: var(--s-2);
+  text-align: right;
+}
+
+.config-row {
+  min-height: 72px;
+  gap: var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.config-row:last-child {
+  border-bottom: 0;
+}
+
+.config-row__identity {
+  display: grid;
+  gap: 3px;
+  min-width: 190px;
+  flex: 1 1 240px;
+}
+
+.config-row__values {
+  flex: 1 1 280px;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+}
+
+.config-value {
+  display: grid;
+  gap: 2px;
+}
+
+.config-value small {
+  color: var(--text-muted);
+}
+
+.config-value strong {
+  font-family: var(--font-mono);
+}
+
+.config-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.config-editor-form {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.config-editor-form__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.money-input {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.money-input:focus-within {
+  outline: 3px solid color-mix(in srgb, var(--brand) 55%, transparent);
+  outline-offset: 1px;
+}
+
+.money-input > span {
+  padding-left: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.money-input input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.resource-inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-3);
+}
+
+.resource-inventory-card {
+  display: grid;
+  gap: var(--s-3);
+  min-height: 170px;
+}
+
+.resource-inventory-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .resource-inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .config-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 620px) {
+  .config-card-grid,
+  .resource-inventory-grid,
+  .config-editor-form__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .config-section-heading,
+  .config-detail-heading,
+  .config-list-selector {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .config-list-selector__help {
+    justify-items: stretch;
+    text-align: left;
+  }
+
+  .config-card {
+    min-height: auto;
+  }
+
+  .config-row__identity,
+  .config-row__values,
+  .config-actions {
+    flex-basis: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+}
 @media (max-width: 720px) {
   .pricing-context {
     grid-template-columns: 1fr;

@@ -4,6 +4,16 @@ import { getSupabaseClient } from './cloud-config';
 
 type Row = Record<string, unknown>;
 const specs = {
+  travel_pricing_setting: {
+    table: 'travel_pricing_settings',
+    fields: [
+      'fuel_price_cents_per_liter',
+      'efficiency_milli_km_per_liter',
+      'margin_basis_points',
+    ],
+    booleans: [],
+    json: [],
+  },
   price_list: {
     table: 'price_lists',
     fields: ['name', 'kind', 'is_default', 'is_active'],
@@ -73,7 +83,13 @@ const specs = {
   },
   event_offer_rate: {
     table: 'event_offer_rates',
-    fields: ['offer_id', 'price_list_id', 'amount_cents'],
+    fields: [
+      'offer_id',
+      'price_list_id',
+      'amount_cents',
+      'operator_amount_cents',
+      'with_projector_amount_cents',
+    ],
     booleans: [],
     json: [],
   },
@@ -139,8 +155,9 @@ export async function catalogSyncIssues(
     }>
   >(
     `SELECT id,'Servicios y precios' source,entity_type,entity_id,status,last_error FROM service_catalog_outbox WHERE business_id=?
-     UNION ALL SELECT id,'Servicios/LED' source,entity_type,entity_id,status,last_error FROM event_service_outbox WHERE business_id=?`,
-    [businessId, businessId],
+     UNION ALL SELECT id,'Servicios/LED' source,entity_type,entity_id,status,last_error FROM event_service_outbox WHERE business_id=?
+     UNION ALL SELECT id,'Configuración de precios' source,entity_type,entity_id,status,last_error FROM pricing_settings_outbox WHERE business_id=?`,
+    [businessId, businessId, businessId],
   );
   return rows.map((r) => ({
     id: r.id,
@@ -178,9 +195,12 @@ export async function syncServiceCatalog(
 ) {
   const spec = specFor(type);
   const eventService = type.startsWith('event_') || type.startsWith('led_');
-  const outbox = eventService
-    ? 'event_service_outbox'
-    : 'service_catalog_outbox';
+  const travelSettings = type === 'travel_pricing_setting';
+  const outbox = travelSettings
+    ? 'pricing_settings_outbox'
+    : eventService
+      ? 'event_service_outbox'
+      : 'service_catalog_outbox';
   const cursorTable = eventService
     ? 'event_service_cursor'
     : 'service_catalog_cursor';

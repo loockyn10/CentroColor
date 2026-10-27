@@ -5,8 +5,11 @@ import {
   labUnitPrice,
   ledAvailability,
   effectiveWindow,
+  eventOfferBasePrice,
+  ledOfferBasePrice,
   quoteEventService,
   quotePlotter,
+  quoteTravel,
   rollFit,
   type LabPriceTier,
   type LabVariant,
@@ -47,6 +50,94 @@ const material = (
   name: code,
   rollWidthMm,
   isActive: true,
+});
+
+describe('pricing UX calculations', () => {
+  const travelSettings = {
+    id: 'travel',
+    businessId: 'b',
+    fuelPriceCentsPerLiter: 160_000,
+    efficiencyMilliKmPerLiter: 10_000,
+    marginBasisPoints: 2_000,
+  };
+  const fabricOffer = {
+    id: 'fabric',
+    businessId: 'b',
+    kind: 'fabric_screen' as const,
+    name: 'Pantalla 3 × 2',
+    widthMm: 3_000,
+    heightMm: 2_000,
+    projection: 'front' as const,
+    withProjector: true,
+    primaryResourceId: 'screen',
+    projectorResourceId: 'projector',
+    isActive: true,
+  };
+  const rate = {
+    id: 'rate',
+    businessId: 'b',
+    offerId: 'fabric',
+    priceListId: 'public',
+    amountCents: 4_000_000,
+    operatorAmountCents: 750_000,
+    withProjectorAmountCents: 5_500_000,
+  };
+
+  it('calcula ida y vuelta, combustible y margen sólo con enteros', () => {
+    expect(quoteTravel(travelSettings, 25_000)).toEqual({
+      oneWayDistanceMeters: 25_000,
+      totalDistanceMeters: 50_000,
+      fuelMilliLiters: 5_000,
+      baseCostCents: 800_000,
+      totalCents: 960_000,
+    });
+    expect(quoteTravel(travelSettings, 1)).toMatchObject({
+      totalDistanceMeters: 2,
+      totalCents: 38,
+    });
+    expect(() => quoteTravel(travelSettings, 1.5)).toThrow('metros enteros');
+  });
+
+  it('redondea cada salida a la unidad entera más cercana, con empates hacia arriba', () => {
+    const halfCent = {
+      ...travelSettings,
+      fuelPriceCentsPerLiter: 1,
+      efficiencyMilliKmPerLiter: 1_000,
+      marginBasisPoints: 0,
+    };
+    expect(quoteTravel(halfCent, 250)).toEqual({
+      oneWayDistanceMeters: 250,
+      totalDistanceMeters: 500,
+      fuelMilliLiters: 500,
+      baseCostCents: 1,
+      totalCents: 1,
+    });
+  });
+
+  it('aplica el margen sobre el costo exacto antes del redondeo monetario final', () => {
+    const fractionalCost = {
+      ...travelSettings,
+      fuelPriceCentsPerLiter: 1,
+      efficiencyMilliKmPerLiter: 1_000,
+      marginBasisPoints: 5_000,
+    };
+    expect(quoteTravel(fractionalCost, 250)).toMatchObject({
+      baseCostCents: 1,
+      totalCents: 1,
+    });
+  });
+
+  it('separa las variantes de tela y suma el operador al LED', () => {
+    expect(eventOfferBasePrice(fabricOffer, rate, false)).toBe(4_000_000);
+    expect(eventOfferBasePrice(fabricOffer, rate, true)).toBe(5_500_000);
+    expect(
+      ledOfferBasePrice(
+        { ...rate, offerId: 'led', amountCents: 1_000_000 },
+        3_000,
+        2_000,
+      ),
+    ).toBe(6_750_000);
+  });
 });
 const rate = (
   code: string,

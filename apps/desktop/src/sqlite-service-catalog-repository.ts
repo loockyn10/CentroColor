@@ -16,6 +16,7 @@ import type {
   LedPreset,
   LedController,
   LedPanelReservation,
+  TravelPricingSettings,
 } from '@centrocolor/domain';
 
 type Row = Record<string, unknown>;
@@ -32,6 +33,13 @@ const fromList = (r: Row): PriceList => ({
   isActive: bool(r, 'is_active'),
   createdAt: str(r, 'created_at'),
   updatedAt: str(r, 'updated_at'),
+});
+const fromTravelSettings = (r: Row): TravelPricingSettings => ({
+  id: str(r, 'id'),
+  businessId: str(r, 'business_id'),
+  fuelPriceCentsPerLiter: num(r, 'fuel_price_cents_per_liter'),
+  efficiencyMilliKmPerLiter: num(r, 'efficiency_milli_km_per_liter'),
+  marginBasisPoints: num(r, 'margin_basis_points'),
 });
 const fromVariant = (r: Row): LabVariant => ({
   id: str(r, 'id'),
@@ -100,6 +108,11 @@ const fromOfferRate = (r: Row): EventOfferRate => ({
   offerId: str(r, 'offer_id'),
   priceListId: str(r, 'price_list_id'),
   amountCents: num(r, 'amount_cents'),
+  operatorAmountCents: num(r, 'operator_amount_cents'),
+  withProjectorAmountCents:
+    r.with_projector_amount_cents == null
+      ? null
+      : num(r, 'with_projector_amount_cents'),
 });
 const fromPool = (r: Row): LedPanelPool => ({
   id: str(r, 'id'),
@@ -136,6 +149,7 @@ const fromPanelReservation = (r: Row): LedPanelReservation => ({
 });
 
 const tables = [
+  'travel_pricing_settings',
   'price_lists',
   'lab_variants',
   'lab_price_tiers',
@@ -215,6 +229,24 @@ export class SQLiteServiceCatalogRepository implements ServiceCatalogRepository 
     if (!result.rowsAffected)
       throw new Error('El registro pertenece a otro negocio.');
     return this.get(table, String(row.business_id), String(row.id));
+  }
+  async getTravelPricingSettings(b: string) {
+    return (
+      (await this.list('travel_pricing_settings', b)).map(
+        fromTravelSettings,
+      )[0] ?? null
+    );
+  }
+  async saveTravelPricingSettings(x: TravelPricingSettings) {
+    return fromTravelSettings(
+      await this.save('travel_pricing_settings', {
+        id: x.id,
+        business_id: x.businessId,
+        fuel_price_cents_per_liter: x.fuelPriceCentsPerLiter,
+        efficiency_milli_km_per_liter: x.efficiencyMilliKmPerLiter,
+        margin_basis_points: x.marginBasisPoints,
+      }),
+    );
   }
   async listPriceLists(b: string) {
     return (await this.list('price_lists', b)).map(fromList);
@@ -364,6 +396,8 @@ export class SQLiteServiceCatalogRepository implements ServiceCatalogRepository 
         offer_id: x.offerId,
         price_list_id: x.priceListId,
         amount_cents: x.amountCents,
+        operator_amount_cents: x.operatorAmountCents,
+        with_projector_amount_cents: x.withProjectorAmountCents,
       }),
     );
   }

@@ -164,6 +164,7 @@ export type {
 } from './event';
 export {
   effectivePriceListId,
+  quoteTravel,
   labUnitPrice,
   labPortalStatus,
   squareMillimeters,
@@ -180,6 +181,8 @@ export {
 export type {
   PriceList,
   PriceListKind,
+  TravelPricingSettings,
+  TravelQuote,
   LabPaper,
   LabChannel,
   LabVariant,

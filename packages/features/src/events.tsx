@@ -43,6 +43,11 @@ import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 import { EventServiceComposer } from './event-service-composer';
 import { ResourceCapacityPanel } from './resource-capacity';
+import {
+  ConfigurationCard,
+  ConfigurationSection,
+  ConfigurationStatus,
+} from './configuration-ui';
 
 const statusLabels: Record<EventStatus, string> = {
   inquiry: 'Consulta',
@@ -1281,65 +1286,84 @@ export function ResourcesPage({
         title={editing ? 'Editar equipo físico' : 'Nuevo equipo físico'}
         variant="side"
       >
-        <Card className="resource-form">
-          <form onSubmit={(e) => void save(e)}>
-            <label>
-              Nombre
-              <input
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-            <label>
-              Descripción
-              <input
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-              />
-            </label>
-            <button className="customer-primary">
-              {editing ? 'Guardar cambios' : 'Crear equipo'}
-            </button>
-          </form>
-        </Card>
+        <form className="config-editor-form" onSubmit={(e) => void save(e)}>
+          <p className="meta">
+            El tipo describe el equipo para identificarlo en reservas. No es una
+            tarifa comercial.
+          </p>
+          <label>
+            Nombre
+            <input
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <label>
+            Tipo / descripción
+            <input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ej. Proyector, controlador LED, pantalla"
+            />
+          </label>
+          <Button type="submit">
+            {editing ? 'Guardar cambios' : 'Crear equipo'}
+          </Button>
+        </form>
       </Sheet>
-      <Card className="resource-list">
-        {rows.map((x) => (
-          <div className="event-config-row" key={x.id}>
-            <strong>{x.name}</strong>
-            <span className="meta">Equipo físico reservable</span>
-            <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
-            {canManage && (
-              <>
-                <button
-                  onClick={() => {
-                    setEditing(x);
-                    setName(x.name);
-                    setDescription(x.description ?? '');
-                    setEditorOpen(true);
-                  }}
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() =>
-                    void repository
-                      .setResourceActive(context.businessId, x.id, !x.isActive)
-                      .then(() => {
-                        setRefresh((n) => n + 1);
-                        onMutation?.();
-                      })
-                      .catch((e) => setError(errorText(e)))
-                  }
-                >
-                  {x.isActive ? 'Desactivar' : 'Activar'}
-                </button>
-              </>
-            )}
-          </div>
-        ))}
-      </Card>
+      <ConfigurationSection
+        eyebrow="INVENTARIO FÍSICO"
+        title="Equipos reservables"
+        description="Un solo inventario para controlar disponibilidad y evitar superposiciones."
+      >
+        <div className="resource-inventory-grid">
+          {rows.map((resource) => (
+            <ConfigurationCard
+              key={resource.id}
+              title={resource.name}
+              summary={resource.description || 'Equipo físico'}
+              detail="Recurso reservable"
+              status={<ConfigurationStatus active={resource.isActive} />}
+              actions={
+                canManage ? (
+                  <div className="config-actions">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setEditing(resource);
+                        setName(resource.name);
+                        setDescription(resource.description ?? '');
+                        setEditorOpen(true);
+                      }}
+                    >
+                      Editar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        void repository
+                          .setResourceActive(
+                            context.businessId,
+                            resource.id,
+                            !resource.isActive,
+                          )
+                          .then(() => {
+                            setRefresh((n) => n + 1);
+                            onMutation?.();
+                          })
+                          .catch((e) => setError(errorText(e)))
+                      }
+                    >
+                      {resource.isActive ? 'Desactivar' : 'Activar'}
+                    </Button>
+                  </div>
+                ) : undefined
+              }
+            />
+          ))}
+        </div>
+      </ConfigurationSection>
       {serviceCatalogRepository && (
         <ResourceCapacityPanel
           repository={serviceCatalogRepository}

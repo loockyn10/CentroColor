@@ -150,6 +150,58 @@ describe('SERVICIOS-01 Cloud catalog', () => {
     expect(other.rows).toEqual([]);
   });
 
+  it('persiste viáticos globales con RLS y agrega los componentes comerciales de eventos', async () => {
+    const columns = await db.query<{ column_name: string }>(
+      `select column_name from information_schema.columns
+       where table_schema='public' and table_name='event_offer_rates'
+       and column_name in ('operator_amount_cents','with_projector_amount_cents')
+       order by column_name`,
+    );
+    expect(columns.rows.map((row) => row.column_name)).toEqual([
+      'operator_amount_cents',
+      'with_projector_amount_cents',
+    ]);
+    const settingsId = '77777777-7777-4777-8777-777777777777';
+    await asRole(db, 'authenticated', IDS.owner, () =>
+      db.query(
+        `insert into public.travel_pricing_settings(
+           id,business_id,fuel_price_cents_per_liter,
+           efficiency_milli_km_per_liter,margin_basis_points)
+         values($1,$2,160000,10000,2000)`,
+        [settingsId, IDS.business],
+      ),
+    );
+    const staffRows = await asRole(db, 'authenticated', IDS.staff, () =>
+      db.query<{ margin_basis_points: number }>(
+        'select margin_basis_points from public.travel_pricing_settings where business_id=$1',
+        [IDS.business],
+      ),
+    );
+    expect(staffRows.rows).toEqual([{ margin_basis_points: 2000 }]);
+    const staffUpdate = await asRole(db, 'authenticated', IDS.staff, () =>
+      db.query<{ margin_basis_points: number }>(
+        `update public.travel_pricing_settings set margin_basis_points=2500
+         where id=$1 returning margin_basis_points`,
+        [settingsId],
+      ),
+    );
+    expect(staffUpdate.rows).toEqual([]);
+    const unchanged = await asRole(db, 'authenticated', IDS.owner, () =>
+      db.query<{ margin_basis_points: number }>(
+        'select margin_basis_points from public.travel_pricing_settings where id=$1',
+        [settingsId],
+      ),
+    );
+    expect(unchanged.rows).toEqual([{ margin_basis_points: 2000 }]);
+    const outsiderRows = await asRole(
+      db,
+      'authenticated',
+      IDS.outsider,
+      () => db.query('select id from public.travel_pricing_settings'),
+    );
+    expect(outsiderRows.rows).toEqual([]);
+  });
+
   it('cotiza Mate con tier público, guarda snapshot y nunca usa Profesional por el teléfono', async () => {
     const listRows = await db.query<{ id: string; kind: string }>(
       'select id,kind from public.price_lists where business_id=$1',
