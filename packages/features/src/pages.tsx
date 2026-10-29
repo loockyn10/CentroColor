@@ -257,20 +257,17 @@ export function HomePage({
         action: { label: 'Abrir', run: () => openJob(row.job.id) },
       }),
     );
-    view.ready.forEach((row) => {
-      const balance = view.balanceOf(row.job.id);
+    // Un pedido listo sin saldo sólo espera su retiro: no es una alerta (ver «Listos para entregar»).
+    view.readyWithBalance.forEach((row) =>
       items.push({
         key: `ready-${row.job.id}`,
-        severity: 'ok',
-        icon: 'check',
-        what: `Listo para entregar · ${row.customerName}`,
-        why:
-          balance > 0
-            ? `${row.itemSummary || 'Pedido'} · saldo a cobrar ${money(balance)}`
-            : row.itemSummary || 'Pedido',
-        action: { label: 'Entregar', run: () => openJob(row.job.id) },
-      });
-    });
+        severity: 'mid',
+        icon: 'wallet',
+        what: `Cobrar y entregar · ${row.customerName}`,
+        why: `${row.itemSummary || 'Pedido'} · saldo ${money(view.balanceOf(row.job.id))}`,
+        action: { label: 'Abrir', run: () => openJob(row.job.id) },
+      }),
+    );
     if (data.outOfStock?.length)
       items.push({
         key: 'stock',
@@ -291,29 +288,25 @@ export function HomePage({
     0,
   );
 
+  const shown = attention.slice(0, 6);
+  const hidden = attention.length - shown.length;
+  const todaysAppointments = data.appointments ?? [];
+
   return (
     <div className="home">
       <PageHeader
-        title="¿Qué necesita atención hoy?"
+        title="Hoy"
         actions={
-          <>
-            <Button
-              variant="primary"
-              icon="cart"
-              onClick={() => go('new-sale')}
-            >
-              Nueva venta
-            </Button>
-            <Button icon="camera" onClick={() => go('new-photo-job')}>
-              Nuevo pedido
-            </Button>
-          </>
+          <Button icon="camera" onClick={() => go('new-photo-job')}>
+            Nuevo pedido
+          </Button>
+        }
+        primaryAction={
+          <Button variant="primary" icon="cart" onClick={() => go('new-sale')}>
+            Nueva venta
+          </Button>
         }
       />
-      <p className="identity-summary">
-        {context.profile.displayName || 'Usuario'} · {context.businessName}
-        {context.branchName ? ` · ${context.branchName}` : ''}
-      </p>
       {context.authorization === 'offline-authenticated' && (
         <p className="offline-notice">
           Modo offline · autorización local validada por última vez el{' '}
@@ -341,13 +334,14 @@ export function HomePage({
         )}
         {photoRepository && (
           <Metric
-            label="Pedidos pendientes"
+            label="Pedidos en curso"
             value={data.jobs ? view.open.length : '—'}
             hint={
               view.late.length
                 ? plural(view.late.length, 'atrasado', 'atrasados')
                 : undefined
             }
+            tone={view.late.length ? 'alert' : undefined}
             onClick={() => go('photo-jobs')}
           />
         )}
@@ -356,12 +350,8 @@ export function HomePage({
             label="Listos para entregar"
             value={data.jobs ? view.ready.length : '—'}
             hint={
-              data.jobs && view.ready.length
-                ? view.readyWithBalance.length
-                  ? `${view.readyWithBalance.length} con saldo`
-                  : data.accounts
-                    ? 'Todos pagados'
-                    : undefined
+              view.readyWithBalance.length
+                ? `${view.readyWithBalance.length} con saldo`
                 : undefined
             }
             onClick={() => go('photo-jobs')}
@@ -369,9 +359,13 @@ export function HomePage({
         )}
         {showPayments && (
           <Metric
-            label="Esperando pago"
-            value={data.accounts ? owing.length : '—'}
-            hint={owing.length ? `${money(owedCents)} por cobrar` : undefined}
+            label="Por cobrar"
+            value={data.accounts ? money(owedCents) : '—'}
+            hint={
+              owing.length
+                ? plural(owing.length, 'cuenta', 'cuentas')
+                : undefined
+            }
             tone={owing.length ? 'warn' : undefined}
             onClick={() => go('payments')}
           />
@@ -382,13 +376,15 @@ export function HomePage({
         <Card className="home-attention">
           <div className="section-head">
             <h2>Para resolver ahora</h2>
-            <span className="meta">{attention.length}</span>
+            {attention.length > 0 && (
+              <span className="meta">{attention.length}</span>
+            )}
           </div>
           {attention.length === 0 ? (
             <p className="muted">Todo al día. Nada requiere atención.</p>
           ) : (
             <ul className="attn">
-              {attention.map((item) => (
+              {shown.map((item) => (
                 <li className="attn-row" key={item.key}>
                   <span
                     className={`sev sev--${item.severity}`}
@@ -412,10 +408,16 @@ export function HomePage({
               ))}
             </ul>
           )}
+          {hidden > 0 && (
+            <p className="meta attn-more">
+              y {plural(hidden, 'aviso más', 'avisos más')} en Pedidos, Cobros y
+              Stock
+            </p>
+          )}
         </Card>
 
         <div className="home-side">
-          {appointmentRepository && (
+          {appointmentRepository && todaysAppointments.length > 0 && (
             <Card>
               <div className="section-head">
                 <h2>Turnos de hoy</h2>
@@ -427,37 +429,29 @@ export function HomePage({
                   Agenda
                 </Button>
               </div>
-              {data.appointments && data.appointments.length > 0 ? (
-                <ul className="mini-list">
-                  {data.appointments.slice(0, 4).map((row) => (
-                    <li key={row.id}>
-                      <span className="mini-time mono">
-                        {timeOfDay(row.startsAt)}
-                      </span>
-                      <span className="mini-body">
-                        <strong>{row.customerName}</strong>
-                        <span className="meta">{row.title}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">
-                  {data.appointments ? 'Sin turnos hoy.' : 'Cargando…'}
-                </p>
-              )}
+              <ul className="mini-list">
+                {todaysAppointments.slice(0, 4).map((row) => (
+                  <li key={row.id}>
+                    <span className="mini-time mono">
+                      {timeOfDay(row.startsAt)}
+                    </span>
+                    <span className="mini-body">
+                      <strong>{row.customerName}</strong>
+                      <span className="meta">{row.title}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
             </Card>
           )}
 
           <Card>
             <nav className="glance" aria-label="Seguimiento">
-              {showPayments && (
-                <button type="button" onClick={() => go('payments')}>
-                  <Icon name="wallet" />
-                  <span className="gl">Saldos pendientes</span>
-                  <span className="gv">
-                    {data.accounts ? money(owedCents) : '—'}
-                  </span>
+              {appointmentRepository && todaysAppointments.length === 0 && (
+                <button type="button" onClick={() => go('calendar')}>
+                  <Icon name="calendar" />
+                  <span className="gl">Turnos de hoy</span>
+                  <span className="gv">{data.appointments ? 0 : '—'}</span>
                 </button>
               )}
               {eventRepository && (

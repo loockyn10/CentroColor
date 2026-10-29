@@ -4,20 +4,12 @@ import type {
   ServiceCatalogRepository,
 } from '@centrocolor/application';
 import type { EventOffer, EventOfferRate, Resource } from '@centrocolor/domain';
-import { Button, Card, Sheet } from '@centrocolor/ui';
+import { Button, FormDrawer, InlineMessage } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
-import {
-  ConfigurationRow,
-  ConfigurationSection,
-  MoneyField,
-} from './configuration-ui';
+import { MoneyField, PriceRow, PriceSection } from './configuration-ui';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'No se pudo guardar.';
-const money = (cents: number) =>
-  new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
-    cents / 100,
-  );
 function cents(value: string) {
   const clean = value.trim().replaceAll('.', '').replace(',', '.');
   if (!/^\d+(?:\.\d{1,2})?$/.test(clean))
@@ -171,124 +163,125 @@ export function EventPricingCatalog({
         : ['photo_booth', 'magic_mirror', 'spin_360'].includes(offer.kind),
   );
 
+  const sectionTitle =
+    family === 'led'
+      ? 'Pantallas LED'
+      : family === 'fabric'
+        ? 'Tamaños de pantalla'
+        : 'Servicios';
+  const sectionHint =
+    family === 'led'
+      ? 'Sólo precios. Paneles, píxeles y controladores se administran en Recursos.'
+      : undefined;
+
   return (
     <>
-      {notice && <p role="alert">{notice}</p>}
-      <Card>
-        <ConfigurationSection
-          eyebrow="CATÁLOGO"
-          description={
-            family === 'led'
-              ? 'Sólo componentes comerciales. Paneles, píxeles y controladores se administran en Recursos.'
-              : family === 'fabric'
-                ? 'Cada tamaño tiene un precio final sin proyector y otro con proyector.'
-                : 'Todos los servicios usan la misma edición de precio y estado.'
-          }
-          actions={
-            admin && family === 'fabric' ? (
-              <Button
-                variant="secondary"
-                onClick={() => setNewScreenOpen(true)}
-              >
-                + Nueva pantalla
-              </Button>
-            ) : undefined
-          }
-        />
-        <div className="rows">
-          {visibleOffers.map((offer) => (
-            <OfferRow
-              key={`${offer.id}:${selectedListId}`}
-              offer={offer}
-              rate={rates.find(
-                (rate) =>
-                  rate.offerId === offer.id &&
-                  rate.priceListId === selectedListId,
-              )}
-              resources={resources}
-              admin={admin}
-              onSave={saveOffer}
-              onToggle={(next) =>
-                persist(() => repository.saveEventOffer(next))
-              }
-            />
-          ))}
-          {!visibleOffers.length && (
-            <p className="meta">Todavía no hay elementos en esta familia.</p>
-          )}
-        </div>
-      </Card>
-      <Sheet
+      {notice && !newScreenOpen && (
+        <InlineMessage tone="error">{notice}</InlineMessage>
+      )}
+      <PriceSection
+        title={sectionTitle}
+        hint={sectionHint}
+        action={
+          admin && family === 'fabric' ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setNewScreenOpen(true)}
+            >
+              + Nueva pantalla
+            </Button>
+          ) : undefined
+        }
+      >
+        {visibleOffers.map((offer) => (
+          <OfferRow
+            key={`${offer.id}:${selectedListId}`}
+            offer={offer}
+            rate={rates.find(
+              (rate) =>
+                rate.offerId === offer.id &&
+                rate.priceListId === selectedListId,
+            )}
+            resources={resources}
+            admin={admin}
+            error={notice}
+            onSave={saveOffer}
+            onToggle={(next) => persist(() => repository.saveEventOffer(next))}
+          />
+        ))}
+        {!visibleOffers.length && (
+          <p className="meta price-empty">
+            Todavía no hay elementos en esta familia.
+          </p>
+        )}
+      </PriceSection>
+      <FormDrawer
         open={newScreenOpen}
         onClose={() => setNewScreenOpen(false)}
         title="Nueva pantalla de tela"
-        variant="side"
+        error={notice}
+        disabled={
+          !fabricName.trim() ||
+          !fabricWidth.trim() ||
+          !fabricHeight.trim() ||
+          !fabricPrimary
+        }
+        submitLabel="Crear pantalla"
+        onSubmit={createFabricScreen}
       >
-        <div className="config-editor-form">
+        <label>
+          Nombre
+          <input
+            value={fabricName}
+            onChange={(event) => setFabricName(event.target.value)}
+            placeholder="Pantalla 3×2"
+          />
+        </label>
+        <div className="config-editor-form__grid">
           <label>
-            Nombre
+            Ancho (cm)
             <input
-              value={fabricName}
-              onChange={(event) => setFabricName(event.target.value)}
-              placeholder="Pantalla 3×2"
+              inputMode="decimal"
+              value={fabricWidth}
+              onChange={(event) => setFabricWidth(event.target.value)}
             />
           </label>
-          <div className="config-editor-form__grid">
-            <label>
-              Ancho (cm)
-              <input
-                inputMode="decimal"
-                value={fabricWidth}
-                onChange={(event) => setFabricWidth(event.target.value)}
-              />
-            </label>
-            <label>
-              Alto (cm)
-              <input
-                inputMode="decimal"
-                value={fabricHeight}
-                onChange={(event) => setFabricHeight(event.target.value)}
-              />
-            </label>
-          </div>
           <label>
-            Proyección
-            <select
-              value={fabricProjection}
-              onChange={(event) =>
-                setFabricProjection(event.target.value as 'front' | 'rear')
-              }
-            >
-              <option value="front">Delantera</option>
-              <option value="rear">Trasera</option>
-            </select>
+            Alto (cm)
+            <input
+              inputMode="decimal"
+              value={fabricHeight}
+              onChange={(event) => setFabricHeight(event.target.value)}
+            />
           </label>
-          <ResourceSelect
-            label="Pantalla física"
-            value={fabricPrimary}
-            resources={resources}
-            onChange={setFabricPrimary}
-          />
-          <ResourceSelect
-            label="Proyector físico (opcional)"
-            value={fabricProjector}
-            resources={resources}
-            onChange={setFabricProjector}
-            optional
-          />
-          <Button
-            disabled={
-              !fabricName.trim() ||
-              !fabricWidth.trim() ||
-              !fabricHeight.trim() ||
-              !fabricPrimary
-            }
-            onClick={() => void createFabricScreen()}
-          >
-            Crear pantalla
-          </Button>
         </div>
-      </Sheet>
+        <label>
+          Proyección
+          <select
+            value={fabricProjection}
+            onChange={(event) =>
+              setFabricProjection(event.target.value as 'front' | 'rear')
+            }
+          >
+            <option value="front">Delantera</option>
+            <option value="rear">Trasera</option>
+          </select>
+        </label>
+        <ResourceSelect
+          label="Pantalla física"
+          value={fabricPrimary}
+          resources={resources}
+          onChange={setFabricPrimary}
+        />
+        <ResourceSelect
+          label="Proyector físico (opcional)"
+          value={fabricProjector}
+          resources={resources}
+          onChange={setFabricProjector}
+          optional
+        />
+      </FormDrawer>
     </>
   );
 }
@@ -298,6 +291,7 @@ function OfferRow({
   rate,
   resources,
   admin,
+  error,
   onSave,
   onToggle,
 }: {
@@ -305,6 +299,7 @@ function OfferRow({
   rate?: EventOfferRate;
   resources: Resource[];
   admin: boolean;
+  error: string | null;
   onSave: (offer: EventOffer, draft: RateDraft) => Promise<boolean>;
   onToggle: (offer: EventOffer) => Promise<boolean>;
 }) {
@@ -327,25 +322,23 @@ function OfferRow({
             ?.name ?? 'Recurso faltante')
         : undefined;
   const values =
-    offer.kind === 'led_screen' ? (
-      <>
-        <PriceValue label="Precio por m²" amount={rate?.amountCents ?? null} />
-        <PriceValue
-          label="Operador"
-          amount={rate?.operatorAmountCents ?? null}
-        />
-      </>
-    ) : offer.kind === 'fabric_screen' ? (
-      <>
-        <PriceValue label="Sin proyector" amount={rate?.amountCents ?? null} />
-        <PriceValue
-          label="Con proyector"
-          amount={rate?.withProjectorAmountCents ?? null}
-        />
-      </>
-    ) : (
-      <PriceValue label="Precio" amount={rate?.amountCents ?? null} />
-    );
+    offer.kind === 'led_screen'
+      ? [
+          { label: 'Precio por m²', cents: rate?.amountCents ?? null },
+          { label: 'Operador', cents: rate?.operatorAmountCents ?? null },
+        ]
+      : offer.kind === 'fabric_screen'
+        ? [
+            {
+              label: 'Precio sin proyector',
+              cents: rate?.amountCents ?? null,
+            },
+            {
+              label: 'Precio con proyector',
+              cents: rate?.withProjectorAmountCents ?? null,
+            },
+          ]
+        : [{ label: 'Precio fijo', cents: rate?.amountCents ?? null }];
 
   function beginEdit() {
     setDraft(offer);
@@ -362,25 +355,25 @@ function OfferRow({
 
   return (
     <>
-      <ConfigurationRow
+      <PriceRow
         title={displayName}
         meta={meta}
         values={values}
-        active={offer.isActive}
+        inactive={!offer.isActive}
         onEdit={admin ? beginEdit : undefined}
-        onToggle={
-          admin
-            ? () => void onToggle({ ...offer, isActive: !offer.isActive })
-            : undefined
-        }
       />
-      <Sheet
+      <FormDrawer
         open={open}
         onClose={() => setOpen(false)}
         title={`Editar ${displayName}`}
-        variant="side"
+        error={error}
+        disabled={
+          !amount.trim() || (offer.kind === 'led_screen' && !operator.trim())
+        }
+        onSubmit={save}
       >
-        <div className="config-editor-form">
+        <section className="drawer-section drawer-section--first">
+          <h3>Precio</h3>
           {offer.kind === 'led_screen' ? (
             <>
               <MoneyField
@@ -397,104 +390,104 @@ function OfferRow({
           ) : offer.kind === 'fabric_screen' ? (
             <>
               <MoneyField
-                label="Sin proyector"
+                label="Precio sin proyector"
                 value={amount}
                 onChange={setAmount}
               />
               <MoneyField
-                label="Con proyector"
+                label="Precio con proyector"
                 value={withProjector}
                 onChange={setWithProjector}
                 placeholder="Opcional"
               />
-              <label>
-                Nombre
-                <input
-                  value={draft.name}
-                  onChange={(event) =>
-                    setDraft({ ...draft, name: event.target.value })
-                  }
-                />
-              </label>
-              <div className="config-editor-form__grid">
-                <DimensionField
-                  label="Ancho (cm)"
-                  valueMm={draft.widthMm}
-                  onChange={(widthMm) => setDraft({ ...draft, widthMm })}
-                />
-                <DimensionField
-                  label="Alto (cm)"
-                  valueMm={draft.heightMm}
-                  onChange={(heightMm) => setDraft({ ...draft, heightMm })}
-                />
-              </div>
-              <label>
-                Proyección
-                <select
-                  value={draft.projection ?? 'front'}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      projection: event.target.value as 'front' | 'rear',
-                    })
-                  }
-                >
-                  <option value="front">Delantera</option>
-                  <option value="rear">Trasera</option>
-                </select>
-              </label>
-              <ResourceSelect
-                label="Pantalla física"
-                value={draft.primaryResourceId ?? ''}
-                resources={resources}
-                onChange={(value) =>
-                  setDraft({ ...draft, primaryResourceId: value || null })
-                }
-              />
-              <ResourceSelect
-                label="Proyector físico"
-                value={draft.projectorResourceId ?? ''}
-                resources={resources}
-                optional
-                onChange={(value) =>
-                  setDraft({
-                    ...draft,
-                    projectorResourceId: value || null,
-                    withProjector: Boolean(value),
-                  })
-                }
-              />
             </>
           ) : (
-            <MoneyField label="Precio" value={amount} onChange={setAmount} />
+            <MoneyField
+              label="Precio fijo"
+              value={amount}
+              onChange={setAmount}
+            />
           )}
-          <Button
-            disabled={
-              !amount.trim() ||
-              (offer.kind === 'led_screen' && !operator.trim())
-            }
-            onClick={() => void save()}
-          >
-            Guardar cambios
-          </Button>
-        </div>
-      </Sheet>
+        </section>
+        {offer.kind === 'fabric_screen' && (
+          <section className="drawer-section">
+            <h3>Tamaño y equipamiento</h3>
+            <label>
+              Nombre
+              <input
+                value={draft.name}
+                onChange={(event) =>
+                  setDraft({ ...draft, name: event.target.value })
+                }
+              />
+            </label>
+            <div className="config-editor-form__grid">
+              <DimensionField
+                label="Ancho (cm)"
+                valueMm={draft.widthMm}
+                onChange={(widthMm) => setDraft({ ...draft, widthMm })}
+              />
+              <DimensionField
+                label="Alto (cm)"
+                valueMm={draft.heightMm}
+                onChange={(heightMm) => setDraft({ ...draft, heightMm })}
+              />
+            </div>
+            <label>
+              Proyección
+              <select
+                value={draft.projection ?? 'front'}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    projection: event.target.value as 'front' | 'rear',
+                  })
+                }
+              >
+                <option value="front">Delantera</option>
+                <option value="rear">Trasera</option>
+              </select>
+            </label>
+            <ResourceSelect
+              label="Pantalla física"
+              value={draft.primaryResourceId ?? ''}
+              resources={resources}
+              onChange={(value) =>
+                setDraft({ ...draft, primaryResourceId: value || null })
+              }
+            />
+            <ResourceSelect
+              label="Proyector físico"
+              value={draft.projectorResourceId ?? ''}
+              resources={resources}
+              optional
+              onChange={(value) =>
+                setDraft({
+                  ...draft,
+                  projectorResourceId: value || null,
+                  withProjector: Boolean(value),
+                })
+              }
+            />
+          </section>
+        )}
+        {admin && (
+          <section className="drawer-section">
+            <h3>Estado</h3>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void onToggle({ ...offer, isActive: !offer.isActive }).then(
+                  (saved) => saved && setOpen(false),
+                );
+              }}
+            >
+              {offer.isActive ? 'Desactivar' : 'Activar'}
+            </Button>
+          </section>
+        )}
+      </FormDrawer>
     </>
-  );
-}
-
-function PriceValue({
-  label,
-  amount,
-}: {
-  label: string;
-  amount: number | null;
-}) {
-  return (
-    <span className="config-value">
-      <small>{label}</small>
-      <strong>{amount === null ? 'Sin configurar' : money(amount)}</strong>
-    </span>
   );
 }
 

@@ -2,6 +2,9 @@ import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from './primitives';
 import { Icon } from './icons';
 
+/** Hojas abiertas, de la más antigua a la más nueva: sólo la última atiende teclado y foco. */
+const openSheets: HTMLElement[] = [];
+
 /**
  * Hoja de diálogo: modal (centrado en tablet/escritorio) o lateral. En móvil sube desde abajo.
  * Atrapa el foco, cierra con Esc y devuelve el foco al elemento que la abrió.
@@ -11,6 +14,7 @@ export function Sheet({
   onClose,
   title,
   variant = 'modal',
+  size = 'md',
   children,
   footer,
 }: {
@@ -18,6 +22,8 @@ export function Sheet({
   onClose: () => void;
   title: string;
   variant?: 'side' | 'modal';
+  /** `lg`: hoja lateral ancha para editores con varias secciones. */
+  size?: 'md' | 'lg';
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -32,7 +38,10 @@ export function Sheet({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     ref.current?.focus();
+    const self = ref.current;
+    if (self) openSheets.push(self);
     const onKey = (event: KeyboardEvent) => {
+      if (openSheets[openSheets.length - 1] !== self) return;
       if (event.key === 'Escape') {
         event.stopPropagation();
         closeRef.current();
@@ -56,6 +65,8 @@ export function Sheet({
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
+      const at = self ? openSheets.indexOf(self) : -1;
+      if (at >= 0) openSheets.splice(at, 1);
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
@@ -67,7 +78,7 @@ export function Sheet({
       <div className="scrim" onClick={onClose} aria-hidden="true" />
       <div
         ref={ref}
-        className={`sheet sheet--${variant}`}
+        className={`sheet sheet--${variant} ${size === 'lg' ? 'sheet--lg' : ''}`.trim()}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}

@@ -9,7 +9,18 @@ import type {
   ProductCategory,
   StockMovement,
 } from '@centrocolor/domain';
-import { Card, EmptyState, Icon, Metric, PageHeader } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  FilterBar,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Sheet,
+  StatusBadge,
+} from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 function errorMessage(error: unknown) {
@@ -168,7 +179,9 @@ export function StockPage({
   }
   if (!branchId)
     return (
-      <p role="alert">Se requiere una sucursal activa para consultar stock.</p>
+      <InlineMessage tone="error">
+        Se requiere una sucursal activa para consultar stock.
+      </InlineMessage>
     );
   let running = selected ? (balances[selected.id] ?? 0) : 0;
   const tracked = products.filter((p) => p.tracksInventory);
@@ -183,128 +196,112 @@ export function StockPage({
           ? !p.tracksInventory
           : true,
   );
+  const stockState = (product: Product) => {
+    const quantity = balances[product.id] ?? 0;
+    if (!product.tracksInventory) return null;
+    if (quantity < 0) return { label: 'Negativo', tone: 'alert' as const };
+    if (quantity === 0)
+      return { label: 'Sin stock', tone: 'progress' as const };
+    return null;
+  };
+  const filters = [
+    ['all', 'Todos', products.length],
+    ['out', 'Sin stock', outOfStock.length],
+    ['tracked', 'Controlados', tracked.length],
+    ['untracked', 'Sin control', products.length - tracked.length],
+  ] as const;
   return (
     <>
       <PageHeader title="Stock" />
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
+      {negative.length > 0 && (
+        <InlineMessage tone="info">
+          {negative.length === 1
+            ? '1 producto con stock negativo.'
+            : `${negative.length} productos con stock negativo.`}{' '}
+          Una venta puede dejar el stock en negativo.
+        </InlineMessage>
       )}
-      <section className="kpis" aria-label="Resumen de stock">
-        <Metric label="Productos" value={products.length} />
-        <Metric label="Con control de stock" value={tracked.length} />
-        <Metric
-          label="Sin stock"
-          value={outOfStock.length}
-          tone={outOfStock.length ? 'warn' : undefined}
-        />
-        <Metric
-          label="Negativos"
-          value={negative.length}
-          hint="Una venta puede dejar stock negativo"
-          tone={negative.length ? 'alert' : undefined}
-        />
-      </section>
-      <div className="jobs-toolbar">
-        <div className="search-field">
-          <Icon name="search" />
-          <input
-            type="search"
-            aria-label="Buscar producto"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Nombre o código de barras"
-          />
-        </div>
-        <div className="chips" role="group" aria-label="Filtrar stock">
-          {(
-            [
-              ['all', 'Todos'],
-              ['out', 'Sin stock'],
-              ['tracked', 'Controlados'],
-              ['untracked', 'Sin control'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className="chip"
-              aria-pressed={view === value}
-              onClick={() => setView(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <FilterBar
+        label="Filtrar stock"
+        search={
+          <div className="search-field">
+            <Icon name="search" />
+            <input
+              type="search"
+              aria-label="Buscar producto"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Nombre o código de barras"
+            />
+          </div>
+        }
+      >
+        {filters.map(([value, label, count]) => (
+          <Chip
+            key={value}
+            pressed={view === value}
+            count={count}
+            onClick={() => setView(value)}
+          >
+            {label}
+          </Chip>
+        ))}
+      </FilterBar>
       <Card className="card--flush">
         {shown.length === 0 ? (
           <EmptyState icon="box" title="No hay productos para mostrar" />
         ) : (
-          <div className="rows">
-            <div className="stock-head" aria-hidden="true">
-              <span>Producto</span>
-              <span>Categoría</span>
-              <span>Control</span>
-              <span>Stock actual</span>
-              <span>Acciones</span>
-            </div>
+          <div className="rows catalog-rows">
             {shown.map((product) => {
               const quantity = balances[product.id] ?? 0;
-              const state = !product.tracksInventory
-                ? null
-                : quantity < 0
-                  ? 'Negativo'
-                  : quantity === 0
-                    ? 'Sin stock'
-                    : null;
+              const state = stockState(product);
               return (
-                <div className="stock-row" key={product.id}>
-                  <strong>
-                    {product.name}
-                    <small>{product.barcode ?? ''}</small>
-                  </strong>
-                  <span className="meta">
-                    {categories.find((item) => item.id === product.categoryId)
-                      ?.name ?? '—'}
-                  </span>
-                  <span className="meta">
-                    {product.tracksInventory ? 'Controlado' : 'Sin control'}
-                  </span>
-                  <span className="stock-qty">
-                    <strong
-                      className={
-                        product.tracksInventory && quantity < 0
-                          ? 'stock-negative'
-                          : ''
-                      }
-                    >
-                      {product.tracksInventory ? quantity : '—'}
-                    </strong>
-                    {state && (
-                      <span
+                <div className="price-row" key={product.id}>
+                  <div className="price-row__id">
+                    <strong>{product.name}</strong>
+                    <span className="meta">
+                      {[
+                        product.barcode,
+                        categories.find(
+                          (item) => item.id === product.categoryId,
+                        )?.name,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ') || undefined}
+                    </span>
+                  </div>
+                  <div className="price-row__values">
+                    <span className="config-value">
+                      <small>Stock actual</small>
+                      <strong
                         className={
-                          state === 'Negativo' ? 'txt-alert' : 'txt-warn'
+                          product.tracksInventory && quantity < 0
+                            ? 'stock-negative'
+                            : ''
                         }
                       >
-                        {state}
-                      </span>
+                        {product.tracksInventory ? quantity : 'Sin control'}
+                      </strong>
+                    </span>
+                  </div>
+                  <div className="price-row__state">
+                    {state && (
+                      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
                     )}
-                  </span>
-                  {canManage ? (
-                    <button
-                      type="button"
+                  </div>
+                  {canManage && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setSelected(product);
                         setMode(null);
                         setMovements([]);
                       }}
                     >
-                      Ver movimientos
-                    </button>
-                  ) : (
-                    <span />
+                      Movimientos
+                    </Button>
                   )}
                 </div>
               );
@@ -317,112 +314,114 @@ export function StockPage({
           </p>
         )}
       </Card>
-      {selected && (
-        <Card className="pos-list-card">
-          <div className="pos-actions">
-            <h2>{selected.name}</h2>
-            <button type="button" onClick={() => setSelected(null)}>
-              Cerrar
-            </button>
-          </div>
-          <p>
-            Stock actual:{' '}
-            <strong
-              className={
-                (balances[selected.id] ?? 0) < 0 ? 'stock-negative' : ''
-              }
-            >
-              {selected.tracksInventory
-                ? (balances[selected.id] ?? 0)
-                : 'Sin control'}
-            </strong>
-          </p>
-          {canManage && (
-            <div className="pos-actions">
-              {movements.length === 0 && (
-                <button type="button" onClick={() => setMode('initial')}>
-                  Establecer stock inicial
-                </button>
-              )}
-              {selected.tracksInventory && (
-                <>
-                  <button type="button" onClick={() => setMode('entry')}>
-                    Entrada de stock
-                  </button>
-                  <button type="button" onClick={() => setMode('adjustment')}>
-                    Ajustar conteo
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-          {mode && (
-            <form className="pos-form" onSubmit={(event) => void save(event)}>
-              <h3 className="pos-wide">{labels[mode]}</h3>
-              <label>
-                {mode === 'entry' ? 'Cantidad a ingresar' : 'Stock contado'}
-                <input
-                  type="number"
-                  min={mode === 'entry' ? '1' : '0'}
-                  step="1"
-                  required
-                  value={value}
-                  onChange={(event) => setValue(event.target.value)}
-                />
-              </label>
-              <label>
-                Nota opcional
-                <input
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                />
-              </label>
-              <div className="pos-actions pos-wide">
-                <button type="button" onClick={() => setMode(null)}>
-                  Cancelar
-                </button>
-                <button
-                  className="customer-primary"
-                  type="submit"
-                  disabled={busy}
-                >
-                  {busy ? 'Guardando…' : 'Guardar'}
-                </button>
+      <Sheet
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        variant="side"
+        title={selected ? `Movimientos · ${selected.name}` : 'Movimientos'}
+      >
+        {selected && (
+          <>
+            <p>
+              Stock actual:{' '}
+              <strong
+                className={
+                  (balances[selected.id] ?? 0) < 0 ? 'stock-negative' : ''
+                }
+              >
+                {selected.tracksInventory
+                  ? (balances[selected.id] ?? 0)
+                  : 'Sin control'}
+              </strong>
+            </p>
+            {canManage && (
+              <div className="editor-state-actions">
+                {movements.length === 0 && (
+                  <Button onClick={() => setMode('initial')}>
+                    Establecer stock inicial
+                  </Button>
+                )}
+                {selected.tracksInventory && (
+                  <>
+                    <Button onClick={() => setMode('entry')}>
+                      Entrada de stock
+                    </Button>
+                    <Button onClick={() => setMode('adjustment')}>
+                      Ajustar conteo
+                    </Button>
+                  </>
+                )}
               </div>
-            </form>
-          )}
-          <h3>Movimientos</h3>
-          {movements.length === 0 && (
-            <p className="pos-empty">Todavía no hay movimientos.</p>
-          )}
-          {movements.map((movement) => {
-            const resulting = running;
-            running -= movement.quantityDelta;
-            return (
-              <div className="stock-movement" key={movement.id}>
-                <time>
-                  {new Date(movement.occurredAt).toLocaleString('es-AR')}
-                </time>
-                <span>{labels[movement.movementType]}</span>
-                <strong
-                  className={movement.quantityDelta < 0 ? 'stock-negative' : ''}
-                >
-                  {movement.quantityDelta > 0 ? '+' : ''}
-                  {movement.quantityDelta}
-                </strong>
-                <span>Saldo {resulting}</span>
-                <small>
-                  Usuario {movement.createdBy.slice(0, 8)}
-                  {movement.saleId
-                    ? ` · Venta ${movement.saleId.slice(0, 8)}`
-                    : ''}
-                  {movement.note ? ` · ${movement.note}` : ''}
-                </small>
-              </div>
-            );
-          })}
-        </Card>
-      )}
+            )}
+            {mode && (
+              <form
+                className="form-drawer"
+                onSubmit={(event) => void save(event)}
+              >
+                <h3>{labels[mode]}</h3>
+                <label>
+                  {mode === 'entry' ? 'Cantidad a ingresar' : 'Stock contado'}
+                  <input
+                    type="number"
+                    min={mode === 'entry' ? '1' : '0'}
+                    step="1"
+                    required
+                    value={value}
+                    onChange={(event) => setValue(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Nota opcional
+                  <input
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                  />
+                </label>
+                <div className="editor-state-actions">
+                  <Button variant="primary" type="submit" disabled={busy}>
+                    {busy ? 'Guardando…' : 'Guardar'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setMode(null)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            )}
+            <h3>Historial</h3>
+            {movements.length === 0 && (
+              <p className="meta">Todavía no hay movimientos.</p>
+            )}
+            {movements.map((movement) => {
+              const resulting = running;
+              running -= movement.quantityDelta;
+              return (
+                <div className="stock-movement" key={movement.id}>
+                  <time>
+                    {new Date(movement.occurredAt).toLocaleString('es-AR')}
+                  </time>
+                  <span>{labels[movement.movementType]}</span>
+                  <strong
+                    className={
+                      movement.quantityDelta < 0 ? 'stock-negative' : ''
+                    }
+                  >
+                    {movement.quantityDelta > 0 ? '+' : ''}
+                    {movement.quantityDelta}
+                  </strong>
+                  <span>Saldo {resulting}</span>
+                  <small>
+                    Usuario {movement.createdBy.slice(0, 8)}
+                    {movement.saleId
+                      ? ` · Venta ${movement.saleId.slice(0, 8)}`
+                      : ''}
+                    {movement.note ? ` · ${movement.note}` : ''}
+                  </small>
+                </div>
+              );
+            })}
+          </>
+        )}
+      </Sheet>
     </>
   );
 }

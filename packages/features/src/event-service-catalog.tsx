@@ -4,7 +4,7 @@ import type {
   ServiceCatalogRepository,
 } from '@centrocolor/application';
 import type { EventOffer, EventOfferRate, Resource } from '@centrocolor/domain';
-import { Button, Card } from '@centrocolor/ui';
+import { Button, Card, InlineMessage } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 const errorText = (e: unknown) =>
@@ -128,7 +128,7 @@ export function EventCatalogPanel({
   }
   return (
     <>
-      {notice && <p role="alert">{notice}</p>}
+      {notice && <InlineMessage tone="error">{notice}</InlineMessage>}
       <Card>
         <div className="pricing-card-heading">
           <div>

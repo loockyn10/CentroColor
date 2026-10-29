@@ -26,7 +26,7 @@ import {
   type TravelPricingSettings,
   type TravelQuote,
 } from '@centrocolor/domain';
-import { Button, Card } from '@centrocolor/ui';
+import { Button, InlineMessage } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 const errorText = (e: unknown) =>
@@ -44,10 +44,11 @@ const mm = (cm: string) => {
 const distanceMeters = (value: string) => {
   const normalized = value.trim().replace(',', '.');
   if (!/^\d+(?:\.\d{1,3})?$/.test(normalized))
-    throw new Error('Ingresá la distancia de ida en km, con hasta tres decimales.');
+    throw new Error(
+      'Ingresá la distancia de ida en km, con hasta tres decimales.',
+    );
   const [kilometers, meters = ''] = normalized.split('.');
-  const result =
-    Number(kilometers) * 1_000 + Number(meters.padEnd(3, '0'));
+  const result = Number(kilometers) * 1_000 + Number(meters.padEnd(3, '0'));
   if (!Number.isSafeInteger(result))
     throw new Error('La distancia está fuera de rango.');
   return result;
@@ -390,8 +391,7 @@ export function EventServiceComposer({
       travelCents: prepared.travelCents,
       travel: prepared.travelQuote
         ? {
-            oneWayDistanceMeters:
-              prepared.travelQuote.oneWayDistanceMeters,
+            oneWayDistanceMeters: prepared.travelQuote.oneWayDistanceMeters,
             totalDistanceMeters: prepared.travelQuote.totalDistanceMeters,
             fuelMilliLiters: prepared.travelQuote.fuelMilliLiters,
             fuelPriceCentsPerLiter:
@@ -481,120 +481,136 @@ export function EventServiceComposer({
     setNotice(null);
   }
   return (
-    <Card className="event-wide">
-      <h3>Cotizar servicio</h3>
-      {notice && <p role="alert">{notice}</p>}
-      <div className="form-row">
-        <label>
-          Servicio
-          <select value={offerId} onChange={(e) => setOfferId(e.target.value)}>
-            <option value="">Seleccionar…</option>
-            {offers
-              .filter((x) => x.isActive)
-              .map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        {offer?.kind === 'led_screen' && (
-          <>
-            <label>
-              Tamaño habitual
-              <select
-                value={presetId}
-                onChange={(e) => setPresetId(e.target.value)}
-              >
-                <option value="">Personalizado</option>
-                {presets
-                  .filter((x) => x.isActive)
-                  .map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            {!presetId && (
-              <>
-                <label>
-                  Ancho cm
-                  <input
-                    value={width}
-                    onChange={(e) => setWidth(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Alto cm
-                  <input
-                    value={height}
-                    onChange={(e) => setHeight(e.target.value)}
-                  />
-                </label>
-              </>
-            )}
-          </>
-        )}
-        {offer?.kind === 'fabric_screen' && offer.withProjector && (
+    <div className="form-drawer composer">
+      {notice && <InlineMessage tone="error">{notice}</InlineMessage>}
+      <section className="drawer-section drawer-section--first">
+        <h3>Servicio</h3>
+        <div className="form-row">
           <label>
-            Variante
+            Servicio
             <select
-              value={includeProjector ? 'with' : 'without'}
-              onChange={(event) =>
-                setIncludeProjector(event.target.value === 'with')
-              }
+              value={offerId}
+              onChange={(e) => setOfferId(e.target.value)}
             >
-              <option value="without">Sin proyector</option>
-              <option value="with">Con proyector</option>
+              <option value="">Seleccionar…</option>
+              {offers
+                .filter((x) => x.isActive)
+                .map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
             </select>
           </label>
-        )}
-        <label>
-          Distancia de ida (km)
-          <input
-            inputMode="decimal"
-            value={oneWayDistance}
-            onChange={(e) => setOneWayDistance(e.target.value)}
-          />
-        </label>
-        <label>
-          Armado antes (min)
-          <input
-            inputMode="numeric"
-            value={before}
-            onChange={(e) => setBefore(e.target.value)}
-          />
-        </label>
-        <label>
-          Desarmado después (min)
-          <input
-            inputMode="numeric"
-            value={after}
-            onChange={(e) => setAfter(e.target.value)}
-          />
-        </label>
-        <Button type="button" disabled={!offerId} onClick={() => void check()}>
-          Comprobar y cotizar
-        </Button>
-      </div>
+          {offer?.kind === 'led_screen' && (
+            <>
+              <label>
+                Tamaño habitual
+                <select
+                  value={presetId}
+                  onChange={(e) => setPresetId(e.target.value)}
+                >
+                  <option value="">Personalizado</option>
+                  {presets
+                    .filter((x) => x.isActive)
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              {!presetId && (
+                <>
+                  <label>
+                    Ancho cm
+                    <input
+                      value={width}
+                      onChange={(e) => setWidth(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    Alto cm
+                    <input
+                      value={height}
+                      onChange={(e) => setHeight(e.target.value)}
+                    />
+                  </label>
+                </>
+              )}
+            </>
+          )}
+          {offer?.kind === 'fabric_screen' && offer.withProjector && (
+            <label>
+              Variante
+              <select
+                value={includeProjector ? 'with' : 'without'}
+                onChange={(event) =>
+                  setIncludeProjector(event.target.value === 'with')
+                }
+              >
+                <option value="without">Sin proyector</option>
+                <option value="with">Con proyector</option>
+              </select>
+            </label>
+          )}
+        </div>
+      </section>
+      <section className="drawer-section">
+        <h3>Viáticos y tiempos</h3>
+        <div className="form-row">
+          <label>
+            Distancia de ida (km)
+            <input
+              inputMode="decimal"
+              value={oneWayDistance}
+              onChange={(e) => setOneWayDistance(e.target.value)}
+            />
+          </label>
+          <label>
+            Armado antes (min)
+            <input
+              inputMode="numeric"
+              value={before}
+              onChange={(e) => setBefore(e.target.value)}
+            />
+          </label>
+          <label>
+            Desarmado después (min)
+            <input
+              inputMode="numeric"
+              value={after}
+              onChange={(e) => setAfter(e.target.value)}
+            />
+          </label>
+        </div>
+      </section>
+      <Button
+        type="button"
+        variant={prepared ? 'secondary' : 'primary'}
+        disabled={!offerId}
+        onClick={() => void check()}
+      >
+        Comprobar y cotizar
+      </Button>
       {prepared && (
-        <div className="event-totals">
+        <div className="composer-result">
           <span>
             Servicio <strong>{money(prepared.baseCents)}</strong>
           </span>
           <span>
             Viáticos <strong>{money(prepared.travelCents)}</strong>
           </span>
-          {prepared.travelQuote && prepared.travelQuote.totalDistanceMeters > 0 && (
-            <span className="meta">
-              {prepared.travelQuote.totalDistanceMeters / 1_000} km totales ·{' '}
-              {(prepared.travelQuote.fuelMilliLiters / 1_000)
-                .toFixed(3)
-                .replace('.', ',')}{' '}
-              litros · combustible {money(prepared.travelQuote.baseCostCents)}
-            </span>
-          )}
+          {prepared.travelQuote &&
+            prepared.travelQuote.totalDistanceMeters > 0 && (
+              <span className="meta">
+                {prepared.travelQuote.totalDistanceMeters / 1_000} km totales ·{' '}
+                {(prepared.travelQuote.fuelMilliLiters / 1_000)
+                  .toFixed(3)
+                  .replace('.', ',')}{' '}
+                litros · combustible {money(prepared.travelQuote.baseCostCents)}
+              </span>
+            )}
           {prepared.panels && (
             <span>
               {prepared.panels} paneles ·{' '}
@@ -625,8 +641,8 @@ export function EventServiceComposer({
             Total{' '}
             <strong>{money(prepared.baseCents + prepared.travelCents)}</strong>
           </span>
-          <Button type="button" onClick={add}>
-            Agregar al evento
+          <Button type="button" variant="primary" onClick={add}>
+            Agregar al presupuesto
           </Button>
         </div>
       )}
@@ -636,6 +652,6 @@ export function EventServiceComposer({
           {currentServices.filter((x) => x.isActive).length}
         </p>
       )}
-    </Card>
+    </div>
   );
 }

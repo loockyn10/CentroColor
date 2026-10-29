@@ -1,6 +1,5 @@
 /* Botones sin clase de las features: apariencia base. Va antes de los componentes para que cualquier clase los pise. */
-:where(.main-content) button:not([class]),
-.customer-secondary {
+:where(.main-content) button:not([class]) {
   min-height: var(--touch);
   padding: 0.4rem 0.95rem;
   border: 1.5px solid var(--ink-600);
@@ -9,14 +8,11 @@
   color: var(--ink-900);
   font-weight: 650;
 }
-:where(.main-content) button:not([class]):hover,
-.customer-secondary:hover {
+:where(.main-content) button:not([class]):hover {
   background: var(--paper-100);
   border-color: var(--ink-900);
 }
-:where(.main-content) button:disabled,
-.customer-secondary:disabled,
-.customer-primary:disabled {
+:where(.main-content) button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }

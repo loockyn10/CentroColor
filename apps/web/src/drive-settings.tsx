@@ -4,8 +4,16 @@ import type {
   GoogleDriveIntegrationView,
   PhotoFileIntakeAdminRepository,
 } from '@centrocolor/application';
-import { Card, StateLine } from '@centrocolor/ui';
+import {
+  Button,
+  ConfirmDialog,
+  InlineMessage,
+  IntegrationCard,
+  StatusBadge,
+  type MessageTone,
+} from '@centrocolor/ui';
 
+/** Configuración → Integraciones → Google Drive (owner/admin). Configuración técnica, no operativa. */
 export function DriveSettingsPage({
   context,
   repository,
@@ -15,23 +23,31 @@ export function DriveSettingsPage({
 }) {
   const [integration, setIntegration] =
     useState<GoogleDriveIntegrationView | null>(null);
-  const [message, setMessage] = useState<string | null>(() => {
+  const [message, setMessage] = useState<{
+    tone: MessageTone;
+    text: string;
+  } | null>(() => {
     const query = new URLSearchParams(window.location.search);
     return query.get('googleDrive') === 'error'
-      ? (query.get('message') ?? 'No se pudo conectar Google Drive.')
+      ? {
+          tone: 'error',
+          text: query.get('message') ?? 'No se pudo conectar Google Drive.',
+        }
       : query.get('googleDrive') === 'connected'
-        ? 'Google Drive quedó conectado.'
+        ? { tone: 'success', text: 'Google Drive quedó conectado.' }
         : null;
   });
+  const [confirming, setConfirming] = useState(false);
+  const fail = (x: unknown, fallback: string) =>
+    setMessage({
+      tone: 'error',
+      text: x instanceof Error ? x.message : fallback,
+    });
   const load = () =>
     repository
       .getDriveIntegration(context.businessId)
       .then(setIntegration)
-      .catch((x) =>
-        setMessage(
-          x instanceof Error ? x.message : 'No se pudo consultar Google Drive.',
-        ),
-      );
+      .catch((x) => fail(x, 'No se pudo consultar Google Drive.'));
   useEffect(() => {
     if (context.role !== 'staff') void load();
   }, [context.businessId, context.role, repository]);
@@ -41,91 +57,95 @@ export function DriveSettingsPage({
         await repository.startDriveConnection(context.businessId),
       );
     } catch (x) {
-      setMessage(
-        x instanceof Error ? x.message : 'No se pudo iniciar Google OAuth.',
-      );
+      fail(x, 'No se pudo iniciar Google OAuth.');
     }
   }
   async function disconnect() {
-    if (
-      !window.confirm(
-        '¿Desconectar Google Drive? La metadata histórica se conservará.',
-      )
-    )
-      return;
+    setConfirming(false);
     try {
       await repository.disconnectDrive(context.businessId);
       await load();
     } catch (x) {
-      setMessage(x instanceof Error ? x.message : 'No se pudo desconectar.');
+      fail(x, 'No se pudo desconectar.');
     }
   }
   if (context.role === 'staff')
     return (
-      <Card className="integration">
-        <header className="integration-head">
-          <h2>Google Drive</h2>
-        </header>
-        <p className="muted">
-          Tu rol puede operar trabajos, pero sólo owner/admin puede administrar
-          Google Drive.
+      <IntegrationCard title="Google Drive">
+        <p className="meta">
+          Sólo owner o admin pueden administrar Google Drive.
         </p>
-      </Card>
+      </IntegrationCard>
     );
   const connected = integration?.status === 'connected';
   const needsAttention =
     integration?.status === 'reconnect_required' ||
     integration?.status === 'error';
   return (
-    <Card className="integration drive-settings">
-      <header className="integration-head">
-        <h2>Google Drive</h2>
-        <StateLine
-          parts={[
-            connected
-              ? { text: 'Conectado', tone: 'ok' }
-              : needsAttention
-                ? { text: 'Requiere atención', tone: 'alert' }
-                : { text: 'No conectado' },
-          ]}
-        />
-      </header>
-      {message && <p className="appointment-error">{message}</p>}
-      {connected ? (
-        <>
-          <p>
-            Conectado como{' '}
-            <strong>{integration.googleAccountEmail ?? 'cuenta Google'}</strong>
-          </p>
-          <div className="photo-actions">
-            <button
+    <IntegrationCard
+      title="Google Drive"
+      status={
+        <StatusBadge
+          tone={connected ? 'ok' : needsAttention ? 'alert' : 'closed'}
+        >
+          {connected
+            ? 'Conectado'
+            : needsAttention
+              ? 'Requiere atención'
+              : 'No conectado'}
+        </StatusBadge>
+      }
+      details={
+        connected
+          ? [
+              {
+                label: 'Cuenta',
+                value: integration.googleAccountEmail ?? 'cuenta Google',
+              },
+            ]
+          : undefined
+      }
+      actions={
+        connected ? (
+          <>
+            <Button
               onClick={() =>
                 repository.openDriveFolder(integration.rootFolderId!)
               }
             >
               Abrir Drive
-            </button>
-            <button className="danger-action" onClick={() => void disconnect()}>
+            </Button>
+            <Button variant="danger" onClick={() => setConfirming(true)}>
               Desconectar
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="muted">
-            {needsAttention
-              ? 'Reconectá Google Drive para seguir recibiendo fotos de clientes.'
-              : 'Conectá Google Drive para recibir fotos de clientes.'}
-          </p>
-          <div className="photo-actions">
-            <button className="customer-primary" onClick={() => void connect()}>
-              {needsAttention
-                ? 'Reconectar Google Drive'
-                : 'Conectar Google Drive'}
-            </button>
-          </div>
-        </>
+            </Button>
+          </>
+        ) : (
+          <Button variant="primary" onClick={() => void connect()}>
+            {needsAttention ? 'Reconectar' : 'Conectar'}
+          </Button>
+        )
+      }
+    >
+      {message && (
+        <InlineMessage tone={message.tone}>{message.text}</InlineMessage>
       )}
-    </Card>
+      {!connected && (
+        <p className="meta">
+          {needsAttention
+            ? 'Reconectá para seguir recibiendo fotos de clientes.'
+            : 'Se usa para recibir las fotos de los pedidos.'}
+        </p>
+      )}
+      <ConfirmDialog
+        open={confirming}
+        title="Desconectar Google Drive"
+        destructive
+        confirmLabel="Desconectar"
+        onCancel={() => setConfirming(false)}
+        onConfirm={disconnect}
+      >
+        La metadata histórica se conservará.
+      </ConfirmDialog>
+    </IntegrationCard>
   );
 }

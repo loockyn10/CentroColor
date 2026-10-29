@@ -3,6 +3,7 @@
 @import './base.css';
 @import './compat.css';
 @import './components.css';
+@import './patterns.css';
 @import './shell.css';
 @import './legacy.css';
 @import './panel.css';

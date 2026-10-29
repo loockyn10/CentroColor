@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import {
   buildPhotoJob,
   createCustomer,
@@ -22,7 +22,6 @@ import {
 } from '@centrocolor/application';
 import {
   isPhotoJobOverdue,
-  comparePhotoProductionQueue,
   normalizePhotoServiceDetails,
   photoServiceTypes,
   photoWorkflowRoutes,
@@ -39,22 +38,32 @@ import {
   type PhotoWorkflowRoute,
 } from '@centrocolor/domain';
 import {
+  Button,
   Card,
+  Chip,
+  ConfirmDialog,
   EmptyState,
+  FilterBar,
+  FlashMessage,
+  FormDrawer,
   Icon,
   PageHeader,
   Segmented,
   Sheet,
-  StateLine,
+  StatusBadge,
+  useFlash,
 } from '@centrocolor/ui';
-import { dueText, plural } from './format';
+import { CatalogRow } from './configuration-ui';
+import { CustomerField } from './editor-parts';
+import { photoJobStatus, statusMeta } from './status';
+import { dueText, shortDateTime } from './format';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
 const money = (x: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
     x / 100,
   );
-const errorText = (x: unknown) =>
+export const errorText = (x: unknown) =>
   x instanceof Error ? x.message : 'No se pudo completar la operación.';
 const statusLabel: Record<PhotoJobStatus, string> = {
   received: 'Recibido',
@@ -113,7 +122,7 @@ function WhatsAppNoticePanel({
   if (!value.consent)
     return (
       <section className="whatsapp-panel">
-        <h3>WHATSAPP</h3>
+        <h3>WhatsApp</h3>
         <p>El cliente no pidió avisos por WhatsApp.</p>
       </section>
     );
@@ -123,7 +132,7 @@ function WhatsAppNoticePanel({
     <section
       className={`whatsapp-panel ${latest?.status === 'failed' ? 'whatsapp-failed' : ''}`}
     >
-      <h3>WHATSAPP</h3>
+      <h3>WhatsApp</h3>
       <p>{value.consent.phone}</p>
       {!latest && (
         <p>
@@ -144,15 +153,15 @@ function WhatsAppNoticePanel({
           <p className="whatsapp-error">
             {describeNotificationFailure(latest)}
           </p>
-          <button type="button" disabled={busy} onClick={() => onRetry(latest)}>
+          <Button disabled={busy} onClick={() => onRetry(latest)}>
             Reintentar
-          </button>
+          </Button>
         </>
       )}
       {delivered && jobStatus === 'ready' && (
-        <button type="button" disabled={busy} onClick={onResend}>
+        <Button disabled={busy} onClick={onResend}>
           Reenviar aviso
-        </button>
+        </Button>
       )}
       {value.notifications.length > 1 && (
         <ul className="whatsapp-history">
@@ -184,8 +193,8 @@ export function PhotoServicesPage({
     canEdit = c.role !== 'staff';
   const [rows, setRows] = useState<PhotoService[]>([]),
     [editing, setEditing] = useState<PhotoService | null>(null),
-    [editorOpen, setEditorOpen] = useState(false),
-    [message, setMessage] = useState<string | null>(null);
+    [editorOpen, setEditorOpen] = useState(false);
+  const flash = useFlash();
   const [code, setCode] = useState(''),
     [name, setName] = useState(''),
     [type, setType] = useState<PhotoServiceType>('print'),
@@ -203,7 +212,7 @@ export function PhotoServicesPage({
     repository
       .listServices(c.businessId, true)
       .then(setRows)
-      .catch((x) => setMessage(errorText(x)));
+      .catch((x) => flash.error(errorText(x)));
   useEffect(() => {
     void load();
   }, [repository, c.businessId, refreshToken]);
@@ -241,8 +250,7 @@ export function PhotoServicesPage({
     setPublicOrder(false);
     setEditorOpen(false);
   }
-  async function save(e: FormEvent) {
-    e.preventDefault();
+  async function save() {
     try {
       const details = normalizePhotoServiceDetails({
         code,
@@ -272,7 +280,7 @@ export function PhotoServicesPage({
       load();
       onMutation?.();
     } catch (x) {
-      setMessage(errorText(x));
+      flash.error(errorText(x));
     }
   }
   async function toggle(x: PhotoService) {
@@ -281,230 +289,233 @@ export function PhotoServicesPage({
       load();
       onMutation?.();
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   }
   return (
     <>
       <PageHeader
         title="Servicios fotográficos"
-        description="Catálogo operativo de Laboratorio, archivos y publicación web."
-        actions={
+        primaryAction={
           canEdit ? (
-            <button
-              className="customer-primary"
+            <Button
+              variant="primary"
+              icon="plus"
               onClick={() => {
                 clear();
                 setEditorOpen(true);
               }}
             >
-              + Nuevo servicio
-            </button>
+              Nuevo servicio
+            </Button>
           ) : undefined
         }
       />
-      {message && <p className="appointment-error">{message}</p>}
-      <Sheet
+      {!editorOpen && <FlashMessage flash={flash} />}
+      <Card className="card--flush">
+        {rows.length === 0 ? (
+          <EmptyState icon="camera" title="Todavía no hay servicios" />
+        ) : (
+          <div className="rows catalog-rows">
+            {rows.map((x) => (
+              <CatalogRow
+                key={x.id}
+                title={`${x.code ? `${x.code} · ` : ''}${x.name}`}
+                meta={[
+                  typeLabel[x.serviceType] +
+                    (x.widthMm
+                      ? ` · ${x.widthMm / 10} × ${x.heightMm! / 10} cm`
+                      : ''),
+                  routeLabel[x.workflowRoute] === typeLabel[x.serviceType]
+                    ? null
+                    : routeLabel[x.workflowRoute],
+                  x.requiresCustomerFiles ? 'recibe archivos' : null,
+                  x.isPublic
+                    ? x.publicOrderEnabled
+                      ? 'Web · pedido directo'
+                      : 'Web · sólo lista de precios'
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+                values={[
+                  {
+                    label: 'Precio',
+                    value:
+                      x.workflowRoute === 'lab'
+                        ? 'Por variante y lista'
+                        : money(x.defaultUnitPriceCents),
+                  },
+                ]}
+                active={x.isActive}
+                onEdit={canEdit ? () => select(x) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+      <FormDrawer
         open={canEdit && editorOpen}
         onClose={clear}
         title={
           editing ? 'Editar servicio fotográfico' : 'Nuevo servicio fotográfico'
         }
-        variant="side"
+        error={editorOpen ? flash.current?.text : null}
+        submitLabel={editing ? 'Guardar cambios' : 'Crear servicio'}
+        onSubmit={save}
       >
-        <Card>
-          <form className="photo-service-form" onSubmit={save}>
+        <div className="config-editor-form__grid">
+          <label>
+            Código
+            <input value={code} onChange={(e) => setCode(e.target.value)} />
+          </label>
+          <label>
+            Tipo
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as PhotoServiceType)}
+            >
+              {photoServiceTypes.map((x) => (
+                <option key={x} value={x}>
+                  {typeLabel[x]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label>
+          Nombre *
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <div className="config-editor-form__grid">
+          <label>
+            Ancho (cm)
+            <input
+              inputMode="decimal"
+              value={width}
+              onChange={(e) => setWidth(e.target.value)}
+            />
+          </label>
+          <label>
+            Alto (cm)
+            <input
+              inputMode="decimal"
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+            />
+          </label>
+        </div>
+        <section className="drawer-section">
+          <h3>Operación</h3>
+          <label>
+            Flujo operativo
+            <select
+              value={workflowRoute}
+              onChange={(e) =>
+                setWorkflowRoute(e.target.value as PhotoWorkflowRoute)
+              }
+            >
+              {photoWorkflowRoutes.map((x) => (
+                <option key={x} value={x}>
+                  {routeLabel[x]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={requiresFiles}
+              onChange={(e) => setRequiresFiles(e.target.checked)}
+            />
+            Requiere archivos del cliente
+          </label>
+          {workflowRoute === 'lab' ? (
+            <p className="meta">
+              El precio se configura en Precios › Laboratorio.
+            </p>
+          ) : (
             <label>
-              Código
-              <input value={code} onChange={(e) => setCode(e.target.value)} />
-            </label>
-            <label>
-              Nombre *
-              <input
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </label>
-            <label>
-              Tipo
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value as PhotoServiceType)}
-              >
-                {photoServiceTypes.map((x) => (
-                  <option key={x} value={x}>
-                    {typeLabel[x]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Ancho (cm)
+              Precio unitario
               <input
                 inputMode="decimal"
-                value={width}
-                onChange={(e) => setWidth(e.target.value)}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
               />
             </label>
-            <label>
-              Alto (cm)
-              <input
-                inputMode="decimal"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-              />
-            </label>
-            {workflowRoute === 'lab' ? (
-              <p className="meta">
-                El precio se configura por Brillo/Mate, tramo y lista dentro de
-                Configuración → Precios → Laboratorio.
-              </p>
-            ) : (
-              <label>
-                Precio unitario legado
-                <input
-                  inputMode="decimal"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                />
-              </label>
-            )}
-            <label>
-              Flujo operativo
-              <select
-                value={workflowRoute}
-                onChange={(e) =>
-                  setWorkflowRoute(e.target.value as PhotoWorkflowRoute)
-                }
-              >
-                {photoWorkflowRoutes.map((x) => (
-                  <option key={x} value={x}>
-                    {routeLabel[x]}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="photo-checkbox">
-              <input
-                type="checkbox"
-                checked={requiresFiles}
-                onChange={(e) => setRequiresFiles(e.target.checked)}
-              />
-              Requiere archivos del cliente
-            </label>
-            <fieldset className="photo-public-fields">
-              <legend>Catálogo público (/imprimir)</legend>
-              <label className="photo-checkbox">
-                <input
-                  type="checkbox"
-                  checked={isPublic}
-                  onChange={(e) => {
-                    setIsPublic(e.target.checked);
-                    if (!e.target.checked) setPublicOrder(false);
-                  }}
-                />
-                Mostrar en la web
-              </label>
-              <label className="photo-checkbox">
-                <input
-                  type="checkbox"
-                  checked={publicOrder}
-                  disabled={
-                    !isPublic || workflowRoute !== 'lab' || !requiresFiles
-                  }
-                  onChange={(e) => setPublicOrder(e.target.checked)}
-                />
-                Aceptar pedidos directos
-              </label>
-              <small>
-                Los pedidos directos requieren flujo Laboratorio y archivos del
-                cliente. Papel y tramos públicos se configuran en Configuración
-                → Precios → Laboratorio.
-              </small>
-              <label>
-                Nombre público
-                <input
-                  maxLength={80}
-                  placeholder={name || 'Ej.: 10x15'}
-                  value={publicName}
-                  onChange={(e) => setPublicName(e.target.value)}
-                />
-              </label>
-              <label>
-                Descripción pública
-                <input
-                  maxLength={300}
-                  value={publicDescription}
-                  onChange={(e) => setPublicDescription(e.target.value)}
-                />
-              </label>
-              <label>
-                Orden en la lista
-                <input
-                  inputMode="numeric"
-                  value={publicSortOrder}
-                  onChange={(e) => setPublicSortOrder(e.target.value)}
-                />
-              </label>
-            </fieldset>
-            <div>
-              <button className="customer-primary" type="submit">
-                {editing ? 'Guardar cambios' : 'Crear servicio'}
-              </button>
-              <button type="button" onClick={clear}>
-                Cancelar
-              </button>
-            </div>
-          </form>
-        </Card>
-      </Sheet>
-      {!canEdit && (
-        <p className="identity-summary">
-          Tu rol puede consultar el catálogo, pero no administrar precios.
-        </p>
-      )}
-      <div className="photo-card-grid">
-        {rows.map((x) => (
-          <Card key={x.id} className={!x.isActive ? 'photo-inactive' : ''}>
-            <strong>
-              {x.code ? `${x.code} · ` : ''}
-              {x.name}
-            </strong>
-            <span>
-              {typeLabel[x.serviceType]}
-              {x.widthMm ? ` · ${x.widthMm / 10} × ${x.heightMm! / 10} cm` : ''}
-            </span>
-            <b>
-              {x.workflowRoute === 'lab'
-                ? 'Precios por variante y lista'
-                : money(x.defaultUnitPriceCents)}
-            </b>
-            <span>
-              {routeLabel[x.workflowRoute]} ·{' '}
-              {x.requiresCustomerFiles
-                ? 'recibe archivos'
-                : 'sin carga del cliente'}
-            </span>
-            <span>{x.isActive ? 'Activo' : 'Inactivo'}</span>
-            {x.isPublic && (
-              <span className="photo-web-tag">
-                {x.publicOrderEnabled
-                  ? `Web · pedido directo${x.publicName ? ` · «${x.publicName}»` : ''}`
-                  : 'Web · sólo lista de precios'}
-              </span>
-            )}
-            {canEdit && (
-              <div>
-                <button onClick={() => select(x)}>Editar</button>
-                <button onClick={() => void toggle(x)}>
-                  {x.isActive ? 'Desactivar' : 'Activar'}
-                </button>
-              </div>
-            )}
-          </Card>
-        ))}
-      </div>
+          )}
+        </section>
+        <section className="drawer-section">
+          <h3>Publicación web (/imprimir)</h3>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={isPublic}
+              onChange={(e) => {
+                setIsPublic(e.target.checked);
+                if (!e.target.checked) setPublicOrder(false);
+              }}
+            />
+            Mostrar en la web
+          </label>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={publicOrder}
+              disabled={!isPublic || workflowRoute !== 'lab' || !requiresFiles}
+              onChange={(e) => setPublicOrder(e.target.checked)}
+            />
+            Aceptar pedidos directos
+          </label>
+          <p className="meta">
+            Los pedidos directos requieren flujo Laboratorio y archivos del
+            cliente.
+          </p>
+          <label>
+            Nombre público
+            <input
+              maxLength={80}
+              placeholder={name || 'Ej.: 10x15'}
+              value={publicName}
+              onChange={(e) => setPublicName(e.target.value)}
+            />
+          </label>
+          <label>
+            Descripción pública
+            <input
+              maxLength={300}
+              value={publicDescription}
+              onChange={(e) => setPublicDescription(e.target.value)}
+            />
+          </label>
+          <label>
+            Orden en la lista
+            <input
+              inputMode="numeric"
+              value={publicSortOrder}
+              onChange={(e) => setPublicSortOrder(e.target.value)}
+            />
+          </label>
+        </section>
+        {editing && (
+          <section className="drawer-section">
+            <h3>Estado</h3>
+            <Button
+              variant={editing.isActive ? 'danger' : 'secondary'}
+              onClick={() => {
+                void toggle(editing);
+                clear();
+              }}
+            >
+              {editing.isActive ? 'Desactivar servicio' : 'Activar servicio'}
+            </Button>
+          </section>
+        )}
+      </FormDrawer>
     </>
   );
 }
@@ -537,6 +548,8 @@ export function NewPhotoJobPage({
   initialCustomerId?: string | null;
 }) {
   const c = useBusinessContext();
+  const flash = useFlash();
+  const formId = useId();
   const [services, setServices] = useState<PhotoService[]>([]),
     [priceLists, setPriceLists] = useState<PriceList[]>([]),
     [labVariants, setLabVariants] = useState<LabVariant[]>([]),
@@ -545,19 +558,16 @@ export function NewPhotoJobPage({
     [query, setQuery] = useState(''),
     [customerId, setCustomerId] = useState(initialCustomerId ?? ''),
     [preset, setPreset] = useState<Customer | null>(null),
-    [quick, setQuick] = useState(''),
-    [showQuick, setShowQuick] = useState(false),
     [promised, setPromised] = useState(''),
     [priority, setPriority] = useState<PhotoJobPriority>('normal'),
     [notes, setNotes] = useState(''),
     [lines, setLines] = useState<DraftLine[]>([]),
-    [message, setMessage] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
   useEffect(() => {
     repository
       .listServices(c.businessId)
       .then(setServices)
-      .catch((x) => setMessage(errorText(x)));
+      .catch((x) => flash.error(errorText(x)));
   }, [repository, c.businessId, refreshToken]);
   useEffect(() => {
     if (!serviceCatalogRepository) return;
@@ -571,14 +581,14 @@ export function NewPhotoJobPage({
         setLabVariants(variants);
         setLabTiers(tiers);
       })
-      .catch((error) => setMessage(errorText(error)));
+      .catch((error) => flash.error(errorText(error)));
   }, [serviceCatalogRepository, c.businessId, refreshToken]);
   useEffect(() => {
     const timer = window.setTimeout(
       () =>
         searchCustomers(customerRepository, c.businessId, query)
           .then((r) => setCustomers(r.filter((x) => x.isActive)))
-          .catch((x) => setMessage(errorText(x))),
+          .catch((x) => flash.error(errorText(x))),
       120,
     );
     return () => clearTimeout(timer);
@@ -658,10 +668,10 @@ export function NewPhotoJobPage({
     const variant = labVariants.find((x) => x.id === line.variantId);
     return `${line.name} · ${variant?.paper === 'matte' ? 'Mate' : 'Brillo'} · ${selectedList?.name ?? 'Público'}`;
   }
-  async function quickCreate() {
+  async function quickCreate(fullName: string): Promise<boolean> {
     try {
       const x = await createCustomer(customerRepository, c.businessId, {
-        fullName: quick,
+        fullName,
         phone: null,
         email: null,
         documentNumber: null,
@@ -670,17 +680,17 @@ export function NewPhotoJobPage({
       setCustomers((v) => [x, ...v]);
       setCustomerId(x.id);
       setQuery(x.fullName);
-      setQuick('');
-      setShowQuick(false);
       onMutation?.();
+      return true;
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
+      return false;
     }
   }
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
-    setMessage(null);
+    flash.clear();
     try {
       const built = buildPhotoJob({
         businessId: c.businessId,
@@ -713,10 +723,10 @@ export function NewPhotoJobPage({
       setLines([]);
       setNotes('');
       setPromised('');
-      setMessage('Pedido creado como Recibido.');
+      flash.success('Pedido creado como Recibido.');
       onMutation?.();
     } catch (x) {
-      setMessage(errorText(x));
+      flash.error(errorText(x));
     } finally {
       setBusy(false);
     }
@@ -728,229 +738,230 @@ export function NewPhotoJobPage({
       return sum;
     }
   }, 0);
+  const customerOptions =
+    preset && !customers.some((x) => x.id === preset.id)
+      ? [preset, ...customers]
+      : customers;
+  const lineErrors = lines.length === 0;
   return (
     <>
       <PageHeader title="Nuevo pedido" />
-      {message && <p className="appointment-error">{message}</p>}
-      <Card>
-        <form className="photo-job-form" onSubmit={save}>
-          <label className="photo-wide">
-            Buscar cliente
-            <input
-              type="search"
-              placeholder="Nombre o teléfono"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <label className="photo-wide">
-            Cliente *
-            <select
-              required
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-            >
-              <option value="">Seleccionar…</option>
-              {(preset && !customers.some((x) => x.id === preset.id)
-                ? [preset, ...customers]
-                : customers
-              ).map((x) => (
-                <option value={x.id} key={x.id}>
-                  {x.fullName}
-                  {x.phone ? ` · ${x.phone}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-          {selectedList && (
-            <p className="photo-wide meta">
-              Lista aplicada: {selectedList.name}
-            </p>
-          )}
-          <div className="photo-wide">
-            <button type="button" onClick={() => setShowQuick((v) => !v)}>
-              + Crear cliente
-            </button>
-            {showQuick && (
-              <span className="photo-inline">
-                <input
-                  placeholder="Nombre completo"
-                  value={quick}
-                  onChange={(e) => setQuick(e.target.value)}
-                />
-                <button type="button" onClick={() => void quickCreate()}>
-                  Crear y seleccionar
-                </button>
-              </span>
-            )}
-          </div>
-          <label>
-            Entrega prometida
-            <input
-              type="datetime-local"
-              value={promised}
-              onChange={(e) => setPromised(e.target.value)}
-            />
-          </label>
-          <label>
-            Prioridad
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as PhotoJobPriority)}
-            >
-              <option value="normal">Normal</option>
-              <option value="urgent">Urgente</option>
-            </select>
-          </label>
-          <label className="photo-wide">
-            Notas
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </label>
-          <div className="photo-wide photo-add">
-            <select
-              defaultValue=""
-              onChange={(e) => {
-                addService(e.target.value);
-                e.target.value = '';
-              }}
-            >
-              <option value="">+ Agregar servicio</option>
-              {services.flatMap((x) =>
-                x.workflowRoute === 'lab' && serviceCatalogRepository
-                  ? labVariants
-                      .filter(
-                        (v) =>
-                          v.photoServiceId === x.id &&
-                          v.channel === 'laboratory' &&
-                          v.isActive,
-                      )
-                      .map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {x.name} · {v.paper === 'matte' ? 'Mate' : 'Brillo'}
-                        </option>
-                      ))
-                  : [
-                      <option key={x.id} value={x.id}>
-                        {x.name} · {money(x.defaultUnitPriceCents)}
-                      </option>,
-                    ],
-              )}
-            </select>
-            <button type="button" onClick={addCustom}>
-              + Concepto personalizado
-            </button>
-          </div>
-          {lines.map((x) => (
-            <div className="photo-line photo-wide" key={x.key}>
-              <label>
-                Servicio
-                <input
-                  required
-                  value={x.name}
-                  readOnly={Boolean(x.serviceId)}
-                  onChange={(e) => patchLine(x.key, { name: e.target.value })}
-                />
-              </label>
-              <label>
-                Cantidad
-                <input
-                  required
-                  min="1"
-                  type="number"
-                  value={x.quantity}
-                  onChange={(e) =>
-                    patchLine(x.key, { quantity: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Precio unitario
-                <input
-                  required
-                  inputMode="decimal"
-                  value={
-                    x.variantId
-                      ? (() => {
-                          try {
-                            return String(priceForLine(x) / 100);
-                          } catch {
-                            return 'Sin tarifa';
-                          }
-                        })()
-                      : x.price
-                  }
-                  readOnly={Boolean(x.variantId)}
-                  onChange={(e) => patchLine(x.key, { price: e.target.value })}
-                />
-              </label>
-              <label>
-                Notas
-                <input
-                  value={x.notes}
-                  onChange={(e) => patchLine(x.key, { notes: e.target.value })}
-                />
-              </label>
-              {!x.serviceId && (
-                <label>
-                  Ancho (cm)
-                  <input
-                    inputMode="decimal"
-                    value={x.widthMm === null ? '' : x.widthMm / 10}
-                    onChange={(e) =>
-                      patchLine(x.key, {
-                        widthMm: e.target.value
-                          ? Math.round(
-                              Number(e.target.value.replace(',', '.')) * 10,
-                            )
-                          : null,
-                      })
-                    }
-                  />
-                </label>
-              )}
-              {!x.serviceId && (
-                <label>
-                  Alto (cm)
-                  <input
-                    inputMode="decimal"
-                    value={x.heightMm === null ? '' : x.heightMm / 10}
-                    onChange={(e) =>
-                      patchLine(x.key, {
-                        heightMm: e.target.value
-                          ? Math.round(
-                              Number(e.target.value.replace(',', '.')) * 10,
-                            )
-                          : null,
-                      })
-                    }
-                  />
-                </label>
-              )}
-              <span>
-                {x.widthMm ? `${x.widthMm / 10} × ${x.heightMm! / 10} cm` : ''}
-              </span>
-              <button
-                type="button"
-                onClick={() =>
-                  setLines((v) => v.filter((i) => i.key !== x.key))
-                }
-              >
-                Quitar
-              </button>
+      <FlashMessage flash={flash} />
+      <form id={formId} className="editor-form" onSubmit={save}>
+        <Card>
+          <div className="editor-grid">
+            <div className="span-12">
+              <CustomerField
+                customers={customerOptions}
+                query={query}
+                onQuery={setQuery}
+                value={customerId}
+                onChange={setCustomerId}
+                onQuickCreate={quickCreate}
+                busy={busy}
+              />
             </div>
-          ))}
-          <div className="photo-wide photo-total">
-            <strong>Total {money(total)}</strong>
-            <button
-              className="customer-primary"
-              disabled={busy || !lines.length}
-              type="submit"
-            >
-              Guardar pedido
-            </button>
+            {selectedList && (
+              <p className="meta span-12">
+                Lista aplicada: {selectedList.name}
+              </p>
+            )}
+            <label className="span-6">
+              Entrega prometida
+              <input
+                type="datetime-local"
+                value={promised}
+                onChange={(e) => setPromised(e.target.value)}
+              />
+            </label>
+            <label className="check-row span-3">
+              <input
+                type="checkbox"
+                checked={priority === 'urgent'}
+                onChange={(e) =>
+                  setPriority(e.target.checked ? 'urgent' : 'normal')
+                }
+              />
+              Urgente
+            </label>
+            <label className="span-12">
+              Notas
+              <input value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </label>
           </div>
-        </form>
-      </Card>
+        </Card>
+
+        <section className="editor-block editor-block--service">
+          <div className="section-head">
+            <div>
+              <h3>Servicios</h3>
+            </div>
+            <div className="editor-line__actions">
+              <select
+                aria-label="Agregar servicio"
+                defaultValue=""
+                onChange={(e) => {
+                  addService(e.target.value);
+                  e.target.value = '';
+                }}
+              >
+                <option value="">+ Agregar servicio</option>
+                {services.flatMap((x) =>
+                  x.workflowRoute === 'lab' && serviceCatalogRepository
+                    ? labVariants
+                        .filter(
+                          (v) =>
+                            v.photoServiceId === x.id &&
+                            v.channel === 'laboratory' &&
+                            v.isActive,
+                        )
+                        .map((v) => (
+                          <option key={v.id} value={v.id}>
+                            {x.name} · {v.paper === 'matte' ? 'Mate' : 'Brillo'}
+                          </option>
+                        ))
+                    : [
+                        <option key={x.id} value={x.id}>
+                          {x.name} · {money(x.defaultUnitPriceCents)}
+                        </option>,
+                      ],
+                )}
+              </select>
+              <Button variant="secondary" icon="plus" onClick={addCustom}>
+                Concepto personalizado
+              </Button>
+            </div>
+          </div>
+          {lines.length === 0 ? (
+            <p className="meta price-empty">
+              Agregá al menos un servicio para guardar el pedido.
+            </p>
+          ) : (
+            <div className="editor-lines">
+              {lines.map((x) => {
+                let unit = '';
+                try {
+                  unit = x.variantId ? String(priceForLine(x) / 100) : x.price;
+                } catch {
+                  unit = 'Sin tarifa';
+                }
+                return (
+                  <div
+                    className="editor-line editor-line--resource"
+                    key={x.key}
+                  >
+                    <label className="editor-mini span-5">
+                      Servicio
+                      <input
+                        required
+                        value={x.name}
+                        readOnly={Boolean(x.serviceId)}
+                        onChange={(e) =>
+                          patchLine(x.key, { name: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="editor-mini span-3">
+                      Cantidad
+                      <input
+                        required
+                        min="1"
+                        type="number"
+                        value={x.quantity}
+                        onChange={(e) =>
+                          patchLine(x.key, { quantity: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="editor-mini span-4">
+                      Precio unitario
+                      <input
+                        required
+                        inputMode="decimal"
+                        value={unit}
+                        readOnly={Boolean(x.variantId)}
+                        onChange={(e) =>
+                          patchLine(x.key, { price: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label className="editor-mini span-5">
+                      Notas
+                      <input
+                        value={x.notes}
+                        onChange={(e) =>
+                          patchLine(x.key, { notes: e.target.value })
+                        }
+                      />
+                    </label>
+                    {!x.serviceId && (
+                      <>
+                        <label className="editor-mini span-3">
+                          Ancho (cm)
+                          <input
+                            inputMode="decimal"
+                            value={x.widthMm === null ? '' : x.widthMm / 10}
+                            onChange={(e) =>
+                              patchLine(x.key, {
+                                widthMm: e.target.value
+                                  ? Math.round(
+                                      Number(e.target.value.replace(',', '.')) *
+                                        10,
+                                    )
+                                  : null,
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="editor-mini span-3">
+                          Alto (cm)
+                          <input
+                            inputMode="decimal"
+                            value={x.heightMm === null ? '' : x.heightMm / 10}
+                            onChange={(e) =>
+                              patchLine(x.key, {
+                                heightMm: e.target.value
+                                  ? Math.round(
+                                      Number(e.target.value.replace(',', '.')) *
+                                        10,
+                                    )
+                                  : null,
+                              })
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
+                    <div className="editor-line__actions span-4">
+                      {x.widthMm ? (
+                        <span className="meta">
+                          {x.widthMm / 10} × {x.heightMm! / 10} cm
+                        </span>
+                      ) : null}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setLines((v) => v.filter((i) => i.key !== x.key))
+                        }
+                      >
+                        Quitar
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <div className="sticky-foot">
+          <strong className="sticky-foot__total">Total {money(total)}</strong>
+          <Button variant="primary" type="submit" disabled={busy || lineErrors}>
+            Guardar pedido
+          </Button>
+        </div>
+      </form>
     </>
   );
 }
@@ -974,6 +985,7 @@ export function PhotoJobsPage({
   initialJobId?: string | null;
 }) {
   const c = useBusinessContext();
+  const flash = useFlash();
   const openDriveFolder = (folderId: string) =>
     fileIntakeRepository?.openDriveFolder(folderId) ??
     window.open(
@@ -981,6 +993,7 @@ export function PhotoJobsPage({
       '_blank',
       'noopener,noreferrer',
     );
+  const [loaded, setLoaded] = useState(false);
   const [rows, setRows] = useState<PhotoJobSummary[]>([]),
     [selected, setSelected] = useState<PhotoJobBundle | null>(null),
     [editPromised, setEditPromised] = useState(''),
@@ -990,10 +1003,11 @@ export function PhotoJobsPage({
     [view, setView] = useState<'list' | 'board'>('list'),
     [balances, setBalances] = useState<Record<string, number>>({}),
     [query, setQuery] = useState(''),
-    [message, setMessage] = useState<string | null>(null),
     [uploadLink, setUploadLink] = useState<UploadLinkView | null>(null),
     [whatsapp, setWhatsapp] = useState<PhotoJobWhatsAppStatus | null>(null),
-    [whatsappBusy, setWhatsappBusy] = useState(false);
+    [whatsappBusy, setWhatsappBusy] = useState(false),
+    [editMode, setEditMode] = useState(false),
+    [confirmCancel, setConfirmCancel] = useState(false);
   const loadWhatsapp = async (jobId: string, channel: string) => {
     if (!notificationRepository || channel !== 'public_web') {
       setWhatsapp(null);
@@ -1003,7 +1017,7 @@ export function PhotoJobsPage({
       setWhatsapp(await notificationRepository.getStatus(c.businessId, jobId));
     } catch (e) {
       setWhatsapp(null);
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   };
   const load = () => {
@@ -1021,8 +1035,14 @@ export function PhotoJobsPage({
         urgentOnly: filter === 'urgent',
         search: query,
       })
-      .then((x) => setRows(sortPhotoProductionQueue(x)))
-      .catch((e) => setMessage(errorText(e)));
+      .then((x) => {
+        setRows(sortPhotoProductionQueue(x));
+        setLoaded(true);
+      })
+      .catch((e) => {
+        flash.error(errorText(e));
+        setLoaded(true);
+      });
   };
   useEffect(() => {
     const t = setTimeout(load, 120);
@@ -1057,6 +1077,7 @@ export function PhotoJobsPage({
   async function open(id: string) {
     try {
       const bundle = await repository.getJob(c.businessId, id);
+      setEditMode(false);
       setSelected(bundle);
       void loadWhatsapp(id, bundle?.job.sourceChannel ?? 'manual');
       setUploadLink(
@@ -1077,7 +1098,7 @@ export function PhotoJobsPage({
       setEditPriority(bundle?.job.priority ?? 'normal');
       setEditNotes(bundle?.job.notes ?? '');
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   }
   useEffect(() => {
@@ -1097,14 +1118,14 @@ export function PhotoJobsPage({
             () => false,
           )
         : false;
-      setMessage(
+      flash.success(
         copied
           ? 'Link generado y copiado.'
           : 'Link generado. Copialo desde aquí abajo.',
       );
       load();
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   }
   async function revokeLink() {
@@ -1112,13 +1133,13 @@ export function PhotoJobsPage({
     try {
       await fileIntakeRepository.revokeUploadLink(selected.job.id);
       setUploadLink(await fileIntakeRepository.getUploadLink(selected.job.id));
-      setMessage('Link revocado.');
+      flash.success('Link revocado.');
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   }
-  async function saveDetails() {
-    if (!selected) return;
+  async function saveDetails(): Promise<boolean> {
+    if (!selected) return false;
     try {
       const updated = await repository.updateJob(
         {
@@ -1135,8 +1156,10 @@ export function PhotoJobsPage({
       setSelected(updated);
       load();
       onMutation?.();
+      return true;
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
+      return false;
     }
   }
   function patchSelectedItem(
@@ -1159,13 +1182,12 @@ export function PhotoJobsPage({
         : current,
     );
   }
-  async function status(next: PhotoJobStatus) {
+  function status(next: PhotoJobStatus) {
+    if (next === 'cancelled') setConfirmCancel(true);
+    else void applyStatus(next);
+  }
+  async function applyStatus(next: PhotoJobStatus) {
     if (!selected) return;
-    if (
-      next === 'cancelled' &&
-      !window.confirm('¿Cancelar este pedido? Quedará en el historial.')
-    )
-      return;
     try {
       await repository.setJobStatus(c.businessId, selected.job.id, next);
       setSelected(await repository.getJob(c.businessId, selected.job.id));
@@ -1178,7 +1200,7 @@ export function PhotoJobsPage({
         await loadWhatsapp(selected.job.id, selected.job.sourceChannel);
       }
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     }
   }
   async function noticeAction(work: () => Promise<unknown>) {
@@ -1187,17 +1209,35 @@ export function PhotoJobsPage({
     try {
       await work();
     } catch (e) {
-      setMessage(errorText(e));
+      flash.error(errorText(e));
     } finally {
       await loadWhatsapp(selected.job.id, selected.job.sourceChannel);
       setWhatsappBusy(false);
     }
   }
+  const closed =
+    selected && ['delivered', 'cancelled'].includes(selected.job.status);
+  const activeItems = selected?.items.filter((x) => x.isActive) ?? [];
+  const itemsTotal = activeItems.reduce((s, x) => s + x.totalCents, 0);
   return (
     <>
-      <PageHeader
-        title="Pedidos"
-        actions={
+      <PageHeader title="Pedidos" />
+      <FlashMessage flash={flash} />
+      <FilterBar
+        label="Filtrar pedidos"
+        search={
+          <div className="search-field">
+            <Icon name="search" />
+            <input
+              type="search"
+              aria-label="Buscar pedidos"
+              placeholder="Cliente, teléfono, servicio o notas"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+        }
+        end={
           <Segmented
             label="Vista"
             value={view}
@@ -1208,36 +1248,22 @@ export function PhotoJobsPage({
             ]}
           />
         }
-      />
-      {message && <p className="appointment-error">{message}</p>}
-      <div className="jobs-toolbar">
-        <div className="search-field">
-          <Icon name="search" />
-          <input
-            type="search"
-            aria-label="Buscar pedidos"
-            placeholder="Cliente, teléfono, servicio o notas"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <div className="chips" role="group" aria-label="Filtrar por estado">
-          {jobFilters.map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className="chip"
-              aria-pressed={filter === value}
-              onClick={() => setFilter(value)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      >
+        {jobFilters.map(([value, label]) => (
+          <Chip
+            key={value}
+            pressed={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {label}
+          </Chip>
+        ))}
+      </FilterBar>
       {view === 'list' ? (
         <Card className="card--flush">
-          {rows.length === 0 ? (
+          {!loaded ? (
+            <p className="pad meta">Cargando pedidos…</p>
+          ) : rows.length === 0 ? (
             <EmptyState icon="camera" title="No hay pedidos para este filtro" />
           ) : (
             <div className="rows">
@@ -1291,221 +1317,285 @@ export function PhotoJobsPage({
         onClose={() => setSelected(null)}
         title={selected?.customerName ?? 'Pedido'}
         variant="side"
+        size="lg"
       >
         {selected && (
           <div className="photo-detail">
-            <div className="ficha-head">
-              <div>
-                <p className="meta">
-                  {selected.customerPhone ?? 'Sin teléfono'}
-                </p>
+            <header className="ficha-head">
+              <div className="prod-badges">
                 <JobStateLine job={selected.job} />
                 {selected.job.sourceChannel === 'public_web' && (
-                  <p className="meta">Pedido web</p>
+                  <StatusBadge tone="info">Pedido web</StatusBadge>
                 )}
               </div>
-            </div>
-            <div className="photo-actions">
-              {selected.job.status === 'received' && (
-                <button onClick={() => void status('in_progress')}>
-                  En proceso
-                </button>
-              )}
-              {['received', 'in_progress'].includes(selected.job.status) && (
-                <button
-                  className="customer-primary"
-                  onClick={() => void status('ready')}
-                >
-                  Marcar listo
-                </button>
-              )}
-              {selected.job.status === 'ready' && (
-                <button
-                  className="customer-primary"
-                  onClick={() => void status('delivered')}
-                >
-                  Entregado
-                </button>
-              )}
-              {!['delivered', 'cancelled'].includes(selected.job.status) && (
-                <button onClick={() => void status('cancelled')}>
-                  Cancelar
-                </button>
-              )}
-            </div>
-            <dl>
-              <dt>Fecha ingreso</dt>
-              <dd>
-                {new Date(selected.job.createdAt).toLocaleString('es-AR')}
-              </dd>
-              <dt>Entrega prometida</dt>
-              <dd>
-                {selected.job.promisedAt
-                  ? new Date(selected.job.promisedAt).toLocaleString('es-AR')
-                  : 'Sin fecha'}
-              </dd>
-              <dt>Estado</dt>
-              <dd>{statusLabel[selected.job.status]}</dd>
-              <dt>Archivos</dt>
-              <dd>{intakeLabel[selected.job.fileIntakeStatus]}</dd>
-            </dl>
-            {!['delivered', 'cancelled'].includes(selected.job.status) && (
-              <div className="photo-detail-edit">
-                <label>
-                  Entrega prometida
-                  <input
-                    type="datetime-local"
-                    value={editPromised}
-                    onChange={(e) => setEditPromised(e.target.value)}
-                  />
-                </label>
-                <label>
-                  Prioridad
-                  <select
-                    value={editPriority}
-                    onChange={(e) =>
-                      setEditPriority(e.target.value as PhotoJobPriority)
-                    }
+              <div className="ficha-actions">
+                {selected.job.status === 'received' && (
+                  <Button onClick={() => void status('in_progress')}>
+                    En proceso
+                  </Button>
+                )}
+                {['received', 'in_progress'].includes(selected.job.status) && (
+                  <Button
+                    variant="primary"
+                    onClick={() => void status('ready')}
                   >
-                    <option value="normal">Normal</option>
-                    <option value="urgent">Urgente</option>
-                  </select>
-                </label>
+                    Marcar listo
+                  </Button>
+                )}
+                {selected.job.status === 'ready' && (
+                  <Button
+                    variant="primary"
+                    onClick={() => void status('delivered')}
+                  >
+                    Entregado
+                  </Button>
+                )}
+                {!closed && !editMode && (
+                  <Button
+                    variant="ghost"
+                    icon="edit"
+                    onClick={() => setEditMode(true)}
+                  >
+                    Editar pedido
+                  </Button>
+                )}
+              </div>
+            </header>
+
+            <dl className="ficha-data">
+              <div>
+                <dt>Teléfono</dt>
+                <dd>{selected.customerPhone ?? 'Sin teléfono'}</dd>
+              </div>
+              <div>
+                <dt>Ingreso</dt>
+                <dd>{shortDateTime(selected.job.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>Entrega prometida</dt>
+                <dd>{dueText(selected.job.promisedAt)}</dd>
+              </div>
+              <div>
+                <dt>Archivos</dt>
+                <dd>{intakeLabel[selected.job.fileIntakeStatus]}</dd>
+              </div>
+              {selected.job.notes && !editMode && (
+                <div className="ficha-data__wide">
+                  <dt>Notas</dt>
+                  <dd>{selected.job.notes}</dd>
+                </div>
+              )}
+            </dl>
+
+            {editMode && (
+              <section className="drawer-section" aria-label="Editar pedido">
+                <h3>Editar pedido</h3>
+                <div className="config-editor-form__grid">
+                  <label>
+                    Entrega prometida
+                    <input
+                      type="datetime-local"
+                      value={editPromised}
+                      onChange={(e) => setEditPromised(e.target.value)}
+                    />
+                  </label>
+                  <label className="check-row">
+                    <input
+                      type="checkbox"
+                      checked={editPriority === 'urgent'}
+                      onChange={(e) =>
+                        setEditPriority(e.target.checked ? 'urgent' : 'normal')
+                      }
+                    />
+                    Urgente
+                  </label>
+                </div>
                 <label>
                   Notas
                   <textarea
+                    rows={2}
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
                   />
                 </label>
-                <button type="button" onClick={() => void saveDetails()}>
-                  Guardar datos
-                </button>
-              </div>
+              </section>
             )}
-            {selected.items
-              .filter((x) => x.isActive)
-              .map((x) => (
-                <div className="photo-detail-line" key={x.id}>
-                  <span>
-                    {x.quantity} × {x.serviceNameSnapshot}
-                    {x.widthMm
-                      ? ` · ${x.widthMm / 10}×${x.heightMm! / 10} cm`
-                      : ''}
-                  </span>
-                  <b>{money(x.totalCents)}</b>
-                  {x.notes && <small>{x.notes}</small>}
-                  {!['delivered', 'cancelled'].includes(
-                    selected.job.status,
-                  ) && (
-                    <div className="photo-detail-line-edit">
-                      <label>
-                        Cantidad
-                        <input
-                          type="number"
-                          min="1"
-                          value={x.quantity}
-                          onChange={(e) =>
-                            patchSelectedItem(x.id, {
-                              quantity: Math.max(1, Number(e.target.value)),
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        Precio unitario
-                        <input
-                          inputMode="decimal"
-                          value={x.unitPriceCents / 100}
-                          onChange={(e) =>
-                            patchSelectedItem(x.id, {
-                              unitPriceCents: Math.max(
-                                0,
-                                Math.round(
-                                  Number(e.target.value.replace(',', '.')) *
-                                    100,
+
+            <section className="editor-block editor-block--service">
+              <div className="section-head">
+                <h3>Servicios</h3>
+              </div>
+              <div className="editor-lines">
+                {activeItems.map((x) => (
+                  <div className="photo-detail-line" key={x.id}>
+                    <span>
+                      {x.quantity} × {x.serviceNameSnapshot}
+                      {x.widthMm
+                        ? ` · ${x.widthMm / 10}×${x.heightMm! / 10} cm`
+                        : ''}
+                    </span>
+                    <b>{money(x.totalCents)}</b>
+                    {x.notes && <small>{x.notes}</small>}
+                    {editMode && (
+                      <div className="photo-detail-line-edit">
+                        <label>
+                          Cantidad
+                          <input
+                            type="number"
+                            min="1"
+                            value={x.quantity}
+                            onChange={(e) =>
+                              patchSelectedItem(x.id, {
+                                quantity: Math.max(1, Number(e.target.value)),
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Precio unitario
+                          <input
+                            inputMode="decimal"
+                            value={x.unitPriceCents / 100}
+                            onChange={(e) =>
+                              patchSelectedItem(x.id, {
+                                unitPriceCents: Math.max(
+                                  0,
+                                  Math.round(
+                                    Number(e.target.value.replace(',', '.')) *
+                                      100,
+                                  ),
                                 ),
-                              ),
-                            })
+                              })
+                            }
+                          />
+                        </label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            patchSelectedItem(x.id, { isActive: false })
                           }
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          patchSelectedItem(x.id, { isActive: false })
-                        }
-                      >
-                        Quitar línea
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            <section className="photo-files">
-              <h3>ARCHIVOS</h3>
-              {selected.items
-                .filter((x) => x.isActive)
-                .map((item) => {
-                  const files = (selected.files ?? []).filter(
-                    (file) =>
-                      file.photoJobItemId === item.id &&
-                      file.status === 'uploaded',
-                  );
-                  if (!files.length) return null;
-                  const copies = files.reduce(
-                    (sum, file) => sum + file.copies,
-                    0,
-                  );
-                  return (
-                    <div key={item.id}>
-                      <strong>{item.serviceNameSnapshot}</strong>
-                      <span>
-                        {files.length} archivos
-                        {files.some((x) => x.workflowRoute === 'lab')
-                          ? ` / ${copies} copias`
-                          : ''}
-                      </span>
-                    </div>
-                  );
-                })}
-              {!(selected.files ?? []).some((x) => x.status === 'uploaded') && (
-                <p>Todavía no hay archivos recibidos.</p>
-              )}
-              {fileIntakeRepository &&
-                c.role !== 'staff' &&
-                selected.job.fileIntakeStatus !== 'not_required' && (
-                  <div className="photo-actions">
-                    {uploadLink?.url && (
-                      <button
-                        onClick={() =>
-                          void navigator.clipboard
-                            .writeText(uploadLink.url!)
-                            .then(
-                              () => setMessage('Link copiado.'),
-                              () =>
-                                setMessage(
-                                  'No se pudo copiar automáticamente. Seleccioná el link y copialo.',
-                                ),
-                            )
-                        }
-                      >
-                        Copiar link
-                      </button>
-                    )}
-                    <button onClick={() => void createLink()}>
-                      {uploadLink ? 'Regenerar' : 'Generar link'}
-                    </button>
-                    {uploadLink && !uploadLink.revokedAt && (
-                      <button
-                        className="danger-action"
-                        onClick={() => void revokeLink()}
-                      >
-                        Revocar
-                      </button>
+                        >
+                          Quitar
+                        </Button>
+                      </div>
                     )}
                   </div>
+                ))}
+              </div>
+              <p className="quote-total">
+                <span>Total</span>
+                <strong>{money(itemsTotal)}</strong>
+              </p>
+            </section>
+
+            {editMode && (
+              <div className="editor-state-actions">
+                <Button
+                  variant="primary"
+                  onClick={() =>
+                    void saveDetails().then(() => setEditMode(false))
+                  }
+                >
+                  Guardar cambios
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setEditMode(false);
+                    void open(selected.job.id);
+                  }}
+                >
+                  Descartar
+                </Button>
+              </div>
+            )}
+
+            <section className="editor-block editor-block--resource photo-files">
+              <div className="section-head">
+                <h3>Archivos</h3>
+              </div>
+              {activeItems.map((item) => {
+                const files = (selected.files ?? []).filter(
+                  (file) =>
+                    file.photoJobItemId === item.id &&
+                    file.status === 'uploaded',
+                );
+                if (!files.length) return null;
+                const copies = files.reduce(
+                  (sum, file) => sum + file.copies,
+                  0,
+                );
+                return (
+                  <div key={item.id}>
+                    <strong>{item.serviceNameSnapshot}</strong>
+                    <span>
+                      {files.length} archivos
+                      {files.some((x) => x.workflowRoute === 'lab')
+                        ? ` / ${copies} copias`
+                        : ''}
+                    </span>
+                  </div>
+                );
+              })}
+              {!(selected.files ?? []).some((x) => x.status === 'uploaded') && (
+                <p className="meta">Todavía no hay archivos recibidos.</p>
+              )}
+              <div className="editor-state-actions">
+                {selected.job.driveFolderId && (
+                  <Button
+                    icon="folder"
+                    onClick={() => openDriveFolder(selected.job.driveFolderId!)}
+                  >
+                    Abrir carpeta en Drive
+                  </Button>
                 )}
+                {selected.job.driveEditedFolderId && (
+                  <Button
+                    icon="folder"
+                    onClick={() =>
+                      openDriveFolder(selected.job.driveEditedFolderId!)
+                    }
+                  >
+                    Abrir Editadas
+                  </Button>
+                )}
+                {fileIntakeRepository &&
+                  c.role !== 'staff' &&
+                  selected.job.fileIntakeStatus !== 'not_required' && (
+                    <>
+                      {uploadLink?.url && (
+                        <Button
+                          icon="copy"
+                          onClick={() =>
+                            void navigator.clipboard
+                              .writeText(uploadLink.url!)
+                              .then(
+                                () => flash.success('Link copiado.'),
+                                () =>
+                                  flash.error(
+                                    'No se pudo copiar automáticamente. Seleccioná el link y copialo.',
+                                  ),
+                              )
+                          }
+                        >
+                          Copiar link
+                        </Button>
+                      )}
+                      <Button icon="link" onClick={() => void createLink()}>
+                        {uploadLink ? 'Regenerar link' : 'Generar link'}
+                      </Button>
+                      {uploadLink && !uploadLink.revokedAt && (
+                        <Button
+                          variant="danger"
+                          onClick={() => void revokeLink()}
+                        >
+                          Revocar link
+                        </Button>
+                      )}
+                    </>
+                  )}
+              </div>
               {uploadLink?.url && (
                 <input
                   className="upload-link-url"
@@ -1519,33 +1609,20 @@ export function PhotoJobsPage({
                 !uploadLink.url &&
                 !uploadLink.revokedAt &&
                 !uploadLink.submittedAt && (
-                  <small>
+                  <small className="meta">
                     Por seguridad el token no se puede volver a leer. Regeneralo
                     para obtener un link nuevo.
                   </small>
                 )}
-              {selected.job.driveFolderId && (
-                <button
-                  onClick={() => openDriveFolder(selected.job.driveFolderId!)}
-                >
-                  Abrir carpeta en Drive
-                </button>
-              )}
-              {selected.job.driveEditedFolderId && (
-                <button
-                  onClick={() =>
-                    openDriveFolder(selected.job.driveEditedFolderId!)
-                  }
-                >
-                  Abrir Editadas
-                </button>
-              )}
               {!fileIntakeRepository &&
                 selected.job.fileIntakeStatus !== 'not_required' &&
                 !selected.job.driveFolderId && (
-                  <small>Google Drive requiere conexión.</small>
+                  <small className="meta">
+                    Google Drive requiere conexión.
+                  </small>
                 )}
             </section>
+
             {selected.job.sourceChannel === 'public_web' &&
               (whatsapp && notificationRepository ? (
                 <WhatsAppNoticePanel
@@ -1567,19 +1644,12 @@ export function PhotoJobsPage({
                   }
                 />
               ) : !notificationRepository ? (
-                <small className="whatsapp-panel">
+                <small className="meta whatsapp-panel">
                   El aviso por WhatsApp lo envía la nube cuando este cambio se
                   sincroniza; no hace falta hacer nada en este equipo.
                 </small>
               ) : null)}
-            <h3>
-              TOTAL{' '}
-              {money(
-                selected.items
-                  .filter((x) => x.isActive)
-                  .reduce((s, x) => s + x.totalCents, 0),
-              )}
-            </h3>
+
             <PaymentAccountPanel
               repository={paymentRepository}
               sourceType="photo_job"
@@ -1589,25 +1659,44 @@ export function PhotoJobsPage({
                 onMutation?.();
               }}
             />
-            {!['delivered', 'cancelled'].includes(selected.job.status) && (
-              <button
-                className="customer-primary"
-                type="button"
-                onClick={() => void saveDetails()}
-              >
-                Guardar líneas y datos
-              </button>
-            )}
-            {selected.job.notes && <p>{selected.job.notes}</p>}
+
             {selected.job.sourceAppointmentId && (
-              <small>Origen: turno {selected.job.sourceAppointmentId}</small>
+              <small className="meta">
+                Origen: turno {selected.job.sourceAppointmentId}
+              </small>
             )}
             {selected.job.sourceEventId && (
-              <small>Origen: evento {selected.job.sourceEventId}</small>
+              <small className="meta">
+                Origen: presupuesto o reserva {selected.job.sourceEventId}
+              </small>
+            )}
+            {!closed && (
+              <section className="drawer-section">
+                <Button
+                  variant="danger"
+                  onClick={() => void status('cancelled')}
+                >
+                  Cancelar pedido
+                </Button>
+              </section>
             )}
           </div>
         )}
       </Sheet>
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar pedido"
+        destructive
+        confirmLabel="Cancelar pedido"
+        cancelLabel="Volver"
+        onCancel={() => setConfirmCancel(false)}
+        onConfirm={() => {
+          setConfirmCancel(false);
+          return applyStatus('cancelled');
+        }}
+      >
+        Quedará en el historial.
+      </ConfirmDialog>
     </>
   );
 }
@@ -1623,20 +1712,21 @@ const jobFilters: Array<[string, string]> = [
   ['all', 'Todos'],
 ];
 
-/** Estado principal del trabajo en una línea; sólo urgencia/atraso/listo llevan tono. */
-function JobStateLine({ job }: { job: PhotoJobSummary['job'] }) {
-  const parts: Array<{ text: string; tone?: 'alert' | 'warn' | 'ok' }> = [];
-  if (
-    job.priority === 'urgent' &&
-    !['delivered', 'cancelled'].includes(job.status)
-  )
-    parts.push({ text: 'Urgente', tone: 'alert' });
-  if (isPhotoJobOverdue(job)) parts.push({ text: 'Atrasado', tone: 'alert' });
-  parts.push({
-    text: statusLabel[job.status],
-    tone: job.status === 'ready' ? 'ok' : undefined,
-  });
-  return <StateLine parts={parts} />;
+/** Estado del pedido como pastillas: urgencia y atraso (alerta) más el estado de trabajo. */
+export function JobStateLine({ job }: { job: PhotoJobSummary['job'] }) {
+  const open = !['delivered', 'cancelled'].includes(job.status);
+  const state = statusMeta(photoJobStatus, job.status);
+  return (
+    <span className="prod-badges">
+      {open && job.priority === 'urgent' && (
+        <StatusBadge tone="alert">Urgente</StatusBadge>
+      )}
+      {open && isPhotoJobOverdue(job) && (
+        <StatusBadge tone="alert">Atrasado</StatusBadge>
+      )}
+      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+    </span>
+  );
 }
 
 function JobRow({
@@ -1691,255 +1781,5 @@ function JobRow({
         )}
       </span>
     </button>
-  );
-}
-
-type ProductionRow = {
-  bundle: PhotoJobBundle;
-  item: PhotoJobBundle['items'][number];
-  route: 'lab' | 'editing';
-  files: NonNullable<PhotoJobBundle['files']>;
-};
-type ProductionJob = {
-  key: string;
-  bundle: PhotoJobBundle;
-  route: 'lab' | 'editing';
-  services: string[];
-  files: NonNullable<PhotoJobBundle['files']>;
-};
-
-/**
- * Producción: la cola de Laboratorio y de Edición. Una fila por trabajo y carril, pensada para
- * una tablet de ~10": ver la cola, abrir Drive o el trabajo y pasarlo a «en proceso» / «listo».
- */
-export function PhotoProductionPage({
-  repository,
-  fileIntakeRepository,
-  notificationRepository,
-  refreshToken,
-  onOpenJob,
-  onMutation,
-}: {
-  repository: PhotoRepository;
-  fileIntakeRepository?: PhotoFileIntakeAdminRepository;
-  /** Web: avisa a la nube de que el pedido quedó listo (el aviso de WhatsApp lo envía ella). */
-  notificationRepository?: PhotoJobNotificationRepository;
-  refreshToken?: number;
-  onOpenJob?: (jobId: string) => void;
-  onMutation?: () => void;
-}) {
-  const c = useBusinessContext();
-  const [rows, setRows] = useState<ProductionRow[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busyJob, setBusyJob] = useState<string | null>(null);
-  const [reload, setReload] = useState(0);
-  useEffect(() => {
-    let live = true;
-    void repository
-      .listJobs(c.businessId, c.branchId!, {
-        statuses: ['received', 'in_progress', 'ready'],
-        limit: 300,
-      })
-      .then(
-        async (jobs) =>
-          (
-            await Promise.all(
-              jobs
-                .filter((x) => x.job.fileIntakeStatus === 'submitted')
-                .map((x) => repository.getJob(c.businessId, x.job.id)),
-            )
-          ).filter(Boolean) as PhotoJobBundle[],
-      )
-      .then((bundles) => {
-        const next: ProductionRow[] = [];
-        for (const bundle of bundles)
-          for (const item of bundle.items.filter((x) => x.isActive)) {
-            const files = (bundle.files ?? []).filter(
-              (x) => x.photoJobItemId === item.id && x.status === 'uploaded',
-            );
-            const route = files[0]?.workflowRoute;
-            if ((route === 'lab' || route === 'editing') && files.length)
-              next.push({ bundle, item, route, files });
-          }
-        next.sort((a, b) =>
-          comparePhotoProductionQueue(a.bundle.job, b.bundle.job),
-        );
-        if (live) {
-          setRows(next);
-          setLoaded(true);
-        }
-      })
-      .catch((x) => live && setMessage(errorText(x)));
-    return () => {
-      live = false;
-    };
-  }, [repository, c.businessId, c.branchId, refreshToken, reload]);
-  const openFolder = (id: string) =>
-    fileIntakeRepository?.openDriveFolder(id) ??
-    window.open(
-      `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`,
-      '_blank',
-      'noopener,noreferrer',
-    );
-
-  const queue = (route: 'lab' | 'editing'): ProductionJob[] => {
-    const byJob = new Map<string, ProductionJob>();
-    for (const row of rows.filter((x) => x.route === route)) {
-      const found = byJob.get(row.bundle.job.id);
-      if (found) {
-        found.services.push(row.item.serviceNameSnapshot);
-        found.files.push(...row.files);
-      } else
-        byJob.set(row.bundle.job.id, {
-          key: `${route}:${row.bundle.job.id}`,
-          bundle: row.bundle,
-          route,
-          services: [row.item.serviceNameSnapshot],
-          files: [...row.files],
-        });
-    }
-    return [...byJob.values()];
-  };
-
-  async function advance(job: ProductionJob, next: PhotoJobStatus) {
-    setBusyJob(job.bundle.job.id);
-    setMessage(null);
-    try {
-      await repository.setJobStatus(c.businessId, job.bundle.job.id, next);
-      if (next === 'ready' && job.bundle.job.sourceChannel === 'public_web')
-        await notificationRepository?.wake(c.businessId, job.bundle.job.id);
-      setReload((x) => x + 1);
-      onMutation?.();
-    } catch (x) {
-      setMessage(errorText(x));
-    } finally {
-      setBusyJob(null);
-    }
-  }
-
-  return (
-    <div className="production">
-      <PageHeader
-        title="Producción"
-        description="Vista operativa de los pedidos de laboratorio y edición."
-      />
-      {message && <p className="appointment-error">{message}</p>}
-      {(['lab', 'editing'] as const).map((route) => {
-        const jobs = queue(route);
-        const urgent = jobs.filter(
-          (x) =>
-            x.bundle.job.priority === 'urgent' ||
-            isPhotoJobOverdue(x.bundle.job),
-        ).length;
-        return (
-          <section
-            className="lane"
-            key={route}
-            aria-label={route === 'lab' ? 'Laboratorio' : 'Edición'}
-          >
-            <header className="lane-head on-dark">
-              <h2>{route === 'lab' ? 'LABORATORIO' : 'EDICIÓN'}</h2>
-              <span className="lane-stats">
-                {jobs.length} en cola
-                {urgent > 0 && (
-                  <span className="hot"> · {urgent} urgentes o atrasados</span>
-                )}
-              </span>
-            </header>
-            {!loaded ? (
-              <p className="pad meta">Cargando cola…</p>
-            ) : jobs.length === 0 ? (
-              <EmptyState icon="printer" title="No hay pedidos en esta cola" />
-            ) : (
-              <div className="rows">
-                {jobs.map((job) => {
-                  const j = job.bundle.job;
-                  const busy = busyJob === j.id;
-                  const copies = job.files.reduce((s, x) => s + x.copies, 0);
-                  const flag =
-                    isPhotoJobOverdue(j) || j.priority === 'urgent'
-                      ? 'alert'
-                      : j.status === 'ready'
-                        ? 'ok'
-                        : undefined;
-                  return (
-                    <div
-                      className="oprow prod-row"
-                      data-flag={flag}
-                      key={job.key}
-                    >
-                      <span className="who">
-                        {job.bundle.customerName}
-                        {j.sourceChannel === 'public_web' && (
-                          <span className="meta block">Pedido web</span>
-                        )}
-                      </span>
-                      <span className="what">
-                        {job.services.join(' · ')}
-                        <span className="meta block">
-                          {plural(job.files.length, 'archivo', 'archivos')}
-                          {route === 'lab' ? ` · ${copies} copias` : ''}
-                        </span>
-                      </span>
-                      <span className="when">
-                        <span
-                          className={
-                            isPhotoJobOverdue(j) ? 'txt-alert' : undefined
-                          }
-                        >
-                          {dueText(j.promisedAt)}
-                        </span>
-                        <JobStateLine job={j} />
-                      </span>
-                      <span className="act">
-                        {j.status === 'received' && (
-                          <button
-                            type="button"
-                            className="btn touch-lg"
-                            disabled={busy}
-                            onClick={() => void advance(job, 'in_progress')}
-                          >
-                            En proceso
-                          </button>
-                        )}
-                        {['received', 'in_progress'].includes(j.status) && (
-                          <button
-                            type="button"
-                            className="btn btn--primary touch-lg"
-                            disabled={busy}
-                            onClick={() => void advance(job, 'ready')}
-                          >
-                            Listo
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn--ghost touch-lg"
-                          onClick={() =>
-                            openFolder(job.files[0]!.driveFolderId)
-                          }
-                        >
-                          {route === 'editing' ? 'Originales' : 'Drive'}
-                        </button>
-                        {onOpenJob && (
-                          <button
-                            type="button"
-                            className="btn btn--ghost touch-lg"
-                            onClick={() => onOpenJob(j.id)}
-                          >
-                            Abrir
-                          </button>
-                        )}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        );
-      })}
-    </div>
   );
 }

@@ -302,16 +302,12 @@ function App() {
         ) : activeId === 'appointment-types' ? (
           <>
             <PageHeader title="Tipos y parámetros" />
-            <div className="settings-grid">
-              <section>
-                <AppointmentTypesPage
-                  repository={appointmentRepository}
-                  embedded
-                />
-              </section>
-              <section>
-                <EventTypesPage repository={eventRepository} embedded />
-              </section>
+            <div className="catalog-stack">
+              <AppointmentTypesPage
+                repository={appointmentRepository}
+                embedded
+              />
+              <EventTypesPage repository={eventRepository} embedded />
             </div>
           </>
         ) : activeId === 'events' ? (
@@ -383,6 +379,7 @@ function App() {
             paymentRepository={paymentRepository}
             photoRepository={photoRepository}
             serviceCatalogRepository={serviceCatalogRepository}
+            eventRepository={eventRepository}
             storage="cloud"
             initialCustomerId={openCustomerId}
             onNewJob={(customerId) => {
@@ -409,7 +406,7 @@ function App() {
         ) : activeId === 'settings' ? (
           <>
             <PageHeader title="Integraciones" />
-            <div className="settings-grid">
+            <div className="catalog-stack">
               <DriveSettingsPage
                 context={context}
                 repository={fileIntakeRepository}

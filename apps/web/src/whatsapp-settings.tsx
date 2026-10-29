@@ -1,11 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   BusinessContext,
   WhatsAppAdminRepository,
   WhatsAppIntegrationView,
   WhatsAppTestResult,
 } from '@centrocolor/application';
-import { Card, StateLine } from '@centrocolor/ui';
+import {
+  Button,
+  ConfirmDialog,
+  FormDrawer,
+  InlineMessage,
+  IntegrationCard,
+  StatusBadge,
+} from '@centrocolor/ui';
 
 const stateLabel: Record<WhatsAppIntegrationView['status'], string> = {
   not_configured: 'Sin configurar',
@@ -28,6 +35,7 @@ export function WhatsAppSettingsPage({
   const [integration, setIntegration] =
     useState<WhatsAppIntegrationView | null>(null);
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [test, setTest] = useState<WhatsAppTestResult | null>(null);
@@ -43,7 +51,6 @@ export function WhatsAppSettingsPage({
       .getIntegration(context.businessId)
       .then((value) => {
         setIntegration(value);
-        setEditing(value.status === 'not_configured');
         if (value.phoneNumberId) setPhoneNumberId(value.phoneNumberId);
         if (value.wabaId) setWabaId(value.wabaId);
         if (value.templateName) setTemplateName(value.templateName);
@@ -65,9 +72,8 @@ export function WhatsAppSettingsPage({
       setBusy(false);
     }
   }
-  const save = (event: FormEvent) => {
-    event.preventDefault();
-    void run(async () => {
+  const save = () =>
+    run(async () => {
       const token = accessToken;
       setAccessToken('');
       setIntegration(
@@ -83,7 +89,6 @@ export function WhatsAppSettingsPage({
       setTest(null);
       setMessage('Configuración guardada. Probá la conexión para verificarla.');
     });
-  };
   const probe = () =>
     run(async () => {
       const result = await repository.test(context.businessId);
@@ -91,181 +96,173 @@ export function WhatsAppSettingsPage({
       setIntegration(result.integration);
     });
   const disconnect = () => {
-    if (
-      !window.confirm(
-        '¿Desconectar WhatsApp? Se borra el token guardado. Los pedidos siguen funcionando, pero no se enviarán avisos.',
-      )
-    )
-      return;
-    void run(async () => {
+    setConfirming(false);
+    return run(async () => {
       setIntegration(await repository.disconnect(context.businessId));
       setTest(null);
-      setEditing(true);
     });
   };
 
   if (!admin)
     return (
-      <Card className="integration">
-        <header className="integration-head">
-          <h2>WhatsApp</h2>
-        </header>
-        <p className="muted">
-          Tu rol puede operar trabajos, pero sólo owner/admin puede configurar
-          WhatsApp.
-        </p>
-      </Card>
+      <IntegrationCard title="WhatsApp">
+        <p className="meta">Sólo owner o admin pueden configurar WhatsApp.</p>
+      </IntegrationCard>
     );
   const configured = integration && integration.status !== 'not_configured';
   return (
     <>
-      <Card className="integration whatsapp-settings">
-        <header className="integration-head">
-          <h2>WhatsApp</h2>
-          <StateLine
-            parts={[
-              {
-                text: integration ? stateLabel[integration.status] : '…',
-                tone:
-                  integration?.status === 'configured'
-                    ? 'ok'
-                    : integration?.status === 'error'
-                      ? 'alert'
-                      : undefined,
-              },
-            ]}
-          />
-        </header>
-        {message && <p className="appointment-error">{message}</p>}
-        <dl>
-          <dt>Número configurado</dt>
-          <dd>
-            {integration?.displayPhoneNumber ??
+      <IntegrationCard
+        title="WhatsApp"
+        status={
+          <StatusBadge
+            tone={
+              integration?.status === 'configured'
+                ? 'ok'
+                : integration?.status === 'error'
+                  ? 'alert'
+                  : 'closed'
+            }
+          >
+            {integration ? stateLabel[integration.status] : '…'}
+          </StatusBadge>
+        }
+        details={[
+          {
+            label: 'Número configurado',
+            value:
+              integration?.displayPhoneNumber ??
               (integration?.phoneNumberId
                 ? `ID ${integration.phoneNumberId}`
-                : '—')}
-          </dd>
-          <dt>Plantilla</dt>
-          <dd>{integration?.templateName ?? '—'}</dd>
-          <dt>Idioma</dt>
-          <dd>{integration?.templateLanguage ?? '—'}</dd>
-        </dl>
+                : '—'),
+          },
+          { label: 'Plantilla', value: integration?.templateName ?? '—' },
+          { label: 'Idioma', value: integration?.templateLanguage ?? '—' },
+        ]}
+        actions={
+          <>
+            <Button
+              variant={configured ? 'secondary' : 'primary'}
+              disabled={busy}
+              onClick={() => setEditing(true)}
+            >
+              {configured ? 'Cambiar configuración' : 'Configurar'}
+            </Button>
+            {configured && integration.status !== 'disconnected' && (
+              <>
+                <Button disabled={busy} onClick={() => void probe()}>
+                  Probar conexión
+                </Button>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => setConfirming(true)}
+                >
+                  Desconectar
+                </Button>
+              </>
+            )}
+          </>
+        }
+      >
+        {message && !editing && (
+          <InlineMessage tone="info">{message}</InlineMessage>
+        )}
         {integration?.lastCheckError && (
-          <p className="whatsapp-error">{integration.lastCheckError}</p>
+          <InlineMessage tone="error">
+            {integration.lastCheckError}
+          </InlineMessage>
         )}
         {integration?.status === 'not_configured' && (
-          <p>
+          <p className="meta">
             Sin WhatsApp los pedidos funcionan igual: sólo queda sin enviar el
             aviso automático.
           </p>
         )}
-        <div className="photo-actions">
-          <button
-            className="customer-primary"
-            disabled={busy}
-            onClick={() => setEditing((value) => !value)}
-          >
-            {configured ? 'Cambiar configuración' : 'Configurar'}
-          </button>
-          {configured && integration.status !== 'disconnected' && (
-            <>
-              <button disabled={busy} onClick={() => void probe()}>
-                Probar conexión
-              </button>
-              <button
-                className="danger-action"
-                disabled={busy}
-                onClick={disconnect}
-              >
-                Desconectar
-              </button>
-            </>
-          )}
-        </div>
         {test && (
-          <p className={test.ok ? 'whatsapp-ok' : 'whatsapp-error'}>
+          <InlineMessage tone={test.ok ? 'success' : 'error'}>
             {test.ok
-              ? `✓ Conexión correcta${test.displayPhoneNumber ? ` (${test.displayPhoneNumber})` : ''}${test.template?.checked ? ` · plantilla ${test.template.status}` : ' · cargá el WABA ID para verificar la plantilla'}.`
-              : `⚠ ${test.message ?? 'La conexión falló.'}`}
-          </p>
+              ? `Conexión correcta${test.displayPhoneNumber ? ` (${test.displayPhoneNumber})` : ''}${test.template?.checked ? ` · plantilla ${test.template.status}` : ' · cargá el WABA ID para verificar la plantilla'}.`
+              : (test.message ?? 'La conexión falló.')}
+          </InlineMessage>
         )}
-      </Card>
-      {editing && (
-        <Card>
-          <form
-            className="photo-service-form"
-            onSubmit={save}
+      </IntegrationCard>
+      <FormDrawer
+        open={editing}
+        onClose={() => setEditing(false)}
+        title="Configurar WhatsApp"
+        busy={busy}
+        error={editing ? message : null}
+        onSubmit={save}
+      >
+        <label>
+          Phone Number ID *
+          <input
+            required
+            inputMode="numeric"
             autoComplete="off"
-          >
-            <label>
-              Phone Number ID *
-              <input
-                required
-                inputMode="numeric"
-                value={phoneNumberId}
-                onChange={(e) => setPhoneNumberId(e.target.value)}
-              />
-            </label>
-            <label>
-              WABA ID (cuenta de WhatsApp Business)
-              <input
-                inputMode="numeric"
-                value={wabaId}
-                onChange={(e) => setWabaId(e.target.value)}
-              />
-            </label>
-            <label>
-              Nombre de la plantilla *
-              <input
-                required
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-              />
-            </label>
-            <label>
-              Idioma de la plantilla *
-              <input
-                required
-                value={templateLanguage}
-                onChange={(e) => setTemplateLanguage(e.target.value)}
-              />
-            </label>
-            <label>
-              Token de acceso
-              {integration?.status === 'not_configured' ? ' *' : ''}
-              <input
-                type="password"
-                autoComplete="new-password"
-                required={!configured || integration?.status === 'disconnected'}
-                placeholder={
-                  configured && integration?.status !== 'disconnected'
-                    ? 'Dejar vacío para conservar el actual'
-                    : ''
-                }
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-              />
-              <small>
-                Se guarda cifrado en el servidor y no se vuelve a mostrar.
-              </small>
-            </label>
-            <div>
-              <button
-                className="customer-primary"
-                type="submit"
-                disabled={busy}
-              >
-                Guardar
-              </button>
-              {configured && (
-                <button type="button" onClick={() => setEditing(false)}>
-                  Cancelar
-                </button>
-              )}
-            </div>
-          </form>
-        </Card>
-      )}
+            value={phoneNumberId}
+            onChange={(e) => setPhoneNumberId(e.target.value)}
+          />
+        </label>
+        <label>
+          WABA ID (cuenta de WhatsApp Business)
+          <input
+            inputMode="numeric"
+            autoComplete="off"
+            value={wabaId}
+            onChange={(e) => setWabaId(e.target.value)}
+          />
+        </label>
+        <div className="config-editor-form__grid">
+          <label>
+            Nombre de la plantilla *
+            <input
+              required
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+            />
+          </label>
+          <label>
+            Idioma *
+            <input
+              required
+              value={templateLanguage}
+              onChange={(e) => setTemplateLanguage(e.target.value)}
+            />
+          </label>
+        </div>
+        <label>
+          Token de acceso
+          {integration?.status === 'not_configured' ? ' *' : ''}
+          <input
+            type="password"
+            autoComplete="new-password"
+            required={!configured || integration?.status === 'disconnected'}
+            placeholder={
+              configured && integration?.status !== 'disconnected'
+                ? 'Dejar vacío para conservar el actual'
+                : ''
+            }
+            value={accessToken}
+            onChange={(e) => setAccessToken(e.target.value)}
+          />
+          <small className="meta">
+            Se guarda cifrado en el servidor y no se vuelve a mostrar.
+          </small>
+        </label>
+      </FormDrawer>
+      <ConfirmDialog
+        open={confirming}
+        title="Desconectar WhatsApp"
+        destructive
+        confirmLabel="Desconectar"
+        onCancel={() => setConfirming(false)}
+        onConfirm={disconnect}
+      >
+        Se borra el token guardado. Los pedidos siguen funcionando, pero no se
+        enviarán avisos.
+      </ConfirmDialog>
     </>
   );
 }

@@ -1,5 +1,33 @@
 # Estado actual
 
+## UX/UI — fase 8: limpieza y cierre global (29/10/2026)
+
+Pasada final sobre toda la app, sin tocar reglas, dominio, sync, migraciones ni SQL remoto. Verificado localmente: `pnpm lint`, `pnpm typecheck`, `pnpm test` (**568/568**), `pnpm build`, `pnpm build:desktop` y `git diff --check` pasan; `pnpm format:check` sobre el código pasa (sólo falta el formato previo de `docs/OPERATIONAL_TEST_DATA_CLEANUP.md`). Comprobado en navegador con repositorios en memoria: ninguna de 24 vistas desborda horizontalmente a 390 px y los flujos nuevos (detalle de pedido, Nuevo pedido, Servicios fotográficos, Stock) se vieron a 1280, 800 y 390 px. **No verificado:** ventana Tauri real, tablet física, lector de pantalla, persistencia y datos reales. Estado de despliegue en `docs/HANDOFF.md`: migraciones remotas al día (verificado con `migration list` y `db push --dry-run`), Edge Functions históricas sin re-verificar y Desktop requiere reinstalación. BUGs funcionales pendientes en `docs/UX_AUDIT.md` («Cierre»).
+
+## UX/UI — fase 7: Taller y Configuración secundaria (29/10/2026)
+
+Cambio de presentación, sin tocar dominio, reglas, SQL ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, formato, `pnpm test` (568/568) y `pnpm build` pasan. Comprobado en navegador con repositorios en memoria a 1280 y 390 px: Plotter, cotización y trabajos de Marquetería, Productos con drawer y categorías, Materiales, Tipos y parámetros, Recursos con capacidad LED e Integraciones. **No verificado:** persistencia real de alta/edición, OAuth de Drive, conexión de WhatsApp real, ventana Tauri, tablet física.
+
+## UX/UI — fase 6: Mostrador (Inicio, Clientes, Cobros) (29/10/2026)
+
+Cambio de presentación, sin tocar reglas de cobro, `WorkPayment`, dominio, SQL ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, formato, `pnpm test` (568/568) y `pnpm build` pasan. Comprobado en navegador con repositorios en memoria (pedidos, cuentas, reservas, turnos y ventas de muestra) a 1280 y 390 px: Inicio con 4 KPI y avisos acotados, ficha de cliente con Datos/Cuenta/Pedidos/Reservas, drawer de edición con lista de precios y estado, y Cobros en tabla (desktop) y tarjetas (mobile). **No verificado:** persistencia real, registro de pagos real, ventana Tauri, tablet física. POS, Ventas, Stock y Productos sin cambios en esta fase.
+
+## UX/UI — fase 5: Presupuestos y reservas + Agenda (29/10/2026)
+
+Cambio de presentación, sin tocar disponibilidad, estados de negocio, dominio, SQL ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, formato, `pnpm test` (568/568) y `pnpm build` pasan. Comprobado en navegador con repositorios en memoria (un presupuesto con servicios, viáticos y recurso; turnos de muestra) a 1280, 1024 y 390 px: editor en hoja ancha con pie fijo, «Agregar servicio» como segunda hoja apilada (Esc cierra sólo la superior), Agenda con título único y barra compacta, editor de turnos en hoja. **No verificado:** guardar/cotizar contra datos reales, conflictos de disponibilidad reales, ventana Tauri, tablet física. Pendientes en `docs/HANDOFF.md`.
+
+## UX/UI — fase 4: Precios (29/10/2026)
+
+Cambio de presentación y composición de Configuración → Precios, sin tocar dominio, reglas, esquema, SQL remoto ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, formato, `pnpm test` (568/568) y `pnpm build` pasan. Comprobado en navegador con repositorios en memoria (listas, tramos, tarifas de Plotter, ofertas LED/tela/eventos) a 1280 y 390 px: portada de familias, detalle de Laboratorio, Plotter y pantallas de tela, hoja de edición con secciones y hoja de disponibilidad/publicación. **No verificado:** persistencia real de tarifas, ventana Tauri, tablet física. Pendientes que no se resuelven con UX (Marquetería, Fotografía/Video, atajos LED, Kiosco) en `docs/HANDOFF.md`.
+
+## UX/UI — fase 3: Producción para tablet (29/10/2026)
+
+Cambio de presentación, sin tocar reglas de negocio, dominio, SQL ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, `pnpm format:check` sobre el código, `pnpm test` (568/568) y `pnpm build` pasan. Comprobado en navegador con repositorios en memoria y ocho pedidos de muestra a 1280×800, 1024×768, 800×1280 y 390×844: las columnas de acción quedan en la misma coordenada en todas las filas, los botones miden 56 px y el paso Pendiente → En proceso → Listo funciona. **No verificado:** tablet física, ventana Tauri y datos reales. Los puntos que dependen del dominio (pedidos de mostrador sin archivos, ítems en ambos carriles, aviso inmediato de WhatsApp) siguen sin resolver y están descritos en `docs/HANDOFF.md` y `docs/UX_AUDIT.md`.
+
+## UX/UI — fases 0–2 de la auditoría (29/10/2026)
+
+Cambios de interfaz sin tocar reglas de negocio, dominio, esquema, SQL remoto ni sync. Verificado localmente: `pnpm lint`, `pnpm typecheck`, `pnpm test` (568/568) y `pnpm build` pasan; comprobación visual en navegador con repositorios en memoria (Agenda con pestañas bajo el título, Plotter con estados traducidos y `.form-row`, menú «+ Nuevo» abriendo el alta de Cliente, Turno y Presupuesto o reserva). **No verificado**: ventana Tauri, tablet física, datos reales, mensajes de éxito en pantalla (la lógica compila y está cubierta por las pruebas existentes, pero no se disparó un alta real). Detalle y pendientes en `docs/UX_GRAMMAR.md` y `docs/UX_AUDIT.md`; los BUGs funcionales y decisiones de dominio de esa auditoría siguen sin resolver.
+
 ## Configuración → Precios — Fases A/B (27/10/2026)
 
 Implementada en Web y Desktop la fachada única de precios aprobada, sin tablas, migraciones, SQL remoto, cambios de dominio ni cambios de sincronización. Configuración muestra una sola entrada **Precios**; los IDs históricos `services`, `price-lists` y `photo-services` continúan resolviendo para no romper enlaces internos, pero Listas de precios y Servicios y precios ya no compiten como entradas visibles.

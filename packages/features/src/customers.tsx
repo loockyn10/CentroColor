@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import {
   createCustomer,
   deactivateCustomer,
@@ -7,13 +7,31 @@ import {
   searchCustomers,
   updateCustomer,
   type CustomerRepository,
+  type EventRepository,
+  type EventSummary,
   type PhotoJobSummary,
   type PhotoRepository,
   type ServiceCatalogRepository,
   type WorkPaymentRepository,
 } from '@centrocolor/application';
-import type { Customer, CustomerDetails, PriceList } from '@centrocolor/domain';
-import { Button, Card, EmptyState, Icon, PageHeader } from '@centrocolor/ui';
+import {
+  eventStatuses,
+  type Customer,
+  type CustomerDetails,
+  type PriceList,
+} from '@centrocolor/domain';
+import {
+  Button,
+  Card,
+  EmptyState,
+  FormDrawer,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  StatusBadge,
+  takeCreateIntent,
+} from '@centrocolor/ui';
+import { eventStatus, photoJobStatus, statusMeta } from './status';
 import { useBusinessContext } from './auth';
 import { CustomerAccountPanel } from './payments';
 import { dueText } from './format';
@@ -47,14 +65,6 @@ export function whatsappNumber(phone: string) {
   return digits.startsWith('54') ? digits : `549${digits}`;
 }
 
-const jobStatus: Record<string, string> = {
-  received: 'Recibido',
-  in_progress: 'En proceso',
-  ready: 'Listo para entregar',
-  delivered: 'Entregado',
-  cancelled: 'Cancelado',
-};
-
 export function CustomersPage({
   repository,
   storage,
@@ -63,6 +73,7 @@ export function CustomersPage({
   paymentRepository,
   photoRepository,
   serviceCatalogRepository,
+  eventRepository,
   initialCustomerId,
   onNewJob,
   onOpenJob,
@@ -75,6 +86,8 @@ export function CustomersPage({
   /** Opcional: habilita «Pedidos» en la ficha. */
   photoRepository?: PhotoRepository;
   serviceCatalogRepository?: ServiceCatalogRepository;
+  /** Opcional: habilita «Presupuestos y reservas» en la ficha (sólo lectura). */
+  eventRepository?: EventRepository;
   /** Abre la ficha de un cliente (p. ej. desde el buscador global). */
   initialCustomerId?: string | null;
   /** «Nuevo pedido» con el cliente preseleccionado. */
@@ -85,7 +98,10 @@ export function CustomersPage({
   const [query, setQuery] = useState('');
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
-  const [mode, setMode] = useState<'idle' | 'new' | 'detail'>('idle');
+  const [mode, setMode] = useState<'idle' | 'detail'>('idle');
+  const [form, setForm] = useState<'new' | 'edit' | null>(null);
+  const [draftList, setDraftList] = useState('');
+  const [events, setEvents] = useState<EventSummary[]>([]);
   const [details, setDetails] = useState<CustomerDetails>(emptyDetails);
   const [jobs, setJobs] = useState<PhotoJobSummary[]>([]);
   const [priceLists, setPriceLists] = useState<PriceList[]>([]);
@@ -93,6 +109,22 @@ export function CustomersPage({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
+  useEffect(() => {
+    // Alta pedida desde el menú «Nuevo»: abre el formulario directamente.
+    if (takeCreateIntent('customers')) openNew();
+  }, []);
+  function openNew() {
+    setDetails(emptyDetails);
+    setError(null);
+    setForm('new');
+  }
+  function openEdit() {
+    if (!selected) return;
+    setDetails(detailsOf(selected));
+    setDraftList(selected.priceListId ?? '');
+    setError(null);
+    setForm('edit');
+  }
 
   useEffect(() => {
     if (!serviceCatalogRepository) return;
@@ -101,23 +133,6 @@ export function CustomersPage({
       .then(setPriceLists)
       .catch((e) => setError(errorMessage(e)));
   }, [businessId, serviceCatalogRepository, refreshToken]);
-
-  async function assignPriceList(id: string | null) {
-    if (!selected || !repository.assignPriceList || role === 'staff') return;
-    try {
-      const updated = await repository.assignPriceList(
-        businessId,
-        selected.id,
-        id,
-      );
-      setSelected(updated);
-      setRefresh((current) => current + 1);
-      onLocalMutation?.();
-      setError(null);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
 
   useEffect(() => {
     let live = true;
@@ -184,18 +199,54 @@ export function CustomersPage({
     };
   }, [photoRepository, businessId, branchId, selected, refresh, refreshToken]);
 
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  useEffect(() => {
+    if (!eventRepository || !selected || !branchId) {
+      setEvents([]);
+      return;
+    }
+    let live = true;
+    void eventRepository
+      .listEvents({
+        businessId,
+        branchId,
+        statuses: [...eventStatuses],
+        query: selected.fullName,
+        limit: 50,
+      })
+      .then((rows) => {
+        if (live)
+          setEvents(rows.filter((row) => row.customerId === selected.id));
+      })
+      .catch(() => live && setEvents([]));
+    return () => {
+      live = false;
+    };
+  }, [eventRepository, businessId, branchId, selected, refresh, refreshToken]);
+
+  async function save() {
     setBusy(true);
     setError(null);
     try {
-      const saved =
-        mode === 'new'
+      let saved =
+        form === 'new'
           ? await createCustomer(repository, businessId, details)
           : await updateCustomer(repository, businessId, selected!.id, details);
+      if (
+        form === 'edit' &&
+        repository.assignPriceList &&
+        role !== 'staff' &&
+        serviceCatalogRepository &&
+        (saved.priceListId ?? '') !== draftList
+      )
+        saved = await repository.assignPriceList(
+          businessId,
+          saved.id,
+          draftList || null,
+        );
       setSelected(saved);
       setDetails(detailsOf(saved));
       setMode('detail');
+      setForm(null);
       setRefresh((value) => value + 1);
       onLocalMutation?.();
     } catch (saveError) {
@@ -215,6 +266,7 @@ export function CustomersPage({
         : await reactivateCustomer(repository, businessId, selected.id);
       const fresh = await getCustomer(repository, businessId, updated.id);
       setSelected(fresh ?? updated);
+      setForm(null);
       setRefresh((value) => value + 1);
       onLocalMutation?.();
     } catch (toggleError) {
@@ -225,22 +277,17 @@ export function CustomersPage({
   }
 
   const whatsapp = selected?.phone ? whatsappNumber(selected.phone) : null;
+  const priceListName = (id: string | null | undefined) =>
+    id
+      ? (priceLists.find((list) => list.id === id)?.name ?? 'Lista asignada')
+      : 'Público (predeterminada)';
 
   return (
     <>
       <PageHeader
         title="Clientes"
-        actions={
-          <Button
-            variant="primary"
-            icon="plus"
-            onClick={() => {
-              setDetails(emptyDetails);
-              setSelected(null);
-              setError(null);
-              setMode('new');
-            }}
-          >
+        primaryAction={
+          <Button variant="primary" icon="plus" onClick={openNew}>
             Nuevo cliente
           </Button>
         }
@@ -250,11 +297,7 @@ export function CustomersPage({
           Se guardan en este equipo y se sincronizan al validar el acceso.
         </p>
       )}
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && !form && <InlineMessage tone="error">{error}</InlineMessage>}
       <div
         className={`customers ${mode === 'idle' ? '' : 'has-detail'}`.trim()}
       >
@@ -297,9 +340,7 @@ export function CustomersPage({
                       </span>
                     </span>
                     {!customer.isActive && (
-                      <span className="state-line">
-                        <span className="tone-warn">Inactivo</span>
-                      </span>
+                      <StatusBadge tone="closed">Inactivo</StatusBadge>
                     )}
                   </button>
                 ))}
@@ -314,7 +355,7 @@ export function CustomersPage({
           </Card>
         </section>
 
-        {mode !== 'idle' && (
+        {mode === 'detail' && selected && (
           <section className="customers-detail" aria-label="Ficha de cliente">
             <button
               className="customer-back"
@@ -326,97 +367,93 @@ export function CustomersPage({
             <Card>
               <header className="ficha-head">
                 <div>
-                  <h2>
-                    {mode === 'new' ? 'Nuevo cliente' : selected?.fullName}
-                  </h2>
-                  {selected && (
-                    <p className="meta">
-                      {[selected.phone, selected.email]
-                        .filter(Boolean)
-                        .join(' · ') || 'Sin datos de contacto'}
-                      {!selected.isActive && ' · Inactivo'}
-                    </p>
+                  <h2>{selected.fullName}</h2>
+                  {!selected.isActive && (
+                    <StatusBadge tone="closed">Inactivo</StatusBadge>
                   )}
                 </div>
-                {selected && (
-                  <div className="ficha-actions">
-                    {whatsapp && (
-                      <a
-                        className="btn btn--primary"
-                        href={`https://wa.me/${whatsapp}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Icon name="chat" /> WhatsApp
-                      </a>
-                    )}
-                    {onNewJob && selected.isActive && (
-                      <Button
-                        variant="primary"
-                        icon="camera"
-                        onClick={() => onNewJob(selected.id)}
-                      >
-                        Nuevo pedido
-                      </Button>
-                    )}
-                    {selected.phone && (
-                      <a
-                        className="btn btn--ghost btn--sm"
-                        href={`tel:${selected.phone}`}
-                        aria-label={`Llamar a ${selected.fullName}`}
-                      >
-                        <Icon name="phone" /> Llamar
-                      </a>
-                    )}
-                    {selected.email && (
-                      <a
-                        className="btn btn--ghost btn--sm"
-                        href={`mailto:${selected.email}`}
-                        aria-label={`Escribir a ${selected.fullName}`}
-                      >
-                        <Icon name="mail" /> Email
-                      </a>
-                    )}
-                  </div>
-                )}
+                <div className="ficha-actions">
+                  {onNewJob && selected.isActive && (
+                    <Button
+                      variant="primary"
+                      icon="camera"
+                      onClick={() => onNewJob(selected.id)}
+                    >
+                      Nuevo pedido
+                    </Button>
+                  )}
+                  {whatsapp && (
+                    <a
+                      className="btn"
+                      href={`https://wa.me/${whatsapp}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Icon name="chat" /> WhatsApp
+                    </a>
+                  )}
+                  <Button variant="ghost" icon="edit" onClick={openEdit}>
+                    Editar
+                  </Button>
+                </div>
               </header>
 
-              {selected && serviceCatalogRepository && (
-                <div className="ficha-section">
-                  <label>
-                    Lista de precios
-                    <select
-                      value={selected.priceListId ?? ''}
-                      disabled={role === 'staff' || !repository.assignPriceList}
-                      onChange={(event) =>
-                        void assignPriceList(event.target.value || null)
-                      }
-                    >
-                      <option value="">Público (predeterminada)</option>
-                      {priceLists
-                        .filter((list) => list.isActive && !list.isDefault)
-                        .map((list) => (
-                          <option value={list.id} key={list.id}>
-                            {list.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                </div>
-              )}
+              <section className="ficha-section" aria-label="Datos">
+                <h3>Datos</h3>
+                <dl className="ficha-data">
+                  <div>
+                    <dt>Teléfono</dt>
+                    <dd>
+                      {selected.phone ? (
+                        <a href={`tel:${selected.phone}`}>
+                          <Icon name="phone" size={16} /> {selected.phone}
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>
+                      {selected.email ? (
+                        <a href={`mailto:${selected.email}`}>
+                          <Icon name="mail" size={16} /> {selected.email}
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Documento</dt>
+                    <dd>{selected.documentNumber || '—'}</dd>
+                  </div>
+                  {serviceCatalogRepository && (
+                    <div>
+                      <dt>Lista de precios</dt>
+                      <dd>{priceListName(selected.priceListId)}</dd>
+                    </div>
+                  )}
+                  {selected.notes && (
+                    <div className="ficha-data__wide">
+                      <dt>Notas</dt>
+                      <dd>{selected.notes}</dd>
+                    </div>
+                  )}
+                </dl>
+              </section>
 
-              {selected && (
-                <div className="ficha-section">
-                  <CustomerAccountPanel
-                    repository={paymentRepository}
-                    customerId={selected.id}
-                    refreshToken={refreshToken}
-                  />
-                </div>
-              )}
+              <div className="ficha-section">
+                <CustomerAccountPanel
+                  repository={paymentRepository}
+                  customerId={selected.id}
+                  refreshToken={refreshToken}
+                />
+              </div>
 
-              {selected && photoRepository && (
-                <div className="ficha-section">
+              {photoRepository && (
+                <section className="ficha-section" aria-label="Pedidos">
                   <h3>Pedidos de laboratorio</h3>
                   {jobs.length === 0 ? (
                     <p className="meta">Sin pedidos de laboratorio.</p>
@@ -439,99 +476,150 @@ export function CustomersPage({
                           <span className="meta">
                             {dueText(row.job.promisedAt)}
                           </span>
-                          <span className="state-line">
-                            <span>{jobStatus[row.job.status]}</span>
-                          </span>
+                          <StatusBadge
+                            tone={
+                              statusMeta(photoJobStatus, row.job.status).tone
+                            }
+                          >
+                            {statusMeta(photoJobStatus, row.job.status).label}
+                          </StatusBadge>
                         </button>
                       ))}
                     </div>
                   )}
-                </div>
+                </section>
               )}
 
-              <form
-                className="customer-form ficha-section"
-                onSubmit={(event) => void save(event)}
-              >
-                <h3 className="customer-form-wide">Datos</h3>
-                <label>
-                  Nombre completo *
-                  <input
-                    required
-                    value={details.fullName}
-                    onChange={(event) =>
-                      setDetails({ ...details, fullName: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Teléfono
-                  <input
-                    type="tel"
-                    value={details.phone ?? ''}
-                    onChange={(event) =>
-                      setDetails({ ...details, phone: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Email
-                  <input
-                    type="email"
-                    value={details.email ?? ''}
-                    onChange={(event) =>
-                      setDetails({ ...details, email: event.target.value })
-                    }
-                  />
-                </label>
-                <label>
-                  Documento
-                  <input
-                    value={details.documentNumber ?? ''}
-                    onChange={(event) =>
-                      setDetails({
-                        ...details,
-                        documentNumber: event.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label className="customer-form-wide">
-                  Notas
-                  <textarea
-                    rows={3}
-                    value={details.notes ?? ''}
-                    onChange={(event) =>
-                      setDetails({ ...details, notes: event.target.value })
-                    }
-                  />
-                </label>
-                <div className="customer-actions">
-                  <button
-                    className="customer-primary"
-                    type="submit"
-                    disabled={busy}
-                  >
-                    {mode === 'new' ? 'Guardar cliente' : 'Guardar cambios'}
-                  </button>
-                  {selected && (
-                    <button
-                      className="customer-secondary"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void toggleActive()}
-                    >
-                      {selected.isActive
-                        ? 'Desactivar cliente'
-                        : 'Reactivar cliente'}
-                    </button>
+              {eventRepository && (
+                <section className="ficha-section" aria-label="Reservas">
+                  <h3>Presupuestos y reservas</h3>
+                  {events.length === 0 ? (
+                    <p className="meta">Sin presupuestos ni reservas.</p>
+                  ) : (
+                    <div className="rows">
+                      {events.slice(0, 8).map((row) => (
+                        <div
+                          className="oprow"
+                          style={{
+                            ['--cols' as string]: 'minmax(0, 1fr) auto auto',
+                          }}
+                          key={row.id}
+                        >
+                          <span className="what">{row.title}</span>
+                          <span className="meta">
+                            {new Date(row.startsAt).toLocaleDateString(
+                              'es-AR',
+                              { day: '2-digit', month: '2-digit' },
+                            )}
+                          </span>
+                          <StatusBadge
+                            tone={statusMeta(eventStatus, row.status).tone}
+                          >
+                            {statusMeta(eventStatus, row.status).label}
+                          </StatusBadge>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                </div>
-              </form>
+                </section>
+              )}
             </Card>
           </section>
         )}
       </div>
+
+      <FormDrawer
+        open={form !== null}
+        onClose={() => setForm(null)}
+        title={form === 'new' ? 'Nuevo cliente' : 'Editar cliente'}
+        submitLabel={form === 'new' ? 'Guardar cliente' : 'Guardar cambios'}
+        busy={busy}
+        error={error}
+        onSubmit={save}
+      >
+        <label>
+          Nombre completo *
+          <input
+            required
+            value={details.fullName}
+            onChange={(event) =>
+              setDetails({ ...details, fullName: event.target.value })
+            }
+          />
+        </label>
+        <div className="config-editor-form__grid">
+          <label>
+            Teléfono
+            <input
+              type="tel"
+              value={details.phone ?? ''}
+              onChange={(event) =>
+                setDetails({ ...details, phone: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              value={details.email ?? ''}
+              onChange={(event) =>
+                setDetails({ ...details, email: event.target.value })
+              }
+            />
+          </label>
+        </div>
+        <label>
+          Documento
+          <input
+            value={details.documentNumber ?? ''}
+            onChange={(event) =>
+              setDetails({ ...details, documentNumber: event.target.value })
+            }
+          />
+        </label>
+        {form === 'edit' && serviceCatalogRepository && (
+          <label>
+            Lista de precios
+            <select
+              value={draftList}
+              disabled={role === 'staff' || !repository.assignPriceList}
+              onChange={(event) => setDraftList(event.target.value)}
+            >
+              <option value="">Público (predeterminada)</option>
+              {priceLists
+                .filter((list) => list.isActive && !list.isDefault)
+                .map((list) => (
+                  <option value={list.id} key={list.id}>
+                    {list.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        <label>
+          Notas
+          <textarea
+            rows={3}
+            value={details.notes ?? ''}
+            onChange={(event) =>
+              setDetails({ ...details, notes: event.target.value })
+            }
+          />
+        </label>
+        {form === 'edit' && selected && (
+          <section className="drawer-section">
+            <h3>Estado del cliente</h3>
+            <Button
+              variant={selected.isActive ? 'danger' : 'secondary'}
+              disabled={busy}
+              onClick={() => void toggleActive()}
+            >
+              {selected.isActive ? 'Desactivar cliente' : 'Reactivar cliente'}
+            </Button>
+          </section>
+        )}
+      </FormDrawer>
     </>
   );
 }

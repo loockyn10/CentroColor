@@ -9,9 +9,9 @@ import type {
   LedPreset,
   Resource,
 } from '@centrocolor/domain';
-import { Button, Sheet } from '@centrocolor/ui';
+import { Button, FormDrawer, InlineMessage } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
-import { ConfigurationRow, ConfigurationSection } from './configuration-ui';
+import { CatalogRow, CatalogSection } from './configuration-ui';
 
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'No se pudo guardar.';
@@ -151,33 +151,39 @@ export function ResourceCapacityPanel({
 
   return (
     <>
-      {notice && <p role="alert">{notice}</p>}
-      <ConfigurationSection
-        eyebrow="CAPACIDAD TÉCNICA"
-        title="Inventario LED"
-        description="Determina disponibilidad y compatibilidad. No interviene en el precio comercial."
+      {notice && !poolOpen && !controllerOpen && !presetOpen && (
+        <InlineMessage tone="error">{notice}</InlineMessage>
+      )}
+      <div className="section-head catalog-group-head">
+        <h2>Capacidad LED</h2>
+      </div>
+      <CatalogSection
+        title="Pool de paneles"
+        hint="Determina disponibilidad y compatibilidad; no interviene en el precio."
       >
-        <div className="rows">
-          <ConfigurationRow
-            title="Pool de paneles"
-            values={
-              pool
+        <CatalogRow
+          title="Paneles disponibles"
+          values={[
+            {
+              label: 'Capacidad',
+              value: pool
                 ? `${pool.totalPanels} paneles · ${pool.panelAreaMm2 / 1_000_000} m² por panel · ${pool.pixelsPerPanel.toLocaleString('es-AR')} px`
-                : 'Capacidad pendiente de configurar'
-            }
-            active={pool?.isActive ?? false}
-            onEdit={admin ? () => setPoolOpen(true) : undefined}
-          />
-        </div>
-      </ConfigurationSection>
-      <ConfigurationSection
-        eyebrow="EQUIPOS"
+                : 'Pendiente de configurar',
+            },
+          ]}
+          active={pool?.isActive ?? false}
+          onEdit={admin ? () => setPoolOpen(true) : undefined}
+        />
+      </CatalogSection>
+      <CatalogSection
         title="Controladores LED"
-        description="Recursos físicos vinculados y su capacidad máxima."
-        actions={
+        hint="Equipos físicos vinculados y su capacidad máxima."
+        action={
           admin ? (
             <Button
               variant="secondary"
+              size="sm"
+              icon="plus"
               onClick={() => {
                 setControllerResource('');
                 setControllerPixels('');
@@ -189,25 +195,27 @@ export function ResourceCapacityPanel({
           ) : undefined
         }
       >
-        <div className="rows">
-          {controllers.map((controller) => (
-            <ConfigurationRow
+        {controllers.length === 0 && (
+          <p className="meta price-empty">Sin controladores vinculados.</p>
+        )}
+        {controllers.map((controller) => {
+          const resource = resources.find(
+            (item) => item.id === controller.resourceId,
+          );
+          return (
+            <CatalogRow
               key={controller.id}
-              title={
-                resources.find(
-                  (resource) => resource.id === controller.resourceId,
-                )?.name ?? controller.resourceId
-              }
-              values={
-                controller.maxPixels === null
-                  ? 'Capacidad pendiente'
-                  : `${controller.maxPixels.toLocaleString('es-AR')} px`
-              }
-              active={
-                resources.find(
-                  (resource) => resource.id === controller.resourceId,
-                )?.isActive ?? false
-              }
+              title={resource?.name ?? controller.resourceId}
+              values={[
+                {
+                  label: 'Capacidad máxima',
+                  value:
+                    controller.maxPixels === null
+                      ? 'Pendiente'
+                      : `${controller.maxPixels.toLocaleString('es-AR')} px`,
+                },
+              ]}
+              active={resource?.isActive ?? false}
               onEdit={
                 admin
                   ? () => {
@@ -222,128 +230,142 @@ export function ResourceCapacityPanel({
                   : undefined
               }
             />
-          ))}
-        </div>
-      </ConfigurationSection>
-      <ConfigurationSection
-        eyebrow="ATAJOS"
+          );
+        })}
+      </CatalogSection>
+      <CatalogSection
         title="Tamaños LED habituales"
-        description="Medidas técnicas reutilizables para calcular paneles."
-        actions={
+        hint="Medidas técnicas reutilizables para calcular paneles."
+        action={
           admin ? (
-            <Button variant="secondary" onClick={() => setPresetOpen(true)}>
-              + Nuevo tamaño
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="plus"
+              onClick={() => setPresetOpen(true)}
+            >
+              Nuevo tamaño
             </Button>
           ) : undefined
         }
       >
-        <div className="rows">
-          {presets.map((preset) => (
-            <ConfigurationRow
-              key={preset.id}
-              title={preset.name}
-              values={`${preset.widthMm / 1000} × ${preset.heightMm / 1000} m`}
-              active={preset.isActive}
-              onToggle={
-                admin
-                  ? () =>
-                      void persist(() =>
-                        repository.saveLedPreset({
-                          ...preset,
-                          isActive: !preset.isActive,
-                        }),
-                      )
-                  : undefined
-              }
-            />
-          ))}
-        </div>
-      </ConfigurationSection>
-      <Sheet
+        {presets.length === 0 && (
+          <p className="meta price-empty">Sin tamaños cargados.</p>
+        )}
+        {presets.map((preset) => (
+          <CatalogRow
+            key={preset.id}
+            title={preset.name}
+            values={[
+              {
+                label: 'Medidas',
+                value: `${preset.widthMm / 1000} × ${preset.heightMm / 1000} m`,
+              },
+            ]}
+            active={preset.isActive}
+            actions={
+              admin ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    void persist(() =>
+                      repository.saveLedPreset({
+                        ...preset,
+                        isActive: !preset.isActive,
+                      }),
+                    )
+                  }
+                >
+                  {preset.isActive ? 'Desactivar' : 'Activar'}
+                </Button>
+              ) : undefined
+            }
+          />
+        ))}
+      </CatalogSection>
+      <FormDrawer
         open={poolOpen}
         onClose={() => setPoolOpen(false)}
         title="Capacidad del pool LED"
-        variant="side"
+        error={notice}
+        submitLabel="Guardar capacidad"
+        onSubmit={savePool}
       >
-        <div className="config-editor-form">
-          <label>
-            Paneles totales
-            <input
-              inputMode="numeric"
-              value={totalPanels}
-              onChange={(event) => setTotalPanels(event.target.value)}
-            />
-          </label>
-          <label>
-            Área por panel (m²)
-            <input
-              inputMode="decimal"
-              value={panelArea}
-              onChange={(event) => setPanelArea(event.target.value)}
-            />
-          </label>
-          <label>
-            Píxeles por panel
-            <input
-              inputMode="numeric"
-              value={pixelsPerPanel}
-              onChange={(event) => setPixelsPerPanel(event.target.value)}
-            />
-          </label>
-          <Button onClick={() => void savePool()}>Guardar capacidad</Button>
-        </div>
-      </Sheet>
-      <Sheet
+        <label>
+          Paneles totales
+          <input
+            inputMode="numeric"
+            value={totalPanels}
+            onChange={(event) => setTotalPanels(event.target.value)}
+          />
+        </label>
+        <label>
+          Área por panel (m²)
+          <input
+            inputMode="decimal"
+            value={panelArea}
+            onChange={(event) => setPanelArea(event.target.value)}
+          />
+        </label>
+        <label>
+          Píxeles por panel
+          <input
+            inputMode="numeric"
+            value={pixelsPerPanel}
+            onChange={(event) => setPixelsPerPanel(event.target.value)}
+          />
+        </label>
+      </FormDrawer>
+      <FormDrawer
         open={controllerOpen}
         onClose={() => setControllerOpen(false)}
         title="Vincular controlador"
-        variant="side"
+        error={notice}
+        disabled={!controllerResource}
+        submitLabel="Guardar controlador"
+        onSubmit={saveController}
       >
-        <div className="config-editor-form">
-          <label>
-            Equipo físico
-            <select
-              value={controllerResource}
-              onChange={(event) => setControllerResource(event.target.value)}
-            >
-              <option value="">Seleccionar</option>
-              {resources.map((resource) => (
-                <option key={resource.id} value={resource.id}>
-                  {resource.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Máximo de píxeles
-            <input
-              value={controllerPixels}
-              onChange={(event) => setControllerPixels(event.target.value)}
-              placeholder="Pendiente si no se conoce"
-            />
-          </label>
-          <Button
-            disabled={!controllerResource}
-            onClick={() => void saveController()}
+        <label>
+          Equipo físico
+          <select
+            value={controllerResource}
+            onChange={(event) => setControllerResource(event.target.value)}
           >
-            Guardar controlador
-          </Button>
-        </div>
-      </Sheet>
-      <Sheet
+            <option value="">Seleccionar</option>
+            {resources.map((resource) => (
+              <option key={resource.id} value={resource.id}>
+                {resource.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Máximo de píxeles
+          <input
+            value={controllerPixels}
+            onChange={(event) => setControllerPixels(event.target.value)}
+            placeholder="Pendiente si no se conoce"
+          />
+        </label>
+      </FormDrawer>
+      <FormDrawer
         open={presetOpen}
         onClose={() => setPresetOpen(false)}
         title="Nuevo tamaño LED"
-        variant="side"
+        error={notice}
+        disabled={!presetName.trim()}
+        submitLabel="Guardar tamaño"
+        onSubmit={savePreset}
       >
-        <div className="config-editor-form">
-          <label>
-            Nombre
-            <input
-              value={presetName}
-              onChange={(event) => setPresetName(event.target.value)}
-            />
-          </label>
+        <label>
+          Nombre
+          <input
+            value={presetName}
+            onChange={(event) => setPresetName(event.target.value)}
+          />
+        </label>
+        <div className="config-editor-form__grid">
           <label>
             Ancho (cm)
             <input
@@ -358,14 +380,8 @@ export function ResourceCapacityPanel({
               onChange={(event) => setPresetHeight(event.target.value)}
             />
           </label>
-          <Button
-            disabled={!presetName.trim()}
-            onClick={() => void savePreset()}
-          >
-            Guardar tamaño
-          </Button>
         </div>
-      </Sheet>
+      </FormDrawer>
     </>
   );
 }

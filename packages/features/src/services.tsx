@@ -20,15 +20,29 @@ import {
   type PlotterRate,
   type PriceList,
 } from '@centrocolor/domain';
-import { Button, Card, PageHeader, Sheet } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  FlashMessage,
+  InlineMessage,
+  FormDrawer,
+  PageHeader,
+  Sheet,
+  StatusBadge,
+  useFlash,
+} from '@centrocolor/ui';
+import { plotterQuoteStatus, statusMeta } from './status';
 import { useBusinessContext } from './auth';
 import { EventPricingCatalog } from './event-pricing-catalog';
 import {
-  ConfigurationCard,
-  ConfigurationDetailHeader,
-  ConfigurationRow,
-  ConfigurationSection,
+  CatalogRow,
   MoneyField,
+  PriceFamilyCard,
+  PriceFamilyDetail,
+  PriceRow,
+  PriceSection,
+  priceCoverage,
 } from './configuration-ui';
 import { TravelPricingButton } from './travel-pricing';
 
@@ -58,22 +72,61 @@ const mm = (cm: string) => {
     throw new Error('Medida inválida.');
   return result;
 };
-const rateNames: Record<string, string> = {
-  canvas: 'Canvas / m²',
-  photo_paper: 'Papel Foto / m²',
-  plain_paper: 'Papel común / m²',
-  adhesive_vinyl: 'Vinilo adhesivo / m²',
-  front_banner: 'Lona Front / m²',
-  blackout_banner: 'Lona Blackout / m²',
-  vinyl_mdf_small: 'Vinilo + MDF 9 mm hasta 0,12 m² / m²',
-  vinyl_mdf_large: 'Vinilo + MDF 9 mm mayor / m²',
-  plastic_rod: 'Varilla plástica / metro',
-  banner_fold_top_up_to_1m: 'Doblez arriba hasta 1 m',
-  banner_fold_both_up_to_1m: 'Doblez arriba y abajo hasta 1 m',
-  banner_fold_top_over_1m: 'Doblez arriba más de 1 m',
-  banner_fold_both_over_1m: 'Doblez arriba y abajo más de 1 m',
-  canvas_stretcher: 'Canvas con bastidor',
-};
+/** Precio por m² (unidad: superficie). */
+const plotterAreaRates: Array<[string, string]> = [
+  ['canvas', 'Canvas'],
+  ['photo_paper', 'Papel foto'],
+  ['plain_paper', 'Papel común'],
+  ['adhesive_vinyl', 'Vinilo adhesivo'],
+  ['front_banner', 'Lona Front'],
+  ['blackout_banner', 'Lona Blackout'],
+  ['vinyl_mdf_small', 'Vinilo + MDF 9 mm · hasta 0,12 m²'],
+  ['vinyl_mdf_large', 'Vinilo + MDF 9 mm · más de 0,12 m²'],
+];
+/** Varilla: por metro lineal; dobleces: precio fijo por pieza. */
+const plotterFinishRates: Array<[string, string, string]> = [
+  ['plastic_rod', 'Varilla plástica', 'Precio por metro'],
+  ['banner_fold_top_up_to_1m', 'Doblez arriba · hasta 1 m', 'Precio por pieza'],
+  [
+    'banner_fold_both_up_to_1m',
+    'Doblez arriba y abajo · hasta 1 m',
+    'Precio por pieza',
+  ],
+  ['banner_fold_top_over_1m', 'Doblez arriba · más de 1 m', 'Precio por pieza'],
+  [
+    'banner_fold_both_over_1m',
+    'Doblez arriba y abajo · más de 1 m',
+    'Precio por pieza',
+  ],
+];
+const stretcherSizes: Array<[number, number]> = [
+  [200, 300],
+  [300, 400],
+  [300, 450],
+  [400, 500],
+  [400, 600],
+  [500, 600],
+  [500, 800],
+  [500, 900],
+];
+const plotterRateTotal =
+  plotterAreaRates.length + plotterFinishRates.length + stretcherSizes.length;
+interface RateDraft {
+  code: string;
+  title: string;
+  unit: string;
+  widthMm: number | null;
+  heightMm: number | null;
+  value: string;
+}
+interface TierDraft {
+  variantId: string;
+  title: string;
+  existing?: LabPriceTier;
+  min: string;
+  max: string;
+  price: string;
+}
 
 export function PriceListsPage({
   repository,
@@ -162,7 +215,7 @@ function PriceListManager({
   }
   return (
     <>
-      {notice && <p role="alert">{notice}</p>}
+      {notice && <InlineMessage tone="error">{notice}</InlineMessage>}
       <Card>
         <div className="rows">
           {lists.map((list) => (
@@ -282,6 +335,9 @@ export function ServiceCatalogPage({
   const [serviceId, setServiceId] = useState('');
   const [listId, setListId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [rateDraft, setRateDraft] = useState<RateDraft | null>(null);
+  const [tierDraft, setTierDraft] = useState<TierDraft | null>(null);
   const reload = async () => {
     try {
       const [a, b, c, d, e, f, g] = await Promise.all([
@@ -353,7 +409,7 @@ export function ServiceCatalogPage({
     maxQuantity: string,
     price: string,
     existing?: LabPriceTier,
-  ) {
+  ): Promise<boolean> {
     try {
       const min = Number(minQuantity),
         max = maxQuantity.trim() ? Number(maxQuantity) : null;
@@ -375,8 +431,10 @@ export function ServiceCatalogPage({
       await reload();
       onMutation?.();
       setNotice(null);
+      return true;
     } catch (error) {
       setNotice(errorText(error));
+      return false;
     }
   }
   async function saveRate(
@@ -384,7 +442,7 @@ export function ServiceCatalogPage({
     price: string,
     widthMm: number | null = null,
     heightMm: number | null = null,
-  ) {
+  ): Promise<boolean> {
     try {
       if (!listId) throw new Error('Seleccioná una lista.');
       const existing = rates.find(
@@ -406,8 +464,10 @@ export function ServiceCatalogPage({
       await reload();
       onMutation?.();
       setNotice(null);
+      return true;
     } catch (error) {
       setNotice(errorText(error));
+      return false;
     }
   }
   const activeVariants = variants.filter((x) => x.photoServiceId === serviceId);
@@ -442,41 +502,123 @@ export function ServiceCatalogPage({
     }
   }
   const selectedList = lists.find((list) => list.id === listId) ?? null;
+  const listName = selectedList?.name ?? 'Sin lista activa';
   const labServices = services.filter(
     (service) => service.workflowRoute === 'lab',
   );
-  const listLabTiers = tiers.filter((tier) => tier.priceListId === listId);
-  const listPlotterRates = rates.filter((rate) => rate.priceListId === listId);
-  const eventServiceOffers = eventOffers.filter((offer) =>
-    ['photo_booth', 'magic_mirror', 'spin_360'].includes(offer.kind),
-  );
+  const rateFor = (
+    code: string,
+    widthMm: number | null = null,
+    heightMm: number | null = null,
+  ) =>
+    rates.find(
+      (rate) =>
+        rate.priceListId === listId &&
+        rate.code === code &&
+        rate.widthMm === widthMm &&
+        rate.heightMm === heightMm,
+    );
   const offersFor = (kinds: EventOffer['kind'][]) =>
-    eventOffers.filter((offer) => kinds.includes(offer.kind));
+    eventOffers.filter((offer) => offer.isActive && kinds.includes(offer.kind));
   const pricedOffers = (offers: EventOffer[]) =>
     offers.filter((offer) =>
       eventRates.some(
         (rate) => rate.offerId === offer.id && rate.priceListId === listId,
       ),
     ).length;
-  const sectionTitle =
-    section === 'lab'
-      ? 'Laboratorio'
-      : section === 'plotter'
-        ? 'Plotter'
-        : section === 'led'
-          ? 'Pantalla LED'
-          : section === 'fabric'
-            ? 'Pantallas de tela'
-            : section === 'events'
-              ? 'Servicios para eventos'
-              : null;
+  const labVariantsOffered = variants.filter(
+    (variant) => variant.isActive && variant.channel === 'laboratory',
+  );
+  const labPriced = labVariantsOffered.filter((variant) =>
+    tiers.some(
+      (tier) => tier.variantId === variant.id && tier.priceListId === listId,
+    ),
+  ).length;
+  const plotterPriced =
+    plotterAreaRates.filter(([code]) => rateFor(code)).length +
+    plotterFinishRates.filter(([code]) => rateFor(code)).length +
+    stretcherSizes.filter(([w, h]) => rateFor('canvas_stretcher', w, h)).length;
+  const familyCards: Array<{
+    key: 'lab' | 'plotter' | 'led' | 'fabric' | 'events';
+    title: string;
+    summary: string;
+    priced: number;
+    total: number;
+  }> = [
+    {
+      key: 'lab',
+      title: 'Laboratorio',
+      summary: 'Precio por copia, por tramo',
+      priced: labPriced,
+      total: labVariantsOffered.length,
+    },
+    {
+      key: 'plotter',
+      title: 'Plotter',
+      summary: 'Precio por m², por metro y por pieza',
+      priced: plotterPriced,
+      total: plotterRateTotal,
+    },
+    {
+      key: 'led',
+      title: 'Pantalla LED',
+      summary: 'Precio por m² y operador',
+      priced: pricedOffers(offersFor(['led_screen'])),
+      total: offersFor(['led_screen']).length,
+    },
+    {
+      key: 'fabric',
+      title: 'Pantallas de tela',
+      summary: 'Precio sin proyector y con proyector',
+      priced: pricedOffers(offersFor(['fabric_screen'])),
+      total: offersFor(['fabric_screen']).length,
+    },
+    {
+      key: 'events',
+      title: 'Servicios para eventos',
+      summary: 'Precio fijo: Cabina, Espejo Mágico, Giro 360',
+      priced: pricedOffers(
+        offersFor(['photo_booth', 'magic_mirror', 'spin_360']),
+      ),
+      total: offersFor(['photo_booth', 'magic_mirror', 'spin_360']).length,
+    },
+  ];
+  const sectionTitle = familyCards.find((card) => card.key === section)?.title;
+  const variantTitle = (variant: LabVariant) =>
+    `${variant.channel === 'laboratory' ? 'Laboratorio' : 'Kiosco'} · ${variant.paper === 'glossy' ? 'Brillo' : 'Mate'}`;
+  const plotterRow = (
+    code: string,
+    title: string,
+    unit: string,
+    widthMm: number | null = null,
+    heightMm: number | null = null,
+  ) => {
+    const rate = rateFor(code, widthMm, heightMm);
+    return (
+      <PriceRow
+        key={`${listId}:${code}:${widthMm}:${heightMm}`}
+        title={title}
+        values={[{ label: unit, cents: rate?.amountCents ?? null }]}
+        onEdit={
+          admin
+            ? () =>
+                setRateDraft({
+                  code,
+                  title,
+                  unit,
+                  widthMm,
+                  heightMm,
+                  value: rate ? pesos(rate.amountCents) : '',
+                })
+            : undefined
+        }
+      />
+    );
+  };
   return (
     <>
-      <PageHeader
-        title="Precios"
-        description="Una lista activa para todas las familias comerciales."
-      />
-      {notice && <p role="alert">{notice}</p>}
+      <PageHeader title="Precios" />
+      {notice && <InlineMessage tone="error">{notice}</InlineMessage>}
       <Card className="config-list-selector">
         <label>
           Lista de precios
@@ -505,108 +647,320 @@ export function ServiceCatalogPage({
       </Card>
       {section === null && (
         <>
-          <ConfigurationSection
-            eyebrow="PRECIOS POR FAMILIA"
-            description={`Tarifas correspondientes a ${selectedList?.name ?? 'la lista seleccionada'}.`}
-          />
+          <div className="section-head price-families-head">
+            <h2>Familias de precios</h2>
+          </div>
           <div className="config-card-grid">
-            <ConfigurationCard
-              title="Laboratorio"
-              summary={`${labServices.length} tamaños · ${variants.filter((variant) => variant.isActive).length} variantes`}
-              detail={`${listLabTiers.length} tramos en ${selectedList?.name ?? 'esta lista'}`}
-              onAction={() => setSection('lab')}
-            />
-            <ConfigurationCard
-              title="Plotter"
-              summary={`${listPlotterRates.length} tarifas configuradas`}
-              detail="Materiales, precio por m² y reglas especiales"
-              onAction={() => setSection('plotter')}
-            />
-            <ConfigurationCard
-              title="Pantalla LED"
-              summary="Precio por m² + operador"
-              detail={`${pricedOffers(offersFor(['led_screen']))} tarifas configuradas`}
-              onAction={() => setSection('led')}
-            />
-            <ConfigurationCard
-              title="Pantallas de tela"
-              summary="Precio sin proyector + con proyector"
-              detail={`${offersFor(['fabric_screen']).length} tamaños · ${pricedOffers(offersFor(['fabric_screen']))} con precio`}
-              onAction={() => setSection('fabric')}
-            />
-            <ConfigurationCard
-              title="Servicios para eventos"
-              summary="Cabina · Espejo Mágico · Giro 360"
-              detail={`${pricedOffers(eventServiceOffers)}/${eventServiceOffers.length} con tarifa en esta lista`}
-              onAction={() => setSection('events')}
-            />
-            <ConfigurationCard
+            {familyCards.map((card) => {
+              const coverage = priceCoverage(card.priced, card.total);
+              return (
+                <PriceFamilyCard
+                  key={card.key}
+                  title={card.title}
+                  summary={card.summary}
+                  detail={coverage.text}
+                  status={
+                    <StatusBadge tone={coverage.tone}>
+                      {coverage.label}
+                    </StatusBadge>
+                  }
+                  onOpen={() => setSection(card.key)}
+                />
+              );
+            })}
+            <PriceFamilyCard
               title="Fotografía / Video"
-              summary="Pendiente de catálogo extensible"
-              detail="No se crean servicios temporales ni enums nuevos en esta fase."
+              summary="Próximamente"
               disabled
-              actionLabel="Pendiente Fase C"
             />
-            <ConfigurationCard
+            <PriceFamilyCard
               title="Marquetería"
-              summary="Configuración especializada"
-              detail="Costos, markup, merma, mano de obra y componentes"
-              onAction={() => onNavigate?.('mouldings')}
+              summary="Varillas y materiales"
+              detail="Se configura en Materiales"
+              external
+              onOpen={() => onNavigate?.('mouldings')}
             />
           </div>
         </>
       )}
-      {section !== null && (
-        <ConfigurationDetailHeader
-          title={sectionTitle ?? ''}
-          listName={selectedList?.name ?? 'Sin lista activa'}
-          description={
-            section === 'led'
-              ? 'Precio por superficie y componente fijo de operador.'
-              : section === 'fabric'
-                ? 'Precios finales por tamaño, con y sin proyector.'
-                : section === 'events'
-                  ? 'Precios fijos de cada servicio.'
-                  : undefined
-          }
-          onBack={() => setSection(null)}
-        />
-      )}
       {section === 'lab' && (
-        <>
-          <Card>
-            <div className="form-row">
-              <label>
-                Tamaño / servicio
-                <select
-                  value={serviceId}
-                  onChange={(e) => setServiceId(e.target.value)}
-                >
-                  {services
-                    .filter((x) => x.workflowRoute === 'lab')
-                    .map((x) => (
-                      <option key={x.id} value={x.id}>
-                        {x.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
+        <PriceFamilyDetail
+          title="Laboratorio"
+          listName={listName}
+          onBack={() => setSection(null)}
+          actions={
+            <>
               <Button
                 variant="secondary"
+                disabled={!serviceId}
+                onClick={() => setAvailabilityOpen(true)}
+              >
+                Disponibilidad y publicación
+              </Button>
+              <Button
+                variant="ghost"
                 onClick={() => onNavigate?.('photo-services')}
               >
-                Administrar tamaños y servicios
+                Administrar tamaños
               </Button>
-            </div>
-            {!serviceId && (
-              <p className="meta">
-                Creá primero un servicio fotográfico con flujo Laboratorio.
-              </p>
+            </>
+          }
+        >
+          <div className="price-toolbar">
+            <label>
+              Tamaño
+              <select
+                value={serviceId}
+                onChange={(e) => setServiceId(e.target.value)}
+              >
+                {labServices.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {x.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {!serviceId ? (
+            <InlineMessage tone="info">
+              Creá primero un tamaño con flujo Laboratorio en «Administrar
+              tamaños».
+            </InlineMessage>
+          ) : activeVariants.length === 0 ? (
+            <InlineMessage tone="info">
+              Este tamaño no tiene papeles habilitados. Habilitalos en
+              «Disponibilidad y publicación».
+            </InlineMessage>
+          ) : (
+            activeVariants.map((variant) => {
+              const variantTiers = tiers
+                .filter(
+                  (x) => x.variantId === variant.id && x.priceListId === listId,
+                )
+                .sort((a, b) => a.minQuantity - b.minQuantity);
+              return (
+                <PriceSection
+                  key={`${variant.id}:${listId}`}
+                  title={variantTitle(variant)}
+                  hint={!variant.isActive ? 'No disponible' : undefined}
+                  action={
+                    admin ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setTierDraft({
+                            variantId: variant.id,
+                            title: variantTitle(variant),
+                            min: '1',
+                            max: '',
+                            price: '',
+                          })
+                        }
+                      >
+                        + Nuevo tramo
+                      </Button>
+                    ) : undefined
+                  }
+                >
+                  {variantTiers.length === 0 && (
+                    <p className="meta price-empty">
+                      Sin tramos en esta lista.
+                    </p>
+                  )}
+                  {variantTiers.map((tier) => (
+                    <PriceRow
+                      key={tier.id}
+                      title={`${tier.minQuantity}–${tier.maxQuantity ?? '∞'} copias`}
+                      values={[
+                        {
+                          label: 'Precio por copia',
+                          cents: tier.unitPriceCents,
+                        },
+                      ]}
+                      inactive={!variant.isActive}
+                      onEdit={
+                        admin
+                          ? () =>
+                              setTierDraft({
+                                variantId: variant.id,
+                                title: variantTitle(variant),
+                                existing: tier,
+                                min: String(tier.minQuantity),
+                                max: tier.maxQuantity?.toString() ?? '',
+                                price: pesos(tier.unitPriceCents),
+                              })
+                          : undefined
+                      }
+                    />
+                  ))}
+                </PriceSection>
+              );
+            })
+          )}
+        </PriceFamilyDetail>
+      )}
+      {section === 'plotter' && (
+        <PriceFamilyDetail
+          title="Plotter"
+          listName={listName}
+          onBack={() => setSection(null)}
+          actions={
+            <Button
+              variant="ghost"
+              onClick={() => onNavigate?.('plotter-materials')}
+            >
+              Administrar materiales
+            </Button>
+          }
+        >
+          <PriceSection title="Materiales">
+            {plotterAreaRates.map(([code, title]) =>
+              plotterRow(code, title, 'Precio por m²'),
             )}
-          </Card>
+          </PriceSection>
+          <PriceSection title="Terminaciones">
+            {plotterFinishRates.map(([code, title, unit]) =>
+              plotterRow(code, title, unit),
+            )}
+          </PriceSection>
+          <PriceSection title="Canvas con bastidor">
+            {stretcherSizes.map(([width, height]) =>
+              plotterRow(
+                'canvas_stretcher',
+                `${width / 10}×${height / 10} cm`,
+                'Precio por pieza',
+                width,
+                height,
+              ),
+            )}
+          </PriceSection>
+        </PriceFamilyDetail>
+      )}
+      {(section === 'led' || section === 'fabric' || section === 'events') && (
+        <PriceFamilyDetail
+          title={sectionTitle ?? ''}
+          listName={listName}
+          onBack={() => setSection(null)}
+        >
+          <EventPricingCatalog
+            repository={repository}
+            eventRepository={eventRepository}
+            selectedListId={listId}
+            family={section}
+            onMutation={() => {
+              void reload();
+              onMutation?.();
+            }}
+          />
+        </PriceFamilyDetail>
+      )}
+      <FormDrawer
+        open={tierDraft !== null}
+        onClose={() => setTierDraft(null)}
+        title={
+          tierDraft
+            ? `${tierDraft.existing ? 'Editar tramo' : 'Nuevo tramo'} · ${tierDraft.title}`
+            : 'Tramo'
+        }
+        error={notice}
+        disabled={!tierDraft?.price.trim()}
+        onSubmit={async () => {
+          if (!tierDraft) return;
+          const existing =
+            tierDraft.existing ??
+            tiers.find(
+              (x) =>
+                x.variantId === tierDraft.variantId &&
+                x.priceListId === listId &&
+                x.minQuantity === Number(tierDraft.min),
+            );
+          if (
+            await saveTier(
+              tierDraft.variantId,
+              tierDraft.min,
+              tierDraft.max,
+              tierDraft.price,
+              existing,
+            )
+          )
+            setTierDraft(null);
+        }}
+      >
+        {tierDraft && (
+          <>
+            <div className="config-editor-form__grid">
+              <label>
+                Desde (copias)
+                <input
+                  type="number"
+                  min="1"
+                  value={tierDraft.min}
+                  onChange={(e) =>
+                    setTierDraft({ ...tierDraft, min: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Hasta (vacío = sin límite)
+                <input
+                  type="number"
+                  min="1"
+                  value={tierDraft.max}
+                  onChange={(e) =>
+                    setTierDraft({ ...tierDraft, max: e.target.value })
+                  }
+                />
+              </label>
+            </div>
+            <MoneyField
+              label="Precio por copia"
+              value={tierDraft.price}
+              onChange={(price) => setTierDraft({ ...tierDraft, price })}
+            />
+          </>
+        )}
+      </FormDrawer>
+      <FormDrawer
+        open={rateDraft !== null}
+        onClose={() => setRateDraft(null)}
+        title={rateDraft ? `Editar precio · ${rateDraft.title}` : 'Precio'}
+        error={notice}
+        disabled={!rateDraft?.value.trim()}
+        onSubmit={async () => {
+          if (!rateDraft) return;
+          if (
+            await saveRate(
+              rateDraft.code,
+              rateDraft.value,
+              rateDraft.widthMm,
+              rateDraft.heightMm,
+            )
+          )
+            setRateDraft(null);
+        }}
+      >
+        {rateDraft && (
+          <MoneyField
+            label={rateDraft.unit}
+            value={rateDraft.value}
+            onChange={(value) => setRateDraft({ ...rateDraft, value })}
+          />
+        )}
+      </FormDrawer>
+      <Sheet
+        open={availabilityOpen}
+        onClose={() => setAvailabilityOpen(false)}
+        title="Disponibilidad y publicación"
+        variant="side"
+      >
+        <div className="form-drawer">
+          {selectedService && (
+            <p className="meta">Tamaño: {selectedService.name}</p>
+          )}
           {serviceId && (
-            <Card>
-              <h2>Papel y canal</h2>
+            <section className="drawer-section">
+              <h3>Papel y canal</h3>
               <div className="rows">
                 {(['laboratory', 'kiosk'] as const).flatMap((channel) =>
                   (['glossy', 'matte'] as const).map((paper) => {
@@ -614,17 +968,22 @@ export function ServiceCatalogPage({
                       (x) => x.channel === channel && x.paper === paper,
                     );
                     return (
-                      <div className="oprow" key={`${channel}-${paper}`}>
-                        <span>
-                          {channel === 'laboratory' ? 'Laboratorio' : 'Kiosco'}{' '}
-                          · {paper === 'glossy' ? 'Brillo' : 'Mate'}
-                        </span>
-                        <span className="meta">
+                      <div className="price-row" key={`${channel}-${paper}`}>
+                        <div className="price-row__id">
+                          <strong>
+                            {channel === 'laboratory'
+                              ? 'Laboratorio'
+                              : 'Kiosco'}{' '}
+                            · {paper === 'glossy' ? 'Brillo' : 'Mate'}
+                          </strong>
+                        </div>
+                        <StatusBadge tone={variant?.isActive ? 'ok' : 'closed'}>
                           {variant?.isActive ? 'Disponible' : 'No disponible'}
-                        </span>
+                        </StatusBadge>
                         {admin && (
                           <Button
-                            variant="ghost"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => void saveVariant(paper, channel)}
                           >
                             {variant?.isActive ? 'Desactivar' : 'Activar'}
@@ -639,11 +998,11 @@ export function ServiceCatalogPage({
                 Kiosco sólo conserva precios de referencia; no genera pedidos ni
                 trabajos.
               </p>
-            </Card>
+            </section>
           )}
           {serviceId && portal && (
-            <Card>
-              <h2>Visibilidad en /imprimir</h2>
+            <section className="drawer-section">
+              <h3>Publicación en /imprimir</h3>
               <p className="meta">
                 El portal público sólo ofrece variantes de Laboratorio
                 disponibles con un tramo en la lista Pública; las listas
@@ -651,10 +1010,10 @@ export function ServiceCatalogPage({
               </p>
               {portal.serviceBlockers.length > 0 && (
                 <>
-                  <p role="status">
-                    Este servicio no se muestra en la web:{' '}
+                  <InlineMessage tone="info">
+                    Este tamaño no se muestra en la web:{' '}
                     {portal.serviceBlockers.join(' ')}
-                  </p>
+                  </InlineMessage>
                   {admin && portal.publishable && (
                     <Button onClick={() => void publishService()}>
                       Publicar en /imprimir
@@ -664,109 +1023,27 @@ export function ServiceCatalogPage({
               )}
               <div className="rows">
                 {portal.variants.map((status) => (
-                  <div className="oprow" key={status.variantId}>
-                    <span>
-                      {status.channel === 'laboratory'
-                        ? 'Laboratorio'
-                        : 'Kiosco'}{' '}
-                      · {status.paper === 'glossy' ? 'Brillo' : 'Mate'}
-                    </span>
-                    <span className="meta">
-                      {status.offered
-                        ? 'Se ofrece en la web'
-                        : (status.reason ?? 'Oculta por el servicio')}
-                    </span>
+                  <div className="price-row" key={status.variantId}>
+                    <div className="price-row__id">
+                      <strong>
+                        {status.channel === 'laboratory'
+                          ? 'Laboratorio'
+                          : 'Kiosco'}{' '}
+                        · {status.paper === 'glossy' ? 'Brillo' : 'Mate'}
+                      </strong>
+                      <span className="meta">
+                        {status.offered
+                          ? 'Se ofrece en la web'
+                          : (status.reason ?? 'Oculta por el tamaño')}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
-            </Card>
+            </section>
           )}
-          {activeVariants.map((variant) => (
-            <LabTierCard
-              key={`${variant.id}:${listId}`}
-              variant={variant}
-              tiers={tiers.filter(
-                (x) => x.variantId === variant.id && x.priceListId === listId,
-              )}
-              admin={admin}
-              onSave={saveTier}
-            />
-          ))}
-        </>
-      )}
-      {section === 'plotter' && (
-        <>
-          <Card>
-            <h2>Tarifas</h2>
-            <div className="rows">
-              {Object.entries(rateNames).map(([code, label]) => {
-                if (code === 'canvas_stretcher') return null;
-                const rate = rates.find(
-                  (x) =>
-                    x.priceListId === listId &&
-                    x.code === code &&
-                    x.widthMm === null,
-                );
-                return (
-                  <RateRow
-                    key={`${listId}:${code}`}
-                    label={label}
-                    rate={rate}
-                    admin={admin}
-                    onSave={(value) => void saveRate(code, value)}
-                  />
-                );
-              })}
-            </div>
-          </Card>
-          <Card>
-            <h2>Canvas con bastidor</h2>
-            <div className="rows">
-              {[
-                [200, 300],
-                [300, 400],
-                [300, 450],
-                [400, 500],
-                [400, 600],
-                [500, 600],
-                [500, 800],
-                [500, 900],
-              ].map(([width, height]) => {
-                const rate = rates.find(
-                  (x) =>
-                    x.priceListId === listId &&
-                    x.code === 'canvas_stretcher' &&
-                    x.widthMm === width &&
-                    x.heightMm === height,
-                );
-                return (
-                  <RateRow
-                    key={`${listId}:${width}:${height}`}
-                    label={`${width! / 10}×${height! / 10} cm`}
-                    rate={rate}
-                    admin={admin}
-                    onSave={(value) =>
-                      void saveRate('canvas_stretcher', value, width!, height!)
-                    }
-                  />
-                );
-              })}
-            </div>
-          </Card>
-        </>
-      )}
-      {(section === 'led' || section === 'fabric' || section === 'events') && (
-        <EventPricingCatalog
-          repository={repository}
-          eventRepository={eventRepository}
-          selectedListId={listId}
-          family={section}
-          onMutation={() => {
-            void reload();
-            onMutation?.();
-          }}
-        />
-      )}
+        </div>
+      </Sheet>
       <Sheet
         open={listsOpen}
         onClose={() => setListsOpen(false)}
@@ -789,167 +1066,6 @@ export function ServiceCatalogPage({
   );
 }
 
-function LabTierCard({
-  variant,
-  tiers,
-  admin,
-  onSave,
-}: {
-  variant: LabVariant;
-  tiers: LabPriceTier[];
-  admin: boolean;
-  onSave: (
-    variantId: string,
-    min: string,
-    max: string,
-    price: string,
-    existing?: LabPriceTier,
-  ) => Promise<void>;
-}) {
-  const [min, setMin] = useState('1');
-  const [max, setMax] = useState('');
-  const [price, setPrice] = useState('');
-  const [editing, setEditing] = useState(false);
-  return (
-    <Card>
-      <h2>
-        {variant.channel === 'laboratory' ? 'Laboratorio' : 'Kiosco'} ·{' '}
-        {variant.paper === 'glossy' ? 'Brillo' : 'Mate'}
-        {!variant.isActive && ' · No disponible'}
-      </h2>
-      <div className="rows">
-        {tiers
-          .sort((a, b) => a.minQuantity - b.minQuantity)
-          .map((tier) => (
-            <ConfigurationRow
-              key={tier.id}
-              title={`${tier.minQuantity}–${tier.maxQuantity ?? '∞'} copias`}
-              values={
-                <span className="config-value">
-                  <small>Precio por copia</small>
-                  <strong>{money(tier.unitPriceCents)}</strong>
-                </span>
-              }
-              active={variant.isActive}
-              onEdit={
-                admin
-                  ? () => {
-                      setMin(String(tier.minQuantity));
-                      setMax(tier.maxQuantity?.toString() ?? '');
-                      setPrice(pesos(tier.unitPriceCents));
-                      setEditing(true);
-                    }
-                  : undefined
-              }
-            />
-          ))}
-      </div>
-      {admin && !editing && (
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setMin('1');
-            setMax('');
-            setPrice('');
-            setEditing(true);
-          }}
-        >
-          + Nuevo tramo
-        </Button>
-      )}
-      {admin && editing && (
-        <div className="form-row">
-          <label>
-            Desde
-            <input
-              type="number"
-              min="1"
-              value={min}
-              onChange={(e) => setMin(e.target.value)}
-            />
-          </label>
-          <label>
-            Hasta (vacío = sin límite)
-            <input
-              type="number"
-              min="1"
-              value={max}
-              onChange={(e) => setMax(e.target.value)}
-            />
-          </label>
-          <MoneyField
-            label="Precio por copia"
-            value={price}
-            onChange={setPrice}
-          />
-          <Button
-            onClick={() => {
-              void onSave(
-                variant.id,
-                min,
-                max,
-                price,
-                tiers.find((x) => x.minQuantity === Number(min)),
-              ).then(() => setEditing(false));
-            }}
-          >
-            Guardar tramo
-          </Button>
-          <Button variant="ghost" onClick={() => setEditing(false)}>
-            Cancelar
-          </Button>
-        </div>
-      )}
-    </Card>
-  );
-}
-function MaterialRow({
-  material,
-  admin,
-  onSave,
-}: {
-  material: PlotterMaterial;
-  admin: boolean;
-  onSave: (m: PlotterMaterial, roll: string, active: boolean) => Promise<void>;
-}) {
-  const [roll, setRoll] = useState(
-    material.rollWidthMm === null
-      ? ''
-      : String(material.rollWidthMm / 10).replace('.', ','),
-  );
-  return (
-    <div className="oprow">
-      <span className="who">{material.name}</span>
-      <label>
-        Ancho de rollo (cm)
-        <input
-          value={roll}
-          onChange={(e) => setRoll(e.target.value)}
-          disabled={!admin}
-          placeholder="Sin confirmar"
-        />
-      </label>
-      <span>{material.isActive ? 'Activo' : 'Inactivo'}</span>
-      {admin && (
-        <>
-          <Button
-            variant="ghost"
-            onClick={() => void onSave(material, roll, material.isActive)}
-          >
-            Guardar
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => void onSave(material, roll, !material.isActive)}
-          >
-            {material.isActive ? 'Desactivar' : 'Activar'}
-          </Button>
-        </>
-      )}
-    </div>
-  );
-}
-
 export function PlotterMaterialsPage({
   repository,
   onMutation,
@@ -961,6 +1077,8 @@ export function PlotterMaterialsPage({
   const admin = role !== 'staff';
   const [materials, setMaterials] = useState<PlotterMaterial[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<PlotterMaterial | null>(null);
+  const [roll, setRoll] = useState('');
   const reload = async () => {
     try {
       setMaterials(await repository.listPlotterMaterials(businessId));
@@ -974,88 +1092,100 @@ export function PlotterMaterialsPage({
   }, [businessId, repository]);
   async function saveMaterial(
     material: PlotterMaterial,
-    roll: string,
+    rollWidth: string,
     active: boolean,
-  ) {
+  ): Promise<boolean> {
     try {
       await repository.savePlotterMaterial({
         ...material,
-        rollWidthMm: roll.trim() ? mm(roll) : null,
+        rollWidthMm: rollWidth.trim() ? mm(rollWidth) : null,
         isActive: active,
       });
       await reload();
       onMutation?.();
+      return true;
     } catch (error) {
       setNotice(errorText(error));
+      return false;
     }
   }
+  const rollText = (material: PlotterMaterial) =>
+    material.rollWidthMm === null
+      ? 'Sin confirmar'
+      : `${String(material.rollWidthMm / 10).replace('.', ',')} cm`;
   return (
     <>
       <PageHeader title="Materiales de Plotter" />
-      {notice && <p role="alert">{notice}</p>}
-      <Card>
-        <div className="rows">
-          {materials.map((material) => (
-            <MaterialRow
-              key={material.id}
-              material={material}
-              admin={admin}
-              onSave={saveMaterial}
-            />
-          ))}
-        </div>
-      </Card>
-    </>
-  );
-}
-
-function RateRow({
-  label,
-  rate,
-  admin,
-  onSave,
-}: {
-  label: string;
-  rate: PlotterRate | undefined;
-  admin: boolean;
-  onSave: (value: string) => void;
-}) {
-  const [value, setValue] = useState(rate ? pesos(rate.amountCents) : '');
-  const [editing, setEditing] = useState(false);
-  return (
-    <>
-      <ConfigurationRow
-        title={label}
-        values={
-          <span className="config-value">
-            <small>Precio</small>
-            <strong>{rate ? money(rate.amountCents) : 'Sin configurar'}</strong>
-          </span>
-        }
-        active={Boolean(rate)}
-        onEdit={admin ? () => setEditing(true) : undefined}
-      />
-      {admin && editing && (
-        <div className="form-row">
-          <MoneyField
-            label={`Precio · ${label}`}
-            value={value}
-            onChange={setValue}
-          />
-          <Button
-            onClick={() => {
-              onSave(value);
-              setEditing(false);
-            }}
-            disabled={!value.trim()}
-          >
-            Guardar cambios
-          </Button>
-          <Button variant="ghost" onClick={() => setEditing(false)}>
-            Cancelar
-          </Button>
-        </div>
+      {notice && !editing && (
+        <InlineMessage tone="error">{notice}</InlineMessage>
       )}
+      <Card className="card--flush">
+        {materials.length === 0 ? (
+          <EmptyState icon="layers" title="Todavía no hay materiales" />
+        ) : (
+          <div className="rows catalog-rows">
+            {materials.map((material) => (
+              <CatalogRow
+                key={material.id}
+                title={material.name}
+                values={[
+                  { label: 'Ancho de rollo', value: rollText(material) },
+                ]}
+                active={material.isActive}
+                onEdit={
+                  admin
+                    ? () => {
+                        setEditing(material);
+                        setRoll(
+                          material.rollWidthMm === null
+                            ? ''
+                            : String(material.rollWidthMm / 10).replace(
+                                '.',
+                                ',',
+                              ),
+                        );
+                      }
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )}
+      </Card>
+      <FormDrawer
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title={editing ? `Editar ${editing.name}` : 'Material'}
+        error={notice}
+        onSubmit={async () => {
+          if (editing && (await saveMaterial(editing, roll, editing.isActive)))
+            setEditing(null);
+        }}
+      >
+        <label>
+          Ancho de rollo (cm)
+          <input
+            value={roll}
+            onChange={(e) => setRoll(e.target.value)}
+            placeholder="Sin confirmar"
+          />
+        </label>
+        {editing && (
+          <section className="drawer-section">
+            <h3>Estado</h3>
+            <Button
+              variant={editing.isActive ? 'danger' : 'secondary'}
+              onClick={() =>
+                void saveMaterial(editing, roll, !editing.isActive).then(
+                  (saved) => saved && setEditing(null),
+                )
+              }
+            >
+              {editing.isActive ? 'Desactivar material' : 'Activar material'}
+            </Button>
+          </section>
+        )}
+      </FormDrawer>
     </>
   );
 }
@@ -1085,7 +1215,7 @@ export function PlotterPage({
   const [rods, setRods] = useState<0 | 1 | 2>(0);
   const [fold, setFold] = useState<'none' | 'top' | 'both'>('none');
   const [notes, setNotes] = useState('');
-  const [notice, setNotice] = useState<string | null>(null);
+  const flash = useFlash();
   const reload = async () => {
     try {
       const [a, b, c, d, e] = await Promise.all([
@@ -1104,7 +1234,7 @@ export function PlotterPage({
       setQuotes(e);
       setMaterialId((old) => old || b.find((x) => x.isActive)?.id || '');
     } catch (error) {
-      setNotice(errorText(error));
+      flash.error(errorText(error));
     }
   };
   useEffect(() => {
@@ -1169,11 +1299,11 @@ export function PlotterPage({
         createdAt: now,
         updatedAt: now,
       });
-      setNotice('Cotización guardada.');
+      flash.success('Cotización guardada.');
       await reload();
       onMutation?.();
     } catch (error) {
-      setNotice(errorText(error));
+      flash.error(errorText(error));
     }
   }
   async function changeStatus(
@@ -1185,202 +1315,272 @@ export function PlotterPage({
       await reload();
       onMutation?.();
     } catch (error) {
-      setNotice(errorText(error));
+      flash.error(errorText(error));
     }
   }
+  const isBanner =
+    material?.code === 'front_banner' || material?.code === 'blackout_banner';
+  const pricePerM2 =
+    material && !mdf && !canvasStretcher
+      ? rates.find(
+          (x) =>
+            x.priceListId === listId &&
+            x.code === material.code &&
+            x.widthMm === null,
+        )?.amountCents
+      : undefined;
+  const customerName = (id: string | null) =>
+    id
+      ? (customers.find((x) => x.id === id)?.fullName ?? 'Cliente')
+      : 'Sin cliente';
+  const result = typeof calculation === 'string' ? null : calculation;
   return (
     <>
-      <PageHeader title="Plotter" description="Cotizaciones" />
-      {notice && <p role="status">{notice}</p>}
-      <Card>
-        <div className="form-row">
-          <label>
-            Cliente (opcional)
-            <select
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-            >
-              <option value="">Sin cliente · Público</option>
-              {customers.map((x) => (
-                <option key={x.id} value={x.id}>
-                  {x.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div>
-            Lista: <strong>{list?.name ?? 'Sin configurar'}</strong>
-          </div>
-          <label>
-            Material
-            <select
-              value={materialId}
-              onChange={(e) => {
-                setMaterialId(e.target.value);
-                setMdf(false);
-                setCanvasStretcher(false);
-              }}
-            >
-              {materials
-                .filter((x) => x.isActive)
-                .map((x) => (
+      <PageHeader title="Plotter" />
+      <FlashMessage flash={flash} />
+      <div className="quote-workspace">
+        <Card className="quote-inputs">
+          <section className="drawer-section drawer-section--first">
+            <h3>Cliente</h3>
+            <label>
+              Cliente (opcional)
+              <select
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+              >
+                <option value="">Sin cliente</option>
+                {customers.map((x) => (
                   <option key={x.id} value={x.id}>
-                    {x.name}
+                    {x.fullName}
                   </option>
                 ))}
-            </select>
-          </label>
-          <label>
-            Ancho (cm)
-            <input
-              inputMode="decimal"
-              value={width}
-              onChange={(e) => setWidth(e.target.value)}
-            />
-          </label>
-          <label>
-            Alto (cm)
-            <input
-              inputMode="decimal"
-              value={height}
-              onChange={(e) => setHeight(e.target.value)}
-            />
-          </label>
-          <label>
-            Cantidad
-            <input
-              type="number"
-              min="1"
-              value={quantity}
-              onChange={(e) => setQuantity(e.target.value)}
-            />
-          </label>
-        </div>
-        {material?.code === 'adhesive_vinyl' && (
-          <label>
-            <input
-              type="checkbox"
-              checked={mdf}
-              onChange={(e) => setMdf(e.target.checked)}
-            />{' '}
-            Pegado sobre MDF 9 mm
-          </label>
-        )}
-        {material?.code === 'canvas' && (
-          <label>
-            <input
-              type="checkbox"
-              checked={canvasStretcher}
-              onChange={(e) => setCanvasStretcher(e.target.checked)}
-            />{' '}
-            Canvas con bastidor
-          </label>
-        )}
-        <div className="form-row">
-          <label>
-            Varillas
-            <select
-              value={rods}
-              onChange={(e) => setRods(Number(e.target.value) as 0 | 1 | 2)}
-            >
-              <option value={0}>Sin varillas</option>
-              <option value={1}>Superior</option>
-              <option value={2}>Superior + inferior</option>
-            </select>
-          </label>
-          <label>
-            Doblez de lona
-            <select
-              value={fold}
-              onChange={(e) => setFold(e.target.value as typeof fold)}
-            >
-              <option value="none">Sin doblez</option>
-              <option value="top">Arriba</option>
-              <option value="both">Arriba + abajo</option>
-            </select>
-          </label>
-        </div>
-        <label>
-          Notas
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </label>
-      </Card>
-      <Card>
-        <h2>Presupuesto</h2>
-        {typeof calculation === 'string' ? (
-          <p role="alert">{calculation}</p>
-        ) : calculation ? (
-          <>
-            <p>
-              Área: {(calculation.areaMm2 / 1_000_000).toLocaleString('es-AR')}{' '}
-              m² ·{' '}
-              {calculation.rollFit === 'no_fit'
-                ? 'No entra en una sola pieza'
-                : calculation.rollFit === 'rotated'
-                  ? 'Entra rotado'
-                  : calculation.rollFit === 'unknown'
-                    ? 'Ancho de rollo sin configurar'
-                    : 'Entra en el rollo'}
+              </select>
+            </label>
+            <p className="meta">
+              Lista de precios: {list?.name ?? 'sin configurar'}
             </p>
-            <div className="rows">
-              {calculation.lines.map((line) => (
-                <div className="oprow" key={line.code}>
-                  <span>{line.description}</span>
-                  <span>{money(line.amountCents)}</span>
-                </div>
-              ))}
+          </section>
+          <section className="drawer-section">
+            <h3>Material y medidas</h3>
+            <label>
+              Material
+              <select
+                value={materialId}
+                onChange={(e) => {
+                  const next = materials.find((x) => x.id === e.target.value);
+                  setMaterialId(e.target.value);
+                  setMdf(false);
+                  setCanvasStretcher(false);
+                  if (
+                    next?.code !== 'front_banner' &&
+                    next?.code !== 'blackout_banner'
+                  )
+                    setFold('none');
+                }}
+              >
+                {materials
+                  .filter((x) => x.isActive)
+                  .map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <div className="form-row">
+              <label>
+                Ancho (cm)
+                <input
+                  inputMode="decimal"
+                  value={width}
+                  onChange={(e) => setWidth(e.target.value)}
+                />
+              </label>
+              <label>
+                Alto (cm)
+                <input
+                  inputMode="decimal"
+                  value={height}
+                  onChange={(e) => setHeight(e.target.value)}
+                />
+              </label>
+              <label>
+                Cantidad
+                <input
+                  type="number"
+                  min="1"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                />
+              </label>
             </div>
-            <p>
-              <strong>
-                Total ({calculation.quantity}): {money(calculation.totalCents)}
-              </strong>
-            </p>
-            <Button
-              variant="primary"
-              onClick={() => void save()}
-              disabled={calculation.rollFit === 'no_fit'}
-            >
-              Guardar cotización
-            </Button>
-          </>
-        ) : (
-          <p>Seleccioná un material.</p>
-        )}
-      </Card>
-      <Card>
-        <h2>Cotizaciones guardadas</h2>
-        <div className="rows">
-          {quotes.map((quote) => (
-            <div className="oprow" key={quote.id}>
-              <span>
-                {quote.snapshot.materialName} · {quote.snapshot.widthMm / 10}×
-                {quote.snapshot.heightMm / 10} cm
-              </span>
-              <span>{money(quote.totalCents)}</span>
-              <span>{quote.status}</span>
-              {quote.status === 'quoted' && (
-                <Button
-                  variant="ghost"
-                  onClick={() => void changeStatus(quote, 'accepted')}
+          </section>
+          <section className="drawer-section">
+            <h3>Extras</h3>
+            {material?.code === 'adhesive_vinyl' && (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={mdf}
+                  onChange={(e) => setMdf(e.target.checked)}
+                />
+                Pegado sobre MDF 9 mm
+              </label>
+            )}
+            {material?.code === 'canvas' && (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={canvasStretcher}
+                  onChange={(e) => setCanvasStretcher(e.target.checked)}
+                />
+                Canvas con bastidor
+              </label>
+            )}
+            <div className="form-row">
+              <label>
+                Varillas
+                <select
+                  value={rods}
+                  onChange={(e) => setRods(Number(e.target.value) as 0 | 1 | 2)}
                 >
-                  Aceptar
-                </Button>
-              )}
-              {quote.status === 'accepted' && (
-                <Button
-                  variant="ghost"
-                  onClick={() => void changeStatus(quote, 'completed')}
-                >
-                  Completar
-                </Button>
+                  <option value={0}>Sin varillas</option>
+                  <option value={1}>Superior</option>
+                  <option value={2}>Superior + inferior</option>
+                </select>
+              </label>
+              {isBanner && (
+                <label>
+                  Doblez de lona
+                  <select
+                    value={fold}
+                    onChange={(e) => setFold(e.target.value as typeof fold)}
+                  >
+                    <option value="none">Sin doblez</option>
+                    <option value="top">Arriba</option>
+                    <option value="both">Arriba + abajo</option>
+                  </select>
+                </label>
               )}
             </div>
-          ))}
+          </section>
+          <label>
+            Notas
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </label>
+        </Card>
+
+        <Card className="quote-result">
+          <h2>Presupuesto</h2>
+          {typeof calculation === 'string' ? (
+            <InlineMessage tone="error">{calculation}</InlineMessage>
+          ) : result ? (
+            <>
+              <p className="meta quote-result__facts">
+                {(result.areaMm2 / 1_000_000).toLocaleString('es-AR')} m² ·{' '}
+                {result.rollFit === 'no_fit'
+                  ? 'No entra en una sola pieza'
+                  : result.rollFit === 'rotated'
+                    ? 'Entra rotado'
+                    : result.rollFit === 'unknown'
+                      ? 'Ancho de rollo sin configurar'
+                      : 'Entra en el rollo'}
+                {pricePerM2 !== undefined && (
+                  <> · Precio por m² {money(pricePerM2)}</>
+                )}
+              </p>
+              <div className="rows">
+                {result.lines.map((line) => (
+                  <div className="quote-line" key={line.code}>
+                    <span>{line.description}</span>
+                    <span className="num">{money(line.amountCents)}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="quote-total">
+                <span>Total ({result.quantity})</span>
+                <strong>{money(result.totalCents)}</strong>
+              </p>
+              <Button
+                variant="primary"
+                block
+                onClick={() => void save()}
+                disabled={result.rollFit === 'no_fit'}
+              >
+                Guardar cotización
+              </Button>
+            </>
+          ) : (
+            <p className="meta">Elegí un material para ver el precio.</p>
+          )}
+        </Card>
+      </div>
+
+      <section className="price-section-gap">
+        <div className="section-head">
+          <h2>Cotizaciones guardadas</h2>
         </div>
-        {quotes.length === 0 && (
-          <p className="meta">Aún no hay cotizaciones.</p>
-        )}
-      </Card>
+        <Card className="card--flush">
+          {quotes.length === 0 ? (
+            <EmptyState icon="ruler" title="Todavía no hay cotizaciones" />
+          ) : (
+            <div className="rows catalog-rows">
+              {quotes.map((quote) => {
+                const state = statusMeta(plotterQuoteStatus, quote.status);
+                return (
+                  <div className="price-row" key={quote.id}>
+                    <div className="price-row__id">
+                      <strong>
+                        {quote.snapshot.materialName} ·{' '}
+                        {quote.snapshot.widthMm / 10}×
+                        {quote.snapshot.heightMm / 10} cm
+                        {quote.snapshot.quantity > 1
+                          ? ` × ${quote.snapshot.quantity}`
+                          : ''}
+                      </strong>
+                      <span className="meta">
+                        {customerName(quote.customerId)} ·{' '}
+                        {new Date(quote.createdAt).toLocaleDateString('es-AR')}
+                      </span>
+                    </div>
+                    <div className="price-row__values">
+                      <span className="config-value">
+                        <small>Total</small>
+                        <strong>{money(quote.totalCents)}</strong>
+                      </span>
+                    </div>
+                    <div className="price-row__state">
+                      <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                    </div>
+                    {quote.status === 'quoted' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void changeStatus(quote, 'accepted')}
+                      >
+                        Aceptar
+                      </Button>
+                    )}
+                    {quote.status === 'accepted' && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void changeStatus(quote, 'completed')}
+                      >
+                        Completar
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </section>
     </>
   );
 }

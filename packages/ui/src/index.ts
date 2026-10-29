@@ -10,7 +10,6 @@ export {
   type NavigationItem,
 } from './navigation';
 export {
-  Badge,
   Button,
   buttonClass,
   Card,
@@ -22,10 +21,24 @@ export {
   Notice,
   PageHeader,
   Segmented,
-  StateLine,
   Tabs,
   type ButtonVariant,
-  type Tone,
 } from './primitives';
 export { Icon, type IconName } from './icons';
+export {
+  FlashMessage,
+  InlineMessage,
+  useFlash,
+  type Flash,
+  type MessageTone,
+} from './feedback';
+export { StatusBadge, type StatusTone } from './status';
+export {
+  ConfirmDialog,
+  EntityRow,
+  FilterBar,
+  FormDrawer,
+  IntegrationCard,
+} from './patterns';
+export { requestCreate, takeCreateIntent } from './create-intent';
 export { Sheet } from './sheet';

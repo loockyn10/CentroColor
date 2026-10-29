@@ -24,7 +24,17 @@ import {
   type Sale,
   type SaleItem,
 } from '@centrocolor/domain';
-import { Card, PageHeader } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  EmptyState,
+  FilterBar,
+  InlineMessage,
+  PageHeader,
+  Sheet,
+  StatusBadge,
+} from '@centrocolor/ui';
+import { CatalogRow } from './configuration-ui';
 import { useBusinessContext } from './auth';
 import { useScanCoordinator, useScanState } from './global-scanner';
 
@@ -136,9 +146,9 @@ function ProductForm({
   return (
     <form className="pos-form" onSubmit={(event) => void submit(event)}>
       {error && (
-        <p className="customer-error pos-wide" role="alert">
-          {error}
-        </p>
+        <div className="pos-wide">
+          <InlineMessage tone="error">{error}</InlineMessage>
+        </div>
       )}
       <label>
         Nombre *
@@ -204,17 +214,17 @@ function ProductForm({
         Controlar stock
       </label>
       <div className="pos-actions pos-wide">
-        <button
-          className="customer-secondary"
+        <Button
+          variant="secondary"
           type="button"
           disabled={busy}
           onClick={onCancel}
         >
           Cancelar
-        </button>
-        <button className="customer-primary" type="submit" disabled={busy}>
+        </Button>
+        <Button variant="primary" type="submit" disabled={busy}>
           {submitLabel}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -239,6 +249,11 @@ export function ProductsPage({
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
   const [mode, setMode] = useState<'list' | 'new' | 'edit'>('list');
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState<{
+    id?: string;
+    name: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -325,33 +340,20 @@ export function ProductsPage({
     }
   }
 
-  async function addCategory() {
-    const name = window.prompt('Nombre de la nueva categoría');
-    if (name === null) return;
+  async function saveCategory() {
+    if (!categoryDraft) return;
     setBusy(true);
     try {
-      await createCategory(repository, businessId, name);
-      setRefresh((value) => value + 1);
-      onMutation?.();
-      setError(null);
-    } catch (failure) {
-      setError(message(failure));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function editCategory(category: ProductCategory) {
-    const name = window.prompt('Nombre de la categoría', category.name);
-    if (name === null) return;
-    setBusy(true);
-    try {
-      await repository.updateCategory(
-        businessId,
-        category.id,
-        name,
-        category.updatedAt,
-      );
+      if (categoryDraft.id) {
+        const category = categories.find((c) => c.id === categoryDraft.id)!;
+        await repository.updateCategory(
+          businessId,
+          category.id,
+          categoryDraft.name,
+          category.updatedAt,
+        );
+      } else await createCategory(repository, businessId, categoryDraft.name);
+      setCategoryDraft(null);
       setRefresh((value) => value + 1);
       onMutation?.();
       setError(null);
@@ -383,147 +385,215 @@ export function ProductsPage({
 
   return (
     <>
-      <PageHeader title="Productos" />
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
+      <PageHeader
+        title="Productos"
+        actions={
+          <Button onClick={() => setCategoriesOpen(true)}>Categorías</Button>
+        }
+        primaryAction={
+          <Button
+            variant="primary"
+            icon="plus"
+            onClick={() => {
+              setSelected(null);
+              setMode('new');
+            }}
+          >
+            Nuevo producto
+          </Button>
+        }
+      />
+      {error && !categoriesOpen && (
+        <InlineMessage tone="error">{error}</InlineMessage>
       )}
-      {mode === 'list' ? (
-        <>
-          <div className="customer-toolbar">
+      <FilterBar
+        label="Buscar productos"
+        search={
+          <input
+            type="search"
+            aria-label="Buscar productos"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Nombre o código de barras"
+          />
+        }
+      />
+      <Card className="card--flush">
+        {products.length === 0 ? (
+          <EmptyState
+            icon="box"
+            title={query ? 'Sin resultados' : 'Todavía no hay productos'}
+          />
+        ) : (
+          <div className="rows catalog-rows">
+            {products.map((product) => (
+              <CatalogRow
+                key={product.id}
+                title={product.name}
+                meta={
+                  [
+                    product.barcode,
+                    categories.find(
+                      (category) => category.id === product.categoryId,
+                    )?.name,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || undefined
+                }
+                values={[
+                  {
+                    label: 'Precio de venta',
+                    value: formatCents(product.salePriceCents),
+                  },
+                ]}
+                active={product.isActive}
+                onEdit={() => {
+                  setSelected(product);
+                  setMode('edit');
+                }}
+              />
+            ))}
+          </div>
+        )}
+        {products.length === 100 && (
+          <p className="pad meta">
+            Se muestran 100 productos. Usá la búsqueda para encontrar otros.
+          </p>
+        )}
+      </Card>
+
+      <Sheet
+        open={mode !== 'list'}
+        onClose={cancelForm}
+        variant="side"
+        title={mode === 'new' ? 'Nuevo producto' : `Editar ${selected?.name}`}
+      >
+        {mode !== 'list' && (
+          <>
+            <ProductForm
+              key={selected?.id ?? `new-${alta?.barcode ?? ''}`}
+              initial={
+                selected ??
+                (alta
+                  ? { ...emptyDetails, barcode: alta.barcode }
+                  : emptyDetails)
+              }
+              lockedBarcode={mode === 'new' && alta !== null}
+              categories={categories}
+              submitLabel={
+                mode === 'new' ? 'Guardar producto' : 'Guardar cambios'
+              }
+              busy={busy}
+              onSubmit={save}
+              onCancel={cancelForm}
+              autofocus
+              canManageStock={role === 'owner' || role === 'admin'}
+            />
+            {mode === 'edit' && selected && (
+              <section className="drawer-section">
+                <h3>Estado</h3>
+                <Button
+                  variant={selected.isActive ? 'danger' : 'secondary'}
+                  disabled={busy}
+                  onClick={() => void toggle(selected)}
+                >
+                  {selected.isActive
+                    ? 'Desactivar producto'
+                    : 'Reactivar producto'}
+                </Button>
+              </section>
+            )}
+          </>
+        )}
+      </Sheet>
+
+      <Sheet
+        open={categoriesOpen}
+        onClose={() => {
+          setCategoriesOpen(false);
+          setCategoryDraft(null);
+        }}
+        variant="side"
+        title="Categorías"
+      >
+        {error && <InlineMessage tone="error">{error}</InlineMessage>}
+        {categoryDraft ? (
+          <form
+            className="form-drawer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveCategory();
+            }}
+          >
             <label>
-              Buscar productos
+              Nombre de la categoría
               <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Nombre o código de barras"
+                autoFocus
+                required
+                value={categoryDraft.name}
+                onChange={(event) =>
+                  setCategoryDraft({
+                    ...categoryDraft,
+                    name: event.target.value,
+                  })
+                }
               />
             </label>
-            <div className="pos-actions">
-              <button
-                className="customer-secondary"
-                type="button"
-                onClick={() => void addCategory()}
-                disabled={busy}
-              >
-                Nueva categoría
-              </button>
-              <button
-                className="customer-primary"
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  setMode('new');
-                }}
-              >
-                + Nuevo producto
-              </button>
+            <div className="editor-state-actions">
+              <Button variant="primary" type="submit" disabled={busy}>
+                Guardar
+              </Button>
+              <Button variant="ghost" onClick={() => setCategoryDraft(null)}>
+                Cancelar
+              </Button>
             </div>
-          </div>
-          <Card className="pos-list-card">
-            <div className="pos-product-head">
-              <span>Nombre</span>
-              <span>Código</span>
-              <span>Categoría</span>
-              <span>Precio</span>
-              <span>Estado</span>
-              <span>Acciones</span>
-            </div>
-            {products.length === 0 && (
-              <p className="pos-empty">
-                {query ? 'No hay resultados.' : 'Todavía no hay productos.'}
-              </p>
-            )}
-            {products.map((product) => (
-              <div className="pos-product-row" key={product.id}>
-                <strong>{product.name}</strong>
-                <span>{product.barcode ?? '—'}</span>
-                <span>
-                  {categories.find(
-                    (category) => category.id === product.categoryId,
-                  )?.name ?? '—'}
-                </span>
-                <span>{formatCents(product.salePriceCents)}</span>
-                <span>{product.isActive ? 'Activo' : 'Inactivo'}</span>
-                <span className="pos-row-actions">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelected(product);
-                      setMode('edit');
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void toggle(product)}
-                  >
-                    {product.isActive ? 'Desactivar' : 'Reactivar'}
-                  </button>
-                </span>
-              </div>
-            ))}
-            {products.length === 100 && (
-              <p className="pos-empty">
-                Se muestran 100 productos. Usá la búsqueda para encontrar otros.
-              </p>
-            )}
-          </Card>
-          <Card className="pos-list-card">
-            <h2>Categorías</h2>
-            {categories.length === 0 && (
-              <p className="pos-empty">Todavía no hay categorías.</p>
-            )}
+          </form>
+        ) : (
+          <Button
+            variant="secondary"
+            icon="plus"
+            onClick={() => setCategoryDraft({ name: '' })}
+          >
+            Nueva categoría
+          </Button>
+        )}
+        {categories.length === 0 ? (
+          <p className="meta">Todavía no hay categorías.</p>
+        ) : (
+          <div className="rows catalog-rows">
             {categories.map((category) => (
-              <div className="pos-category-row" key={category.id}>
-                <strong>{category.name}</strong>
-                <span>{category.isActive ? 'Activa' : 'Inactiva'}</span>
-                <button
-                  type="button"
+              <div className="price-row" key={category.id}>
+                <div className="price-row__id">
+                  <strong>{category.name}</strong>
+                </div>
+                <div className="price-row__state">
+                  <StatusBadge tone={category.isActive ? 'ok' : 'closed'}>
+                    {category.isActive ? 'Activa' : 'Inactiva'}
+                  </StatusBadge>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={busy}
-                  onClick={() => void editCategory(category)}
+                  onClick={() =>
+                    setCategoryDraft({ id: category.id, name: category.name })
+                  }
                 >
                   Editar
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={busy}
                   onClick={() => void toggleCategory(category)}
                 >
                   {category.isActive ? 'Desactivar' : 'Reactivar'}
-                </button>
+                </Button>
               </div>
             ))}
-          </Card>
-        </>
-      ) : (
-        <Card className="pos-form-card">
-          <h2>
-            {mode === 'new' ? 'Nuevo producto' : `Editar ${selected?.name}`}
-          </h2>
-          <ProductForm
-            key={selected?.id ?? `new-${alta?.barcode ?? ''}`}
-            initial={
-              selected ??
-              (alta ? { ...emptyDetails, barcode: alta.barcode } : emptyDetails)
-            }
-            lockedBarcode={mode === 'new' && alta !== null}
-            categories={categories}
-            submitLabel={
-              mode === 'new' ? 'Guardar producto' : 'Guardar cambios'
-            }
-            busy={busy}
-            onSubmit={save}
-            onCancel={cancelForm}
-            autofocus
-            canManageStock={role === 'owner' || role === 'admin'}
-          />
-        </Card>
-      )}
+          </div>
+        )}
+      </Sheet>
     </>
   );
 }
@@ -778,16 +848,8 @@ export function NewSalePage({
   return (
     <>
       <PageHeader title="Nueva venta" />
-      {notice && (
-        <p className="pos-success" role="status">
-          {notice}
-        </p>
-      )}
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
-      )}
+      {notice && <InlineMessage tone="success">{notice}</InlineMessage>}
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
       <div className="pos-layout">
         <Card className="pos-scan-card">
           <label className="pos-scan-label">
@@ -939,8 +1001,8 @@ export function NewSalePage({
             <strong>{formatCents(cartTotal(lines))}</strong>
           </div>
           <div className="pos-actions">
-            <button
-              className="customer-secondary"
+            <Button
+              variant="secondary"
               type="button"
               disabled={!lines.length}
               onClick={() => {
@@ -949,9 +1011,10 @@ export function NewSalePage({
               }}
             >
               Vaciar
-            </button>
-            <button
-              className="customer-primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
               type="button"
               disabled={!lines.length || busy}
               onClick={() => {
@@ -960,7 +1023,7 @@ export function NewSalePage({
               }}
             >
               Cobrar
-            </button>
+            </Button>
           </div>
         </Card>
       </div>
@@ -1046,14 +1109,10 @@ export function NewSalePage({
                 ))}
               </select>
             </label>
-            {error && (
-              <p className="customer-error" role="alert">
-                {error}
-              </p>
-            )}
+            {error && <InlineMessage tone="error">{error}</InlineMessage>}
             <div className="pos-actions">
-              <button
-                className="customer-secondary"
+              <Button
+                variant="secondary"
                 type="button"
                 disabled={busy}
                 onClick={() => {
@@ -1063,15 +1122,16 @@ export function NewSalePage({
                 }}
               >
                 Cancelar
-              </button>
-              <button
-                className="customer-primary"
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
                 type="button"
                 disabled={busy}
                 onClick={() => void confirm()}
               >
                 {busy ? 'Guardando…' : 'Confirmar venta'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1127,11 +1187,7 @@ export function SalesPage({
             : 'Ventas'
         }
       />
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
       {detail ? (
         <Card className="pos-history-detail">
           <button
@@ -1181,7 +1237,7 @@ export function SalesPage({
             <span>Estado</span>
           </div>
           {sales.length === 0 && (
-            <p className="pos-empty">Todavía no hay ventas.</p>
+            <EmptyState icon="receipt" title="Todavía no hay ventas" />
           )}
           {sales.map((sale) => (
             <button

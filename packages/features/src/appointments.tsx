@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   changeAppointmentStatus,
   createAppointment,
@@ -18,7 +18,21 @@ import {
   type AppointmentType,
   type Customer,
 } from '@centrocolor/domain';
-import { Card, PageHeader, Segmented } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  FilterBar,
+  FormDrawer,
+  InlineMessage,
+  PageHeader,
+  StatusBadge,
+  takeCreateIntent,
+} from '@centrocolor/ui';
+import { AgendaBar, CustomerField } from './editor-parts';
+import { CatalogRow, CatalogSection } from './configuration-ui';
+import { appointmentStatus, statusMeta } from './status';
 import { useBusinessContext } from './auth';
 
 const statusLabels: Record<AppointmentStatus, string> = {
@@ -80,7 +94,11 @@ function AppointmentCard({
       </span>
       <strong>{item.title}</strong>
       <span>{item.customerName}</span>
-      <small>{statusLabels[item.status]}</small>
+      {item.status !== 'scheduled' && (
+        <StatusBadge tone={statusMeta(appointmentStatus, item.status).tone}>
+          {statusLabels[item.status]}
+        </StatusBadge>
+      )}
     </button>
   );
 }
@@ -117,8 +135,7 @@ function AppointmentEditor({
   const [types, setTypes] = useState<AppointmentType[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerQuery, setCustomerQuery] = useState('');
-  const [quickName, setQuickName] = useState('');
-  const [showQuick, setShowQuick] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [overlaps, setOverlaps] = useState<AppointmentSummary[]>([]);
   const [confirmOverlap, setConfirmOverlap] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -177,7 +194,7 @@ function AppointmentEditor({
       );
   }
 
-  async function quickCreate() {
+  async function quickCreate(fullName: string): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
@@ -185,7 +202,7 @@ function AppointmentEditor({
         customerRepository,
         context.businessId,
         {
-          fullName: quickName,
+          fullName,
           phone: null,
           email: null,
           documentNumber: null,
@@ -195,17 +212,16 @@ function AppointmentEditor({
       setCustomers((current) => [customer, ...current]);
       setCustomerId(customer.id);
       setCustomerQuery(customer.fullName);
-      setShowQuick(false);
-      setQuickName('');
+      return true;
     } catch (failure) {
       setError(errorText(failure));
+      return false;
     } finally {
       setBusy(false);
     }
   }
 
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  async function save() {
     setBusy(true);
     setError(null);
     try {
@@ -256,15 +272,12 @@ function AppointmentEditor({
     }
   }
 
-  async function setStatus(status: AppointmentStatus) {
+  function setStatus(status: AppointmentStatus) {
+    if (status === 'cancelled') setConfirmCancel(true);
+    else void applyStatus(status);
+  }
+  async function applyStatus(status: AppointmentStatus) {
     if (!appointment) return;
-    if (
-      status === 'cancelled' &&
-      !window.confirm(
-        '¿Cancelar este turno? El registro quedará en el historial.',
-      )
-    )
-      return;
     setBusy(true);
     setError(null);
     try {
@@ -281,28 +294,27 @@ function AppointmentEditor({
       setBusy(false);
     }
   }
+  const canManage = context.role === 'owner' || context.role === 'admin';
 
   return (
-    <div className="appointment-editor-backdrop" role="presentation">
-      <Card className="appointment-editor">
-        <div className="appointment-editor-heading">
-          <div>
-            <small>AGENDA · {context.branchName}</small>
-            <h2>{appointment ? 'Editar turno' : 'Nuevo turno'}</h2>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            ✕
-          </button>
-        </div>
+    <>
+      <FormDrawer
+        open
+        onClose={onClose}
+        title={appointment ? 'Editar turno' : 'Nuevo turno'}
+        submitLabel={confirmOverlap ? 'Guardar igualmente' : 'Guardar turno'}
+        busy={busy}
+        error={error}
+        onSubmit={save}
+      >
         {appointment && (
-          <span className={`appointment-status status-${appointment.status}`}>
-            {statusLabels[appointment.status]}
+          <span>
+            <StatusBadge
+              tone={statusMeta(appointmentStatus, appointment.status).tone}
+            >
+              {statusLabels[appointment.status]}
+            </StatusBadge>
           </span>
-        )}
-        {error && (
-          <p role="alert" className="appointment-error">
-            {error}
-          </p>
         )}
         {confirmOverlap && overlaps.length > 0 && (
           <div className="appointment-overlap" role="alert">
@@ -316,59 +328,19 @@ function AppointmentEditor({
             <small>Podés guardar igualmente si corresponde.</small>
           </div>
         )}
-        <form
-          className="appointment-form"
-          onSubmit={(event) => void save(event)}
-        >
-          <label className="appointment-form-wide">
-            Buscar cliente
-            <input
-              type="search"
-              value={customerQuery}
-              placeholder="Nombre, teléfono, email o documento"
-              onChange={(event) => setCustomerQuery(event.target.value)}
-            />
-          </label>
-          <label className="appointment-form-wide">
-            Cliente *
-            <select
-              required
+        <div className="editor-grid">
+          <div className="span-12">
+            <CustomerField
+              customers={customers}
+              query={customerQuery}
+              onQuery={setCustomerQuery}
               value={customerId}
-              onChange={(event) => setCustomerId(event.target.value)}
-            >
-              <option value="">Seleccionar…</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.fullName}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="appointment-form-wide quick-customer">
-            <button
-              type="button"
-              onClick={() => setShowQuick((value) => !value)}
-            >
-              + Crear cliente
-            </button>
-            {showQuick && (
-              <div>
-                <input
-                  value={quickName}
-                  placeholder="Nombre completo"
-                  onChange={(event) => setQuickName(event.target.value)}
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void quickCreate()}
-                >
-                  Crear y seleccionar
-                </button>
-              </div>
-            )}
+              onChange={setCustomerId}
+              onQuickCreate={quickCreate}
+              busy={busy}
+            />
           </div>
-          <label>
+          <label className="span-5">
             Tipo de turno
             <select
               value={typeId}
@@ -382,7 +354,7 @@ function AppointmentEditor({
               ))}
             </select>
           </label>
-          <label>
+          <label className="span-6">
             Título *
             <input
               required
@@ -390,7 +362,7 @@ function AppointmentEditor({
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
-          <label>
+          <label className="span-6 half">
             Inicio *
             <input
               required
@@ -410,7 +382,7 @@ function AppointmentEditor({
               }}
             />
           </label>
-          <label>
+          <label className="span-6 half">
             Fin *
             <input
               required
@@ -422,70 +394,67 @@ function AppointmentEditor({
               }}
             />
           </label>
-          <label className="appointment-form-wide">
+          <label className="span-12">
             Notas
             <textarea
-              rows={3}
+              rows={2}
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
             />
           </label>
-          <div className="appointment-editor-actions appointment-form-wide">
-            <button className="customer-primary" type="submit" disabled={busy}>
-              {confirmOverlap ? 'Guardar igualmente' : 'Guardar turno'}
-            </button>
-            <button type="button" onClick={onClose}>
-              Volver
-            </button>
-          </div>
-        </form>
+        </div>
         {appointment && (
-          <div className="appointment-state-actions">
-            {appointment.status !== 'completed' && (
-              <button
-                disabled={busy}
-                type="button"
-                onClick={() => void setStatus('completed')}
-              >
-                Marcar como completado
-              </button>
-            )}
-            {appointment.status !== 'no_show' && (
-              <button
-                disabled={busy}
-                type="button"
-                onClick={() => void setStatus('no_show')}
-              >
-                Marcar como ausente
-              </button>
-            )}
-            {appointment.status !== 'scheduled' &&
-              (appointment.status !== 'cancelled' ||
-                context.role === 'owner' ||
-                context.role === 'admin') && (
-                <button
-                  disabled={busy}
-                  type="button"
-                  onClick={() => void setStatus('scheduled')}
-                >
-                  Volver a programado
-                </button>
+          <section className="drawer-section">
+            <h3>Estado del turno</h3>
+            <div className="editor-state-actions">
+              {appointment.status !== 'completed' && (
+                <Button disabled={busy} onClick={() => setStatus('completed')}>
+                  Marcar como completado
+                </Button>
               )}
-            {appointment.status !== 'cancelled' &&
-              (context.role === 'owner' || context.role === 'admin') && (
-                <button
-                  className="danger-action"
+              {appointment.status !== 'no_show' && (
+                <Button disabled={busy} onClick={() => setStatus('no_show')}>
+                  Marcar como ausente
+                </Button>
+              )}
+              {appointment.status !== 'scheduled' &&
+                (appointment.status !== 'cancelled' || canManage) && (
+                  <Button
+                    disabled={busy}
+                    onClick={() => setStatus('scheduled')}
+                  >
+                    Volver a programado
+                  </Button>
+                )}
+              {appointment.status !== 'cancelled' && canManage && (
+                <Button
+                  variant="danger"
                   disabled={busy}
-                  type="button"
-                  onClick={() => void setStatus('cancelled')}
+                  onClick={() => setStatus('cancelled')}
                 >
                   Cancelar turno
-                </button>
+                </Button>
               )}
-          </div>
+            </div>
+          </section>
         )}
-      </Card>
-    </div>
+      </FormDrawer>
+      <ConfirmDialog
+        open={confirmCancel}
+        title="Cancelar turno"
+        destructive
+        confirmLabel="Cancelar turno"
+        cancelLabel="Volver"
+        busy={busy}
+        onCancel={() => setConfirmCancel(false)}
+        onConfirm={() => {
+          setConfirmCancel(false);
+          return applyStatus('cancelled');
+        }}
+      >
+        El registro quedará en el historial.
+      </ConfirmDialog>
+    </>
   );
 }
 
@@ -561,74 +530,59 @@ export function CalendarPage({
     setRefresh((value) => value + 1);
     onMutation?.();
   }
+  const period =
+    view === 'day'
+      ? shortDate(from)
+      : `${shortDate(from)} – ${shortDate(addDays(to, -1))}`;
   return (
     <>
-      <PageHeader title="Calendario" />
-      <div className="agenda-toolbar">
-        <Segmented
-          label="Vista"
-          value={view}
-          onChange={setView}
-          options={[
-            { value: 'day', label: 'Hoy / Día' },
-            { value: 'week', label: 'Semana' },
-          ]}
-        />
-        <div className="date-navigation">
-          <button
-            type="button"
-            onClick={() => setDate(addDays(date, view === 'day' ? -1 : -7))}
+      <PageHeader
+        title="Calendario"
+        primaryAction={
+          <Button
+            variant="primary"
+            icon="plus"
+            onClick={() => setEditor({ start: date })}
           >
-            ← Anterior
-          </button>
-          <button type="button" onClick={() => setDate(startOfDay(new Date()))}>
-            Hoy
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate(addDays(date, view === 'day' ? 1 : 7))}
+            Nuevo turno
+          </Button>
+        }
+      />
+      <AgendaBar
+        view={view}
+        views={[
+          { value: 'day', label: 'Día' },
+          { value: 'week', label: 'Semana' },
+        ]}
+        onView={setView}
+        period={period}
+        onPrev={() => setDate(addDays(date, view === 'day' ? -1 : -7))}
+        onToday={() => setDate(startOfDay(new Date()))}
+        onNext={() => setDate(addDays(date, view === 'day' ? 1 : 7))}
+        end={
+          <select
+            aria-label="Filtrar por estado"
+            value={status ?? 'all'}
+            onChange={(event) =>
+              setStatus(
+                event.target.value === 'all'
+                  ? null
+                  : (event.target.value as AppointmentStatus),
+              )
+            }
           >
-            Siguiente →
-          </button>
-        </div>
-        <select
-          aria-label="Filtrar por estado"
-          value={status ?? 'all'}
-          onChange={(event) =>
-            setStatus(
-              event.target.value === 'all'
-                ? null
-                : (event.target.value as AppointmentStatus),
-            )
-          }
-        >
-          <option value="all">Todos</option>
-          {appointmentStatuses.map((value) => (
-            <option key={value} value={value}>
-              {statusLabels[value]}
-            </option>
-          ))}
-        </select>
-        <button
-          className="customer-primary"
-          type="button"
-          onClick={() => setEditor({ start: date })}
-        >
-          + Nuevo turno
-        </button>
-      </div>
-      <h2 className="agenda-period-title">
-        {view === 'day'
-          ? shortDate(from)
-          : `${shortDate(from)} – ${shortDate(addDays(to, -1))}`}
-      </h2>
-      {error && (
-        <p className="appointment-error" role="alert">
-          {error}
-        </p>
-      )}
+            <option value="all">Todos los estados</option>
+            {appointmentStatuses.map((value) => (
+              <option key={value} value={value}>
+                {statusLabels[value]}
+              </option>
+            ))}
+          </select>
+        }
+      />
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
       {loading ? (
-        <p>Cargando agenda…</p>
+        <p className="meta">Cargando agenda…</p>
       ) : (
         <div className={`calendar-grid ${view}`}>
           {days.map((day) => {
@@ -638,7 +592,11 @@ export function CalendarPage({
             return (
               <section className="calendar-day" key={dateKey(day)}>
                 <header>
-                  <strong>{shortDate(day)}</strong>
+                  {view === 'week' ? (
+                    <strong>{shortDate(day)}</strong>
+                  ) : (
+                    <span className="meta">Turnos del día</span>
+                  )}
                   <button
                     type="button"
                     aria-label={`Nuevo turno ${shortDate(day)}`}
@@ -713,6 +671,10 @@ export function AppointmentsPage({
   const [refresh, setRefresh] = useState(0);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    // Alta pedida desde el menú «Nuevo»: abre el editor directamente.
+    if (takeCreateIntent('appointments')) setSelected({} as Appointment);
+  }, []);
+  useEffect(() => {
     let live = true;
     const timer = window.setTimeout(() => {
       const to = new Date(`${toDate}T00:00`);
@@ -752,69 +714,72 @@ export function AppointmentsPage({
   }
   return (
     <>
-      <PageHeader title="Turnos" />
-      <div className="appointment-list-filters">
-        <label>
-          Buscar
+      <PageHeader
+        title="Turnos"
+        primaryAction={
+          <Button
+            variant="primary"
+            icon="plus"
+            onClick={() => setSelected({} as Appointment)}
+          >
+            Nuevo turno
+          </Button>
+        }
+      />
+      <FilterBar
+        label="Filtrar turnos"
+        search={
           <input
             type="search"
+            aria-label="Buscar turnos"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Cliente o título"
           />
-        </label>
-        <label>
-          Desde
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(event) => setFromDate(event.target.value)}
-          />
-        </label>
-        <label>
-          Hasta
-          <input
-            type="date"
-            value={toDate}
-            onChange={(event) => setToDate(event.target.value)}
-          />
-        </label>
-        <label>
-          Estado
-          <select
-            value={status ?? 'all'}
-            onChange={(event) =>
-              setStatus(
-                event.target.value === 'all'
-                  ? null
-                  : (event.target.value as AppointmentStatus),
-              )
-            }
-          >
-            <option value="all">Todos</option>
-            {appointmentStatuses.map((value) => (
-              <option key={value} value={value}>
-                {statusLabels[value]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="customer-primary"
-          type="button"
-          onClick={() => setSelected({} as Appointment)}
-        >
-          + Nuevo turno
-        </button>
-      </div>
-      {error && (
-        <p role="alert" className="appointment-error">
-          {error}
-        </p>
-      )}
+        }
+        end={
+          <>
+            <label className="filter-inline">
+              Desde
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(event) => setFromDate(event.target.value)}
+              />
+            </label>
+            <label className="filter-inline">
+              Hasta
+              <input
+                type="date"
+                value={toDate}
+                onChange={(event) => setToDate(event.target.value)}
+              />
+            </label>
+            <select
+              aria-label="Filtrar por estado"
+              value={status ?? 'all'}
+              onChange={(event) =>
+                setStatus(
+                  event.target.value === 'all'
+                    ? null
+                    : (event.target.value as AppointmentStatus),
+                )
+              }
+            >
+              <option value="all">Todos los estados</option>
+              {appointmentStatuses.map((value) => (
+                <option key={value} value={value}>
+                  {statusLabels[value]}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+      />
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
       <Card className="appointment-list-card">
         {rows.length === 0 ? (
-          <p>No hay turnos en este período.</p>
+          <EmptyState icon="calendar" title="No hay turnos en este período" />
         ) : (
           rows.map((row) => (
             <button
@@ -827,9 +792,11 @@ export function AppointmentsPage({
               <strong>{time(row.startsAt)}</strong>
               <span>{row.customerName}</span>
               <span>{row.title}</span>
-              <span className={`appointment-status status-${row.status}`}>
+              <StatusBadge
+                tone={statusMeta(appointmentStatus, row.status).tone}
+              >
                 {statusLabels[row.status]}
-              </span>
+              </StatusBadge>
             </button>
           ))
         )}
@@ -866,7 +833,7 @@ export function AppointmentTypesPage({
   const context = useBusinessContext();
   const canManage = context.role === 'owner' || context.role === 'admin';
   const [types, setTypes] = useState<AppointmentType[]>([]);
-  const [editing, setEditing] = useState<AppointmentType | null>(null);
+  const [drawer, setDrawer] = useState<'new' | AppointmentType | null>(null);
   const [name, setName] = useState('');
   const [duration, setDuration] = useState(60);
   const [refresh, setRefresh] = useState(0);
@@ -881,25 +848,26 @@ export function AppointmentTypesPage({
       live = false;
     };
   }, [repository, context.businessId, refresh, refreshToken]);
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  function open(target: 'new' | AppointmentType) {
+    setName(target === 'new' ? '' : target.name);
+    setDuration(target === 'new' ? 60 : target.defaultDurationMinutes);
+    setError(null);
+    setDrawer(target);
+  }
+  async function save() {
     setError(null);
     try {
-      if (editing)
-        await updateAppointmentType(
-          repository,
-          context.businessId,
-          editing.id,
-          { name, defaultDurationMinutes: duration },
-        );
+      if (drawer && drawer !== 'new')
+        await updateAppointmentType(repository, context.businessId, drawer.id, {
+          name,
+          defaultDurationMinutes: duration,
+        });
       else
         await createAppointmentType(repository, context.businessId, {
           name,
           defaultDurationMinutes: duration,
         });
-      setEditing(null);
-      setName('');
-      setDuration(60);
+      setDrawer(null);
       setRefresh((value) => value + 1);
       onMutation?.();
     } catch (failure) {
@@ -913,6 +881,7 @@ export function AppointmentTypesPage({
         type.id,
         !type.isActive,
       );
+      setDrawer(null);
       setRefresh((value) => value + 1);
       onMutation?.();
     } catch (failure) {
@@ -922,87 +891,83 @@ export function AppointmentTypesPage({
   return (
     <>
       {!embedded && <PageHeader title="Tipos de turno" />}
-      {embedded && <h2>Tipos de turno</h2>}
-      {error && (
-        <p role="alert" className="appointment-error">
-          {error}
-        </p>
-      )}
-      {canManage && (
-        <Card className="appointment-type-form">
-          <form onSubmit={(event) => void save(event)}>
-            <label>
-              Nombre
-              <input
-                required
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
-            <label>
-              Duración predeterminada (min)
-              <input
-                required
-                type="number"
-                min={1}
-                max={1440}
-                value={duration}
-                onChange={(event) => setDuration(Number(event.target.value))}
-              />
-            </label>
-            <button className="customer-primary" type="submit">
-              {editing ? 'Guardar cambios' : 'Crear tipo'}
-            </button>
-            {editing && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditing(null);
-                  setName('');
-                  setDuration(60);
-                }}
-              >
-                Cancelar
-              </button>
-            )}
-          </form>
-        </Card>
-      )}
-      {!canManage && (
-        <p className="customer-storage-note">
-          Tu rol puede consultar los tipos. Solo owner/admin puede modificarlos.
-        </p>
-      )}
-      <Card className="appointment-type-list">
+      {error && !drawer && <InlineMessage tone="error">{error}</InlineMessage>}
+      <CatalogSection
+        title="Tipos de turno"
+        action={
+          canManage ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="plus"
+              onClick={() => open('new')}
+            >
+              Nuevo tipo
+            </Button>
+          ) : undefined
+        }
+      >
         {types.length === 0 ? (
-          <p>Todavía no hay tipos de turno configurados.</p>
+          <p className="meta price-empty">Todavía no hay tipos de turno.</p>
         ) : (
           types.map((type) => (
-            <div key={type.id}>
-              <strong>{type.name}</strong>
-              <span>{type.defaultDurationMinutes} min</span>
-              <span>{type.isActive ? 'Activo' : 'Inactivo'}</span>
-              {canManage && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(type);
-                      setName(type.name);
-                      setDuration(type.defaultDurationMinutes);
-                    }}
-                  >
-                    Editar
-                  </button>
-                  <button type="button" onClick={() => void toggle(type)}>
-                    {type.isActive ? 'Desactivar' : 'Activar'}
-                  </button>
-                </>
-              )}
-            </div>
+            <CatalogRow
+              key={type.id}
+              title={type.name}
+              values={[
+                {
+                  label: 'Duración predeterminada',
+                  value: `${type.defaultDurationMinutes} min`,
+                },
+              ]}
+              active={type.isActive}
+              onEdit={canManage ? () => open(type) : undefined}
+            />
           ))
         )}
-      </Card>
+      </CatalogSection>
+      <FormDrawer
+        open={drawer !== null}
+        onClose={() => setDrawer(null)}
+        title={
+          drawer && drawer !== 'new'
+            ? 'Editar tipo de turno'
+            : 'Nuevo tipo de turno'
+        }
+        error={error}
+        onSubmit={save}
+      >
+        <label>
+          Nombre
+          <input
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
+        </label>
+        <label>
+          Duración predeterminada (min)
+          <input
+            required
+            type="number"
+            min={1}
+            max={1440}
+            value={duration}
+            onChange={(event) => setDuration(Number(event.target.value))}
+          />
+        </label>
+        {drawer && drawer !== 'new' && (
+          <section className="drawer-section">
+            <h3>Estado</h3>
+            <Button
+              variant={drawer.isActive ? 'danger' : 'secondary'}
+              onClick={() => void toggle(drawer)}
+            >
+              {drawer.isActive ? 'Desactivar tipo' : 'Activar tipo'}
+            </Button>
+          </section>
+        )}
+      </FormDrawer>
     </>
   );
 }

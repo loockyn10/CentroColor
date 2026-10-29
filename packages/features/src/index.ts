@@ -31,12 +31,8 @@ export {
   NewFrameQuotePage,
   FrameJobsPage,
 } from './framing';
-export {
-  PhotoServicesPage,
-  NewPhotoJobPage,
-  PhotoJobsPage,
-  PhotoProductionPage,
-} from './photo';
+export { PhotoServicesPage, NewPhotoJobPage, PhotoJobsPage } from './photo';
+export { PhotoProductionPage } from './photo-production';
 export {
   CobrosPage,
   PaymentAccountPanel,

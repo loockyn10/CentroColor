@@ -14,9 +14,21 @@ import {
   type WorkPaymentMethod,
   type WorkPaymentSourceType,
 } from '@centrocolor/domain';
-import { Button, Card, EmptyState, Icon, Sheet } from '@centrocolor/ui';
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  FilterBar,
+  Icon,
+  InlineMessage,
+  PageHeader,
+  Sheet,
+  StatusBadge,
+} from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
-import { shortDateTime } from './format';
+import { plural } from './format';
+import { statusMeta, workSourceStatus } from './status';
 
 const money = (x: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
@@ -36,9 +48,9 @@ const methodLabel: Record<string, string> = {
   other: 'Otro',
 };
 const sourceLabel: Record<string, string> = {
-  event: 'Servicio',
+  event: 'Reserva',
   frame_job: 'Marquetería',
-  photo_job: 'Fotografía',
+  photo_job: 'Pedido',
 };
 const parseAmount = (value: string) => {
   const clean = value.trim();
@@ -75,6 +87,9 @@ export function PaymentAccountPanel({
     [notes, setNotes] = useState(''),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
+    [voiding, setVoiding] = useState<{ id: string; reason: string } | null>(
+      null,
+    ),
     [refresh, setRefresh] = useState(0);
   const load = () =>
     repository
@@ -129,19 +144,22 @@ export function PaymentAccountPanel({
       setBusy(false);
     }
   }
-  async function voidPayment(id: string) {
-    const reason = window.prompt('Motivo obligatorio de la anulación:');
-    if (reason === null) return;
+  function voidPayment(id: string) {
+    setVoiding({ id, reason: '' });
+  }
+  async function confirmVoid() {
+    if (!voiding) return;
     setBusy(true);
     setError(null);
     try {
       await voidWorkPayment(
         repository,
         context.businessId,
-        id,
+        voiding.id,
         context.userId,
-        reason,
+        voiding.reason,
       );
+      setVoiding(null);
       setRefresh((x) => x + 1);
       onMutation?.();
     } catch (x) {
@@ -163,9 +181,7 @@ export function PaymentAccountPanel({
       <div className="work-account-heading">
         <h3>Cuenta</h3>
         {account.balanceCents === 0 && (
-          <span className="state-line">
-            <span className="tone-ok">Pagado</span>
-          </span>
+          <StatusBadge tone="ok">Pagado</StatusBadge>
         )}
       </div>
       <dl className="account-totals">
@@ -188,11 +204,7 @@ export function PaymentAccountPanel({
           resolución/devolución
         </p>
       )}
-      {error && (
-        <p className="appointment-error" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
       <div className="work-payment-actions">
         <Button
           variant="primary"
@@ -259,12 +271,12 @@ export function PaymentAccountPanel({
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
           <div>
-            <button className="customer-primary" disabled={busy}>
+            <Button variant="primary" type="submit" disabled={busy}>
               Confirmar
-            </button>
-            <button type="button" onClick={() => setKind(null)}>
+            </Button>
+            <Button variant="ghost" onClick={() => setKind(null)}>
               Cancelar
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -298,12 +310,14 @@ export function PaymentAccountPanel({
                   <small>{x.voidReason}</small>
                 ) : (
                   context.role !== 'staff' && (
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       disabled={busy}
                       onClick={() => void voidPayment(x.id)}
                     >
                       {conflict ? 'Descartar conflicto' : 'Anular'}
-                    </button>
+                    </Button>
                   )
                 )}
               </div>
@@ -311,6 +325,40 @@ export function PaymentAccountPanel({
           })
         )}
       </div>
+      <Sheet
+        open={voiding !== null}
+        onClose={() => setVoiding(null)}
+        title="Anular pago"
+        variant="modal"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setVoiding(null)}>
+              Volver
+            </Button>
+            <Button
+              variant="danger"
+              disabled={busy || !voiding?.reason.trim()}
+              onClick={() => void confirmVoid()}
+            >
+              Anular pago
+            </Button>
+          </>
+        }
+      >
+        {voiding && (
+          <label>
+            Motivo (obligatorio)
+            <textarea
+              autoFocus
+              rows={3}
+              value={voiding.reason}
+              onChange={(e) =>
+                setVoiding({ ...voiding, reason: e.target.value })
+              }
+            />
+          </label>
+        )}
+      </Sheet>
     </Card>
   );
 }
@@ -343,27 +391,53 @@ export function CustomerAccountPanel({
     <Card className="customer-account">
       <div className="work-account-heading">
         <h3>Cuenta</h3>
-        <strong className={account.balanceCents > 0 ? 'txt-warn' : 'txt-ok'}>
-          {account.balanceCents > 0
-            ? `Saldo ${money(account.balanceCents)}`
-            : 'Sin saldo'}
-        </strong>
+        {account.balanceCents <= 0 ? (
+          <StatusBadge tone="ok">Sin saldo</StatusBadge>
+        ) : (
+          account.sources.length > 1 && (
+            <strong className="txt-warn">
+              Saldo total {money(account.balanceCents)}
+            </strong>
+          )
+        )}
       </div>
-      {account.sources.map((x) => (
-        <div
-          className="customer-account-source"
-          key={`${x.sourceType}-${x.sourceId}`}
-        >
-          <span>
-            {sourceLabel[x.sourceType]} · {x.description}
-          </span>
-          <small>{sourceStatusLabel[x.sourceStatus] ?? x.sourceStatus}</small>
-          <span>
-            Total {money(x.totalCents)} · Pagado {money(x.paidCents)} ·{' '}
-            <b>Saldo {money(x.balanceCents)}</b>
-          </span>
+      {account.sources.length === 0 ? (
+        <p className="meta">Sin pedidos, reservas ni trabajos con cuenta.</p>
+      ) : (
+        <div className="account-sources">
+          {account.sources.map((x) => {
+            const state = statusMeta(workSourceStatus, x.sourceStatus);
+            return (
+              <div
+                className="account-source"
+                key={`${x.sourceType}-${x.sourceId}`}
+              >
+                <div className="account-source__id">
+                  <span className="meta">{sourceLabel[x.sourceType]}</span>
+                  <strong>{x.description}</strong>
+                  <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                </div>
+                <span className="config-value">
+                  <small>Total</small>
+                  <strong>{money(x.totalCents)}</strong>
+                </span>
+                <span className="config-value">
+                  <small>Pagado</small>
+                  <strong>{money(x.paidCents)}</strong>
+                </span>
+                <span className="config-value">
+                  <small>Saldo</small>
+                  <strong
+                    className={x.balanceCents > 0 ? 'txt-warn' : 'txt-ok'}
+                  >
+                    {money(x.balanceCents)}
+                  </strong>
+                </span>
+              </div>
+            );
+          })}
         </div>
-      ))}
+      )}
       {account.recentPayments.length > 0 && (
         <>
           <h4>Pagos recientes</h4>
@@ -380,21 +454,10 @@ export function CustomerAccountPanel({
   );
 }
 
-const sourceStatusLabel: Record<string, string> = {
-  received: 'Recibido',
-  pending: 'Pendiente',
-  in_progress: 'En proceso',
-  ready: 'Listo',
-  delivered: 'Entregado',
-  cancelled: 'Cancelado',
-  inquiry: 'Consulta',
-  quoted: 'Presupuestado',
-  reserved: 'Reservado',
-  completed: 'Realizado',
-};
 const finishedStatuses = new Set(['ready', 'completed', 'delivered']);
 
-type Scope = 'all' | 'finished' | WorkPaymentSourceType;
+type StateFilter = 'all' | 'finished';
+type OriginFilter = 'all' | WorkPaymentSourceType;
 
 /** Cobros: bandeja compacta de cuentas con saldo. Cobrar abre la cuenta real (WorkPayment). */
 export function CobrosPage({
@@ -411,7 +474,8 @@ export function CobrosPage({
   const c = useBusinessContext();
   const [accounts, setAccounts] = useState<WorkAccount[] | null>(null);
   const [names, setNames] = useState<Record<string, string>>({});
-  const [scope, setScope] = useState<Scope>('all');
+  const [stateFilter, setStateFilter] = useState<StateFilter>('all');
+  const [origin, setOrigin] = useState<OriginFilter>('all');
   const [open, setOpen] = useState<WorkAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -469,23 +533,17 @@ export function CobrosPage({
       ),
     [accounts],
   );
-  const visible = sorted.filter((row) =>
-    scope === 'all'
-      ? true
-      : scope === 'finished'
-        ? finishedStatuses.has(row.sourceStatus)
-        : row.sourceType === scope,
+  const visible = sorted.filter(
+    (row) =>
+      (stateFilter === 'all' || finishedStatuses.has(row.sourceStatus)) &&
+      (origin === 'all' || row.sourceType === origin),
   );
-  const count = (predicate: (row: WorkAccount) => boolean) =>
-    sorted.filter(predicate).length;
   const totalDue = sorted.reduce((sum, row) => sum + row.balanceCents, 0);
 
   if (c.role === 'staff')
     return (
       <>
-        <header className="page-head">
-          <h1>Cobros</h1>
-        </header>
+        <PageHeader title="Cobros" />
         <Card>
           <EmptyState icon="lock" title="Sólo owner y admin ven los cobros">
             Registrá pagos desde cada pedido, reserva o trabajo de taller.
@@ -494,100 +552,103 @@ export function CobrosPage({
       </>
     );
 
-  const chips: Array<[Scope, string, number]> = [
-    ['all', 'Todos', sorted.length],
-    [
-      'finished',
-      'Terminados',
-      count((r) => finishedStatuses.has(r.sourceStatus)),
-    ],
-    ['photo_job', 'Fotografía', count((r) => r.sourceType === 'photo_job')],
-    ['frame_job', 'Marquetería', count((r) => r.sourceType === 'frame_job')],
-    ['event', 'Servicios', count((r) => r.sourceType === 'event')],
-  ];
-
   return (
     <>
-      <header className="page-head">
-        <h1>Cobros</h1>
-        {sorted.length > 0 && (
-          <p className="meta page-meta">
-            {sorted.length} con saldo · <strong>{money(totalDue)}</strong> por
-            cobrar
-          </p>
-        )}
-      </header>
-      {error && (
-        <p className="customer-error" role="alert">
-          {error}
-        </p>
-      )}
-      <div
-        className="chips toolbar-row"
-        role="group"
-        aria-label="Filtrar cobros"
-      >
-        {chips.map(([id, label, n]) => (
-          <button
-            key={id}
-            type="button"
-            className="chip"
-            aria-pressed={scope === id}
-            onClick={() => setScope(id)}
+      <PageHeader
+        title="Cobros"
+        description={
+          sorted.length > 0
+            ? `${plural(sorted.length, 'cuenta con saldo', 'cuentas con saldo')} · ${money(totalDue)} por cobrar`
+            : undefined
+        }
+      />
+      {error && <InlineMessage tone="error">{error}</InlineMessage>}
+      <FilterBar
+        label="Filtrar cobros"
+        end={
+          <select
+            aria-label="Origen de la deuda"
+            value={origin}
+            onChange={(event) => setOrigin(event.target.value as OriginFilter)}
           >
-            {label} <span className="count">{n}</span>
-          </button>
-        ))}
-      </div>
+            <option value="all">Todos los orígenes</option>
+            {(['photo_job', 'event', 'frame_job'] as const).map((type) => (
+              <option key={type} value={type}>
+                {sourceLabel[type]}s (
+                {sorted.filter((r) => r.sourceType === type).length})
+              </option>
+            ))}
+          </select>
+        }
+      >
+        <Chip
+          pressed={stateFilter === 'all'}
+          count={sorted.length}
+          onClick={() => setStateFilter('all')}
+        >
+          Todos
+        </Chip>
+        <Chip
+          pressed={stateFilter === 'finished'}
+          count={
+            sorted.filter((r) => finishedStatuses.has(r.sourceStatus)).length
+          }
+          onClick={() => setStateFilter('finished')}
+        >
+          Terminados
+        </Chip>
+      </FilterBar>
       <Card className="card--flush">
         {accounts === null ? (
           <p className="pad meta">Cargando cobros…</p>
         ) : visible.length === 0 ? (
           <EmptyState icon="wallet" title="Sin saldos pendientes" />
         ) : (
-          <div className="rows">
+          <div className="rows cobros">
+            <div className="cobro-row cobro-row--head" aria-hidden="true">
+              <span>Cliente</span>
+              <span>Origen</span>
+              <span>Total</span>
+              <span>Pagado</span>
+              <span>Saldo</span>
+              <span>Estado</span>
+              <span />
+            </div>
             {visible.map((row) => {
               const finished = finishedStatuses.has(row.sourceStatus);
-              const last = row.payments
-                .filter((p) => p.status === 'posted')
-                .at(-1);
+              const state = statusMeta(workSourceStatus, row.sourceStatus);
               return (
                 <div
-                  className="oprow"
+                  className="cobro-row"
                   data-flag={finished ? 'warn' : undefined}
                   key={`${row.sourceType}-${row.sourceId}`}
                 >
-                  <span className="who">
+                  <span className="cobro-client">
                     {names[row.customerId] ?? 'Cliente'}
                   </span>
-                  <span className="what">
-                    <span className="meta">{sourceLabel[row.sourceType]}</span>{' '}
+                  <span className="cobro-origin">
+                    <span className="meta">{sourceLabel[row.sourceType]}</span>
                     {row.description}
                   </span>
-                  <span className="when">
-                    <strong className="num">{money(row.balanceCents)}</strong>
-                    <span className="meta">
-                      de {money(row.totalCents)}
-                      {last
-                        ? ` · último pago ${shortDateTime(last.occurredAt)}`
-                        : ''}
-                    </span>
+                  <span className="cobro-num" data-label="Total">
+                    {money(row.totalCents)}
                   </span>
-                  <span className="act">
-                    <span className="state-line">
-                      <span className={finished ? 'tone-warn' : undefined}>
-                        {sourceStatusLabel[row.sourceStatus] ??
-                          row.sourceStatus}
-                      </span>
-                    </span>
-                    <Button
-                      variant={finished ? 'primary' : 'secondary'}
-                      size="sm"
-                      onClick={() => setOpen(row)}
-                    >
-                      Cobrar
-                    </Button>
+                  <span className="cobro-num" data-label="Pagado">
+                    {money(row.paidCents)}
                   </span>
+                  <strong className="cobro-num cobro-due" data-label="Saldo">
+                    {money(row.balanceCents)}
+                  </strong>
+                  <span className="cobro-state">
+                    <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
+                  </span>
+                  <Button
+                    variant={finished ? 'primary' : 'secondary'}
+                    size="sm"
+                    onClick={() => setOpen(row)}
+                  >
+                    Cobrar
+                  </Button>
                 </div>
               );
             })}

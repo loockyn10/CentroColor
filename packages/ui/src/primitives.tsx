@@ -1,4 +1,11 @@
-import type { ButtonHTMLAttributes, PropsWithChildren, ReactNode } from 'react';
+import {
+  useContext,
+  useLayoutEffect,
+  type ButtonHTMLAttributes,
+  type PropsWithChildren,
+  type ReactNode,
+} from 'react';
+import { PageTabsContext } from './page-tabs';
 import { Icon, type IconName } from './icons';
 
 // El logo real es cuadrado y circular: se muestra siempre con width = height.
@@ -108,67 +115,49 @@ export function Card({
 }
 
 /**
- * Cabecera de página del panel. `eyebrow` se acepta por compatibilidad pero no se muestra:
- * la navegación ya orienta (DESIGN-02). `description` sólo debe usarse si ayuda a decidir.
+ * Cabecera de página del panel: título, acción primaria a la derecha y, si el módulo tiene
+ * pestañas, las pestañas debajo del título (el shell las entrega por contexto; el H1 pasa a ser
+ * el nombre del módulo para no repetir la pestaña activa). `eyebrow` se acepta por compatibilidad
+ * pero no se muestra. `description` sólo debe usarse si ayuda a decidir.
  */
 export function PageHeader({
   title,
   description,
   actions,
+  primaryAction,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
+  /** Acciones secundarias (menor peso). */
   actions?: ReactNode;
+  /** La única acción primaria de la pantalla: va última, a la derecha. */
+  primaryAction?: ReactNode;
 }) {
+  const tabs = useContext(PageTabsContext);
+  const hasTabs = Boolean(tabs?.tabs);
+  const claim = tabs?.claim;
+  useLayoutEffect(() => {
+    if (!hasTabs || !claim) return;
+    claim(true);
+    return () => claim(false);
+  }, [hasTabs, claim]);
   return (
-    <header className="page-head">
-      <h1>{title}</h1>
-      {actions && <div className="page-actions">{actions}</div>}
-      {description && <p className="page-description">{description}</p>}
-    </header>
-  );
-}
-
-export type Tone =
-  'neutral' | 'yellow' | 'amber' | 'red' | 'green' | 'blue' | 'ink' | 'dark';
-
-export function Badge({
-  tone = 'neutral',
-  icon,
-  children,
-}: {
-  tone?: Tone;
-  icon?: IconName;
-  children: ReactNode;
-}) {
-  return (
-    <span
-      className={`badge ${tone !== 'neutral' ? `badge--${tone}` : ''}`.trim()}
-    >
-      {icon && <Icon name={icon} />}
-      {children}
-    </span>
-  );
-}
-
-/** Estado principal en una línea: «URGENTE · EN PROCESO». Sólo el primero lleva tono. */
-export function StateLine({
-  parts,
-}: {
-  parts: Array<{ text: string; tone?: 'alert' | 'warn' | 'ok' }>;
-}) {
-  return (
-    <span className="state-line">
-      {parts.map((part) => (
-        <span
-          key={part.text}
-          className={part.tone ? `tone-${part.tone}` : undefined}
-        >
-          {part.text}
-        </span>
-      ))}
-    </span>
+    <>
+      <header
+        className={`page-head ${hasTabs ? 'page-head--tabbed' : ''}`.trim()}
+      >
+        <h1>{hasTabs && tabs ? tabs.moduleLabel : title}</h1>
+        {(actions || primaryAction) && (
+          <div className="page-actions">
+            {actions}
+            {primaryAction}
+          </div>
+        )}
+        {description && <p className="page-description">{description}</p>}
+      </header>
+      {hasTabs && tabs?.tabs}
+    </>
   );
 }
 

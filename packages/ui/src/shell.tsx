@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
   type PropsWithChildren,
   type ReactNode,
@@ -14,14 +15,23 @@ import {
   type NavModule,
 } from './navigation';
 import { Sheet } from './sheet';
+import { PageTabsContext } from './page-tabs';
+import { requestCreate } from './create-intent';
 
-const createItems: Array<{ id: string; label: string; icon: IconName }> = [
+/** `intent`: la pantalla destino abre directamente su formulario de alta (ver `create-intent`). */
+const createItems: Array<{
+  id: string;
+  label: string;
+  icon: IconName;
+  intent?: boolean;
+}> = [
   { id: 'new-sale', label: 'Venta', icon: 'cart' },
   { id: 'new-photo-job', label: 'Pedido de laboratorio', icon: 'camera' },
   { id: 'new-quote', label: 'Cotización de marquetería', icon: 'frame' },
-  { id: 'appointments', label: 'Turno', icon: 'calendar' },
-  { id: 'events', label: 'Presupuesto o reserva', icon: 'star' },
-  { id: 'customers', label: 'Cliente', icon: 'users' },
+  { id: 'plotter', label: 'Cotización de plotter', icon: 'ruler' },
+  { id: 'appointments', label: 'Turno', icon: 'calendar', intent: true },
+  { id: 'events', label: 'Presupuesto o reserva', icon: 'star', intent: true },
+  { id: 'customers', label: 'Cliente', icon: 'users', intent: true },
 ];
 
 const tabbarIds = ['home', 'new-sale', 'photo-jobs', 'calendar'];
@@ -50,7 +60,30 @@ export function AppShell({
   const [more, setMore] = useState(false);
   const [create, setCreate] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [tabsClaimed, setTabsClaimed] = useState(false);
   const current = moduleFor(activeId);
+  const hasTabs = Boolean(current && current.subs.length > 1);
+  const tabsNode =
+    current && hasTabs ? (
+      <Tabs
+        label={current.label}
+        items={current.subs}
+        activeId={activeId}
+        onSelect={(id) => {
+          onNavigate(id);
+          setMore(false);
+          setCreate(false);
+        }}
+      />
+    ) : null;
+  const pageTabs = useMemo(
+    () => ({
+      tabs: tabsNode,
+      moduleLabel: current?.label ?? '',
+      claim: setTabsClaimed,
+    }),
+    [activeId, current?.label, hasTabs],
+  );
 
   useEffect(() => {
     window.scrollTo?.(0, 0);
@@ -183,15 +216,10 @@ export function AppShell({
         {statusArea}
 
         <main id="contenido" className="main-content">
-          {current && current.subs.length > 1 && (
-            <Tabs
-              label={current.label}
-              items={current.subs}
-              activeId={activeId}
-              onSelect={go}
-            />
-          )}
-          {children}
+          {tabsNode && !tabsClaimed && tabsNode}
+          <PageTabsContext.Provider value={pageTabs}>
+            {children}
+          </PageTabsContext.Provider>
         </main>
       </div>
 
@@ -266,7 +294,14 @@ export function AppShell({
       <Sheet open={create} onClose={() => setCreate(false)} title="Crear nuevo">
         <div className="more-grid">
           {createItems.map((item) => (
-            <button key={item.id} type="button" onClick={() => go(item.id)}>
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                if (item.intent) requestCreate(item.id);
+                go(item.id);
+              }}
+            >
               <Icon name={item.icon} size={28} />
               {item.label}
             </button>

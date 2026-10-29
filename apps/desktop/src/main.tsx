@@ -12,7 +12,7 @@ import {
   syncWorkPayments,
   type BusinessContext,
 } from '@centrocolor/application';
-import { navigation, PageHeader } from '@centrocolor/ui';
+import { InlineMessage, navigation, PageHeader } from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -1127,28 +1127,24 @@ function App() {
         ) : activeId === 'appointment-types' ? (
           <>
             <PageHeader title="Tipos y parámetros" />
-            <div className="settings-grid">
-              <section>
-                <AppointmentTypesPage
-                  repository={appointmentRepository}
-                  refreshToken={dataRefresh}
-                  embedded
-                  onMutation={() => {
-                    void refreshSyncSummary(context.businessId);
-                    if (cloudSessionReady) void runSync(context);
-                  }}
-                />
-              </section>
-              <section>
-                <EventTypesPage
-                  repository={eventRepository}
-                  embedded
-                  onMutation={() => {
-                    void refreshSyncSummary(context.businessId);
-                    if (cloudSessionReady) void runSync(context);
-                  }}
-                />
-              </section>
+            <div className="catalog-stack">
+              <AppointmentTypesPage
+                repository={appointmentRepository}
+                refreshToken={dataRefresh}
+                embedded
+                onMutation={() => {
+                  void refreshSyncSummary(context.businessId);
+                  if (cloudSessionReady) void runSync(context);
+                }}
+              />
+              <EventTypesPage
+                repository={eventRepository}
+                embedded
+                onMutation={() => {
+                  void refreshSyncSummary(context.businessId);
+                  if (cloudSessionReady) void runSync(context);
+                }}
+              />
             </div>
           </>
         ) : activeId === 'events' ? (
@@ -1276,6 +1272,7 @@ function App() {
             paymentRepository={workPaymentRepository}
             photoRepository={photoRepository}
             serviceCatalogRepository={serviceCatalogRepository}
+            eventRepository={eventRepository}
             storage="local"
             initialCustomerId={openCustomerId}
             onNewJob={(customerId) => {
@@ -1300,10 +1297,12 @@ function App() {
             }}
           />
         ) : activeId === 'settings' ? (
-          <PlaceholderPage
-            title="Integraciones"
-            message="Google Drive y WhatsApp se configuran desde la versión Web."
-          />
+          <>
+            <PageHeader title="Integraciones" />
+            <InlineMessage tone="info">
+              Google Drive y WhatsApp se configuran desde la versión Web.
+            </InlineMessage>
+          </>
         ) : activeId === 'products' ? (
           <ProductsPage
             repository={productRepository}

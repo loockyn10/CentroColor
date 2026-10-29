@@ -1,0 +1,890 @@
+/* ───────── Patrones compartidos (UX_GRAMMAR) ───────── */
+
+/* Mensaje en línea: éxito / error / información. */
+.inline-message {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0 0 var(--s-3);
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.inline-message svg {
+  flex: none;
+  margin-top: 1px;
+}
+.inline-message--error {
+  background: var(--red-100);
+  border-color: var(--red-700);
+  color: var(--red-700);
+}
+.inline-message--success {
+  background: var(--green-100);
+  border-color: var(--green-700);
+  color: var(--green-700);
+}
+.inline-message--info {
+  background: var(--paper-100);
+  border-color: var(--paper-300);
+  color: var(--ink-700);
+}
+
+/* Estado: una pastilla legible (Figtree, sin mayúsculas ni mono). */
+.status {
+  --s-bg: var(--paper-100);
+  --s-fg: var(--ink-700);
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  width: fit-content;
+  padding: 0.2em 0.7em;
+  border-radius: var(--r-pill);
+  background: var(--s-bg);
+  color: var(--s-fg);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.status--progress {
+  --s-bg: var(--y-100);
+  --s-fg: var(--ink-900);
+}
+.status--ok {
+  --s-bg: var(--green-100);
+  --s-fg: var(--green-700);
+}
+.status--alert {
+  --s-bg: var(--red-100);
+  --s-fg: var(--red-700);
+}
+.status--info {
+  --s-bg: var(--blue-100);
+  --s-fg: var(--blue-700);
+}
+.status--closed {
+  --s-bg: var(--paper-200);
+  --s-fg: var(--ink-500);
+}
+
+/* Fila de filtros. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+  margin: 0 0 var(--s-4);
+}
+.filter-bar__search {
+  flex: 1 1 220px;
+  max-width: 360px;
+}
+.filter-bar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.filter-bar__end {
+  margin-left: auto;
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+}
+
+/* Formulario dentro de una hoja lateral. */
+.form-drawer {
+  display: grid;
+  gap: var(--s-4);
+}
+.confirm-body {
+  color: var(--ink-700);
+}
+
+/* Filas de formulario: antes sin regla (los campos se apilaban a ancho completo). */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--s-3);
+  align-items: end;
+  margin-bottom: var(--s-3);
+}
+
+/* Etiqueta de sección en mayúsculas (Configuración). */
+.eyebrow {
+  display: block;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Cabecera con pestañas de módulo debajo del título. */
+.page-head--tabbed {
+  margin-bottom: 4px;
+}
+
+/* ───────── Precios: familias, detalle, secciones y filas ───────── */
+.price-families-head {
+  margin: var(--s-5) 0 var(--s-3);
+}
+.price-family {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: var(--s-2);
+  min-height: 132px;
+  padding: var(--s-4) calc(var(--s-4) + 28px) var(--s-4) var(--s-4);
+  border: 1.5px solid var(--ink-900);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+button.price-family:hover {
+  background: var(--y-50);
+}
+button.price-family:active {
+  transform: translateY(1px);
+}
+.price-family--disabled {
+  border-color: var(--paper-300);
+  background: var(--paper-100);
+  color: var(--ink-500);
+}
+.price-family__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.price-family__top h3 {
+  margin: 0;
+  font-size: var(--fs-xl);
+}
+.price-family__summary {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  line-height: 1.15;
+}
+.price-family__detail {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.price-family__go {
+  position: absolute;
+  right: var(--s-4);
+  bottom: var(--s-4);
+}
+
+.price-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin-bottom: var(--s-4);
+}
+.price-detail__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+.price-detail__title h2 {
+  margin: 0;
+}
+.price-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-left: auto;
+}
+.price-list-chip {
+  padding: 6px 10px;
+  border-radius: var(--r-pill);
+  background: var(--ink-900);
+  color: var(--paper-0);
+  font: 500 var(--fs-xs) / 1 var(--font-mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.price-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+.price-toolbar label {
+  min-width: min(100%, 280px);
+}
+.price-section {
+  margin-bottom: var(--s-4);
+}
+.price-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-4);
+  min-height: 64px;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--line);
+}
+.price-row:last-child {
+  border-bottom: 0;
+}
+.price-row__id {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.price-row__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-5);
+  flex: 1 1 240px;
+}
+.price-row__state {
+  display: flex;
+  gap: var(--s-2);
+  min-width: 96px;
+}
+.drawer-section {
+  display: grid;
+  gap: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+.drawer-section > h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+}
+@media (max-width: 620px) {
+  .price-detail__actions {
+    margin-left: 0;
+  }
+}
+
+.price-empty {
+  margin: 0;
+  padding: var(--s-3) 0;
+}
+
+.price-detail {
+  margin-top: var(--s-4);
+}
+.drawer-section--first {
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 620px) {
+  .price-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px;
+  }
+  .price-row__id {
+    grid-column: 1 / -1;
+  }
+  .price-row__values,
+  .price-row__state {
+    grid-column: 1;
+    min-width: 0;
+  }
+  .price-row > .btn {
+    grid-column: 2;
+    grid-row: 2 / span 2;
+    align-self: center;
+  }
+}
+
+/* ───────── Editores en hoja (presupuestos y reservas, turnos) ───────── */
+.sheet-foot__start {
+  margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-4);
+}
+.editor-form {
+  display: grid;
+  gap: var(--s-5);
+}
+.editor-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--s-3);
+  align-items: end;
+}
+.editor-grid > * {
+  grid-column: span 12;
+  min-width: 0;
+}
+.editor-grid > .span-3 {
+  grid-column: span 3;
+}
+.editor-grid > .span-4 {
+  grid-column: span 4;
+}
+.editor-grid > .span-5 {
+  grid-column: span 5;
+}
+.editor-grid > .span-6 {
+  grid-column: span 6;
+}
+.editor-grid > .span-12 {
+  grid-column: span 12;
+}
+.editor-grid > .editor-grid__more {
+  align-self: end;
+}
+@media (max-width: 700px) {
+  .editor-grid > * {
+    grid-column: span 12 !important;
+  }
+  .editor-grid > .half {
+    grid-column: span 6 !important;
+  }
+}
+
+/* Cliente: búsqueda y selección en una fila. */
+.customer-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--s-2) var(--s-3);
+}
+.customer-field__new {
+  display: flex;
+  align-items: center;
+}
+.customer-field__quick {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.customer-field__quick input {
+  flex: 1 1 200px;
+}
+@media (max-width: 700px) {
+  .customer-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Bloques del presupuesto: servicio vendido, recurso físico. */
+.editor-block {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-left-width: 5px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.editor-block--service {
+  border-left-color: var(--y-500);
+}
+.editor-block--resource {
+  border-left-color: var(--ink-500);
+}
+.editor-block .section-head {
+  margin: 0;
+  align-items: flex-start;
+}
+.editor-block .section-head h3 {
+  margin: 0;
+}
+.editor-block .section-head .meta {
+  margin: 2px 0 0;
+}
+.editor-lines {
+  display: grid;
+  gap: var(--s-2);
+}
+.editor-line {
+  display: grid;
+  gap: var(--s-2) var(--s-2);
+  align-items: center;
+  padding: var(--s-2) 0;
+  border-top: 1px solid var(--line);
+}
+.editor-line--service {
+  grid-template-columns:
+    minmax(0, 1.4fr) minmax(0, 1.3fr) 72px minmax(0, 130px)
+    minmax(0, 110px) auto;
+}
+.editor-line--head {
+  padding: 0 0 var(--s-1);
+  border-top: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.editor-line.is-travel {
+  margin-left: var(--s-4);
+  padding-left: var(--s-3);
+  border-left: 3px solid var(--blue-700);
+}
+.editor-line.inactive {
+  opacity: 0.55;
+}
+.editor-line__name {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.editor-line__name input {
+  min-width: 0;
+}
+.editor-line__total {
+  text-align: right;
+  font-family: var(--font-mono);
+}
+.editor-line--resource {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+.editor-line--resource > * {
+  grid-column: span 12;
+  min-width: 0;
+}
+.editor-line--resource > .span-3 {
+  grid-column: span 3;
+}
+.editor-line--resource > .span-4 {
+  grid-column: span 4;
+}
+.editor-line--resource > .span-5 {
+  grid-column: span 5;
+}
+.editor-line--resource > .span-12 {
+  grid-column: span 12;
+}
+.editor-mini {
+  display: grid;
+  gap: 2px;
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  color: var(--text-muted);
+}
+.editor-line__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--s-1);
+}
+.editor-line__check {
+  font-size: var(--fs-sm);
+}
+@media (max-width: 820px) {
+  .editor-line--service {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .editor-line--service > .editor-line__name,
+  .editor-line--service > :nth-child(2) {
+    grid-column: 1 / -1;
+  }
+  .editor-line--head {
+    display: none;
+  }
+  .editor-line--resource > * {
+    grid-column: span 12 !important;
+  }
+}
+.editor-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.event-summary {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.event-summary strong {
+  margin-left: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+}
+.event-summary__total {
+  font-size: var(--fs-lg);
+  color: var(--text);
+}
+.composer-result {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.composer-result > span {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+
+/* ───────── Agenda: barra de período ───────── */
+.agenda-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin: 0 0 var(--s-4);
+}
+.agenda-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.agenda-nav .btn {
+  min-height: var(--touch);
+}
+.agenda-period {
+  margin-left: var(--s-2);
+  font-size: var(--fs-lg);
+  text-transform: capitalize;
+}
+.agenda-bar__end {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+@media (max-width: 700px) {
+  .agenda-bar__end {
+    margin-left: 0;
+    width: 100%;
+  }
+  .agenda-bar__end > * {
+    flex: 1;
+  }
+}
+
+.filter-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.filter-inline input {
+  width: auto;
+}
+
+/* ───────── Mostrador: Inicio, Clientes, Cobros ───────── */
+.attn-more {
+  margin: var(--s-3) 0 0;
+}
+.ficha-head h2 {
+  margin: 0 0 var(--s-1);
+}
+.ficha-section > h3 {
+  margin: 0 0 var(--s-3);
+}
+.ficha-data {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-3) var(--s-5);
+  margin: 0;
+}
+.ficha-data dt {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ficha-data dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+.ficha-data dd a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+}
+.ficha-data__wide {
+  grid-column: 1 / -1;
+}
+@media (max-width: 520px) {
+  .ficha-data {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Cuenta del cliente: origen, estado y los tres importes con su rótulo. */
+.account-sources {
+  display: grid;
+}
+.account-source {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-2) var(--s-3);
+  align-items: end;
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--line);
+}
+.account-source__id {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) var(--s-3);
+  min-width: 0;
+}
+.account-source .config-value strong {
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Cobros: cliente · origen · total · pagado · saldo · estado · acción. */
+.cobro-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.1fr) minmax(0, 1.5fr) 112px 112px 124px 138px
+    auto;
+  gap: var(--s-2) var(--s-4);
+  align-items: center;
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+.cobro-row:last-child {
+  border-bottom: 0;
+}
+.cobro-row[data-flag='warn'] {
+  box-shadow: inset 4px 0 0 var(--y-500);
+}
+.cobro-row--head {
+  padding-block: var(--s-2);
+  background: var(--paper-100);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cobro-client {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.cobro-origin {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cobro-num {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.cobro-due {
+  font-size: var(--fs-lg);
+}
+@media (max-width: 960px) {
+  .cobro-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  }
+  .cobro-row--head {
+    display: none;
+  }
+  .cobro-client,
+  .cobro-origin {
+    grid-column: 1 / -1;
+  }
+  .cobro-num {
+    text-align: left;
+  }
+  .cobro-num::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--text-muted);
+    font-family: var(--font-ui);
+    font-size: var(--fs-xs);
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .cobro-state {
+    grid-column: 1 / 3;
+  }
+  .cobro-row > .btn {
+    grid-column: 3 / -1;
+    justify-self: end;
+  }
+}
+.cobro-row--head > :nth-child(3),
+.cobro-row--head > :nth-child(4),
+.cobro-row--head > :nth-child(5) {
+  text-align: right;
+}
+
+.customer-row > .status {
+  justify-self: end;
+}
+
+@media (max-width: 960px) {
+  .cobro-num {
+    font-size: var(--fs-sm);
+  }
+  .cobro-due {
+    font-size: var(--fs-md);
+  }
+}
+
+/* ───────── Integraciones: configuración técnica ───────── */
+.integration-card {
+  display: grid;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+.integration-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.integration-card__head h2 {
+  margin: 0;
+  font-size: var(--fs-xl);
+}
+.integration-card__details {
+  display: grid;
+  gap: var(--s-2);
+  margin: 0;
+}
+.integration-card__details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.integration-card__details dt {
+  color: var(--text-muted);
+}
+.integration-card__details dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.integration-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.catalog-stack {
+  display: grid;
+  gap: var(--s-4);
+}
+
+.catalog-group-head {
+  margin: var(--s-6) 0 var(--s-3);
+}
+
+/* ───────── Taller: cotizador (entradas a la izquierda, resultado fijo a la derecha) ───────── */
+.quote-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: var(--s-4);
+  align-items: start;
+}
+.quote-inputs {
+  display: grid;
+  gap: var(--s-4);
+}
+.quote-result {
+  position: sticky;
+  top: var(--s-4);
+  display: grid;
+  gap: var(--s-3);
+}
+.quote-result h2 {
+  margin: 0;
+}
+.quote-result__facts {
+  margin: 0;
+}
+.quote-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.quote-line .num {
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+.quote-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+.quote-total strong {
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+}
+.price-section-gap {
+  margin-top: var(--s-6);
+}
+@media (max-width: 900px) {
+  .quote-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quote-result {
+    position: static;
+  }
+}
+
+.quote-components {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s-2) var(--s-4);
+}
+
+.quote-inputs .form-row {
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+}
+
+/* Pie fijo de un formulario de pantalla completa (total + acción primaria). */
+.sticky-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.sticky-foot__total {
+  font-size: var(--fs-xl);
+  font-family: var(--font-mono);
+}
+@media (min-width: 900px) {
+  .sticky-foot {
+    position: sticky;
+    bottom: var(--s-3);
+    box-shadow: var(--sh-lift);
+  }
+}
