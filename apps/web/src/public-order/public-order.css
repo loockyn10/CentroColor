@@ -649,15 +649,54 @@
   color: var(--text-muted);
   flex: none;
 }
+/* Cantidad: [-] [input] [+]. Grilla con pistas mínimas en 0 para que NUNCA desborde la tarjeta
+   (los botones no dependen de que el motor los encoja) y sin overflow:hidden que los recorte. */
 .ph-card .stepper {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
   width: 100%;
-}
-.ph-card .stepper output {
-  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
 }
 .ph-card .stepper button {
-  width: 56px;
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  min-height: 48px;
+}
+.ph-card .stepper .stepper-input,
+.portal .stepper .stepper-input {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-inline: 2px solid var(--ink-900);
+  border-radius: 0;
+  background: var(--paper-0);
+  color: var(--ink-900);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.35rem; /* >=16px evita el zoom automático al enfocar en móviles */
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  -webkit-appearance: none;
+  appearance: none;
+  outline-offset: -3px;
+}
+.stepper .stepper-input:focus-visible {
+  outline: 3px solid var(--y-500);
+  background: var(--y-100);
+}
+.sum-line .up {
+  grid-column: 1;
+  color: #d8cfba;
+  font-size: var(--fs-sm);
+}
+.sum-line .up b {
+  color: inherit;
+  font-weight: 700;
 }
 
 .empty-box {

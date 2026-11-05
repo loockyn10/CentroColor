@@ -35,6 +35,8 @@ export type OrderLine = {
   service: CatalogService;
   files: number;
   copies: number;
+  /** Precio por copia del tramo aplicado (el mismo que multiplica al total). */
+  unitPriceCents: number;
   totalCents: number;
   pricingAvailable?: boolean;
 };
@@ -122,6 +124,7 @@ export function deriveLines(
       service,
       files: own.length,
       copies,
+      unitPriceCents,
       totalCents: copies * unitPriceCents,
       ...(service.tiers ? { pricingAvailable } : {}),
     });

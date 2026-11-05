@@ -244,3 +244,36 @@ describe('pago: transferencia previa (DESIGN-02)', () => {
       ).toEqual([]);
   });
 });
+
+describe('precio por copia del tramo aplicado', () => {
+  const tiered: CatalogService = {
+    ...service('t', '10x15', 0),
+    tiers: [
+      { minQuantity: 1, maxQuantity: 49, unitPriceCents: 60000 },
+      { minQuantity: 50, maxQuantity: null, unitPriceCents: 45000 },
+    ],
+  };
+  const line = (entries: PhotoEntry[]) =>
+    deriveLines([tiered], ['t'], entries)[0]!;
+
+  it('una foto con 50 copias usa el tramo de 50 y el total = copias × precio', () => {
+    const l = line([entry('a', 't', 50)]);
+    expect(l.unitPriceCents).toBe(45000);
+    expect(l.totalCents).toBe(50 * 45000);
+  });
+
+  it('el tramo sale de la suma de varias fotos y cambia al cambiar una cantidad', () => {
+    expect(
+      line([entry('a', 't', 30), entry('b', 't', 10)]).unitPriceCents,
+    ).toBe(60000);
+    const l = line([entry('a', 't', 30), entry('b', 't', 20)]);
+    expect(l.unitPriceCents).toBe(45000);
+    expect(l.totalCents).toBe(50 * 45000);
+  });
+
+  it('sin tramos usa el precio base', () => {
+    expect(
+      deriveLines(catalog, ['s10'], [entry('a', 's10', 2)])[0]!.unitPriceCents,
+    ).toBe(50000);
+  });
+});

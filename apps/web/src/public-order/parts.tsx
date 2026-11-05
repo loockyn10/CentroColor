@@ -67,24 +67,58 @@ export function CopiesStepper({
   label: string;
   onChange: (value: number) => void;
 }) {
+  // Mientras se escribe se conserva el texto tal cual (incluso vacío); el valor válido se envía
+  // apenas existe y al salir del campo se normaliza.
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = draft ?? String(value);
+  const commit = (next: number) => {
+    setDraft(null);
+    onChange(clampCopies(next));
+  };
   return (
     <div className="stepper" role="group" aria-label={`Copias de ${label}`}>
       <button
         type="button"
         aria-label="Menos copias"
         disabled={value <= MIN_COPIES}
-        onClick={() => onChange(clampCopies(value - 1))}
+        onClick={() => commit(value - 1)}
       >
         <Icon name="minus" />
       </button>
-      <output aria-live="polite" aria-label={`${value} copias`}>
-        {value}
-      </output>
+      <input
+        className="stepper-input"
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        enterKeyHint="done"
+        autoComplete="off"
+        aria-label={`Cantidad de copias de ${label}`}
+        value={shown}
+        onFocus={(event) => event.currentTarget.select()}
+        onChange={(event) => {
+          const text = event.target.value.replace(/\D/g, '').slice(0, 3);
+          const n = Number(text);
+          if (!text || n < MIN_COPIES) return setDraft(text);
+          const next = clampCopies(n);
+          setDraft(next === n ? text : String(next));
+          if (next !== value) onChange(next);
+        }}
+        onBlur={() => setDraft(null)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            commit(value + 1);
+          } else if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            commit(value - 1);
+          }
+        }}
+      />
       <button
         type="button"
         aria-label="Más copias"
         disabled={value >= MAX_COPIES}
-        onClick={() => onChange(clampCopies(value + 1))}
+        onClick={() => commit(value + 1)}
       >
         <Icon name="plus" />
       </button>

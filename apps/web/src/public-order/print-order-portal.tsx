@@ -943,6 +943,12 @@ function Summary({
                   {plural(line.copies, 'copia', 'copias')} ·{' '}
                   {plural(line.files, 'foto', 'fotos')}
                 </span>
+                {line.pricingAvailable !== false && line.copies > 0 && (
+                  <span className="up">
+                    Precio por copia:{' '}
+                    <b className="num">{formatMoney(line.unitPriceCents)}</b>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
