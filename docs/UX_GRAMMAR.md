@@ -67,3 +67,19 @@ Texto ≥ 14 px (16 px en estados y fechas), botones de 56 px, columnas fijas po
 ## Fuera de alcance de estas fases
 
 Decisiones de dominio y BUGs funcionales (BUG-1, 4, 5, 8 de `docs/UX_AUDIT.md`) siguen documentados y sin tocar.
+
+## Navegación interna: Volver (05/11/2026)
+
+Cuando una pantalla **reemplaza** a otra (listado → detalle → edición) lleva `PageHeader onBack` (`backLabel` nombra el destino para lectores de pantalla): «← Volver» sobre el título, siempre en el mismo lugar. Las páginas raíz no lo llevan. Hojas, drawers y diálogos se cierran con la «✕» de `Sheet`, Escape o Cancelar. En ambos casos el botón Atrás del navegador (o el gesto del teléfono) hace lo mismo que el control visible: nunca saca al usuario de la app mientras haya algo a lo que volver. No dibujar flechas propias: usar `BackButton`/`PageHeader`.
+
+## Filtros de listados
+
+`FilterBar` es el único patrón: `search` + filtros como hijos + `end` opcional. `FilterSelect` («Categoría: Todas») y `FilterDate` («Desde», «Hasta») llevan el rótulo dentro del disparador; `onClear` + `dirty` agregan «Limpiar» sólo con filtros activos. Sólo se agregan filtros que segmentan de verdad (categoría, estado, origen, período); no llenar pantallas de selectores. Nunca fijar `min-width` en un control de filtro: la barra hace wrap y en pantallas angostas reparte los filtros de a dos. «Inactivo» y «Eliminado» no son lo mismo: lo eliminado no aparece en ningún filtro.
+
+## Controles propios
+
+`Select`, `DatePicker` y `DateTimePicker` (de `@centrocolor/ui`) reemplazan a `<select>`, `<input type=date>` y `<input type=datetime-local>`; no volver a usar los nativos. `Select` acepta `<option>` como hijos o `options`, con `value` + `onChange(value)`. Estados: hover, foco (aro grafito + halo amarillo), seleccionado (barra amarilla y tilde), deshabilitado y error (`invalid`). Teclado: flechas/Inicio/Fin/RePág/AvPág, Enter/Espacio, Escape, letras; el calendario navega por días, semanas, meses y años. En ≤640 px el panel es una hoja inferior con objetivos de 44 px.
+
+## Eliminar y Papelera
+
+«Eliminar» se ofrece con `DeleteAction` (botón + `DeleteDialog`): «¿Eliminar este producto? Dejará de aparecer en Productos. Podés restaurarlo desde Configuración → Papelera. [Cancelar] [Eliminar]», con una línea opcional que explica qué se conserva (p. ej. «Las ventas anteriores siguen mostrándolo»). En el drawer de edición va junto a «Estado», no como acción principal. La Papelera es una entrada discreta al final de Configuración (`TrashPage`): tipo, nombre, fecha y «Restaurar». No se usa para ventas, pagos, movimientos, reservas históricas ni clientes (ver decisión 102).

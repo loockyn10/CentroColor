@@ -35,6 +35,7 @@ const decode = (t: FramingSyncType, r: any): any => {
       salePricePerMeterCents: r.sale_price_per_meter_cents,
       wastePercent: r.waste_percent,
       isActive: r.is_active === 1,
+      deletedAt: r.deleted_at ?? null,
     };
   if (t === 'material')
     return {
@@ -46,6 +47,7 @@ const decode = (t: FramingSyncType, r: any): any => {
       salePriceCents: r.sale_price_cents,
       wastePercent: r.waste_percent,
       isActive: r.is_active === 1,
+      deletedAt: r.deleted_at ?? null,
     };
   if (t === 'settings')
     return {
@@ -189,6 +191,7 @@ export class SQLiteFramingSyncAdapter implements FramingSyncLocalPort {
             'sale_price_per_meter_cents',
             'waste_percent',
             'is_active',
+            'deleted_at',
             'created_at',
             'updated_at',
             'sync_origin',
@@ -205,6 +208,7 @@ export class SQLiteFramingSyncAdapter implements FramingSyncLocalPort {
               'sale_price_cents',
               'waste_percent',
               'is_active',
+              'deleted_at',
               'created_at',
               'updated_at',
               'sync_origin',
@@ -275,6 +279,7 @@ export class SQLiteFramingSyncAdapter implements FramingSyncLocalPort {
             x.salePricePerMeterCents,
             x.wastePercent,
             x.isActive ? 1 : 0,
+            x.deletedAt ?? null,
             x.createdAt,
             x.updatedAt,
             'remote',
@@ -291,6 +296,7 @@ export class SQLiteFramingSyncAdapter implements FramingSyncLocalPort {
               x.salePriceCents,
               x.wastePercent,
               x.isActive ? 1 : 0,
+              x.deletedAt ?? null,
               x.createdAt,
               x.updatedAt,
               'remote',

@@ -20,6 +20,7 @@ pnpm build:desktop
 pnpm format:check
 python tests/pos_sqlite.py
 python tests/pos_sync_sqlite.py
+python tests/catalog_trash_sqlite.py
 python tests/inventory_sqlite.py
 python tests/appointments_sqlite.py
 python tests/appointments_cloud_sql.py

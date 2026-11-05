@@ -73,17 +73,6 @@
   overflow-wrap: anywhere;
 }
 
-.customer-back {
-  border: 0;
-  background: none;
-  padding: 0;
-  color: var(--ink-700);
-  cursor: pointer;
-  font: inherit;
-  font-size: var(--fs-sm);
-  text-decoration: underline;
-}
-
 .pos-actions {
   display: flex;
   align-items: center;

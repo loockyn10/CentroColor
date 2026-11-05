@@ -205,3 +205,14 @@ export type {
   LedController,
   LedPanelReservation,
 } from './services';
+
+export {
+  canManageTrash,
+  isDeleted,
+  isTrashEntityType,
+  sortTrash,
+  trashEntityTypes,
+  trashTypeLabels,
+  withoutDeleted,
+} from './trash';
+export type { TrashEntityType, TrashItem } from './trash';

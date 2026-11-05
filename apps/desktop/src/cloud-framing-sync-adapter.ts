@@ -28,6 +28,7 @@ const fields = (t: FramingSyncType, x: any) =>
         sale_price_per_meter_cents: x.salePricePerMeterCents,
         waste_percent: x.wastePercent,
         is_active: x.isActive,
+        deleted_at: x.deletedAt ?? null,
         created_at: x.createdAt,
       }
     : t === 'material'
@@ -41,6 +42,7 @@ const fields = (t: FramingSyncType, x: any) =>
           sale_price_cents: x.salePriceCents,
           waste_percent: x.wastePercent,
           is_active: x.isActive,
+          deleted_at: x.deletedAt ?? null,
           created_at: x.createdAt,
         }
       : t === 'settings'
@@ -112,6 +114,7 @@ const decode = (t: FramingSyncType, r: any): any => {
       salePricePerMeterCents: r.sale_price_per_meter_cents,
       wastePercent: r.waste_percent,
       isActive: r.is_active,
+      deletedAt: r.deleted_at ?? null,
     };
   if (t === 'material')
     return {
@@ -123,6 +126,7 @@ const decode = (t: FramingSyncType, r: any): any => {
       salePriceCents: r.sale_price_cents,
       wastePercent: r.waste_percent,
       isActive: r.is_active,
+      deletedAt: r.deleted_at ?? null,
     };
   if (t === 'settings')
     return {

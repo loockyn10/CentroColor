@@ -10,6 +10,8 @@ import {
   type ResourceReservationSummary,
   type ServiceCatalogRepository,
   type WorkPaymentRepository,
+  trashItem,
+  type TrashRepository,
 } from '@centrocolor/application';
 import {
   eventStatuses,
@@ -30,6 +32,8 @@ import {
   FilterBar,
   StatusBadge,
   FormDrawer,
+  DatePicker,
+  DeleteAction,
 } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { AgendaBar } from './editor-parts';
@@ -76,10 +80,13 @@ const errorText = (e: unknown) =>
 
 export function EventTypesPage({
   repository,
+  trashRepository,
   onMutation,
   embedded = false,
 }: {
   repository: EventRepository;
+  /** Habilita «Eliminar» (Papelera). */
+  trashRepository?: TrashRepository;
   onMutation?: () => void;
   embedded?: boolean;
 }) {
@@ -179,12 +186,33 @@ export function EventTypesPage({
         {drawer && drawer !== 'new' && (
           <section className="drawer-section">
             <h3>Estado</h3>
-            <Button
-              variant={drawer.isActive ? 'danger' : 'secondary'}
-              onClick={() => void toggle(drawer)}
-            >
-              {drawer.isActive ? 'Desactivar tipo' : 'Activar tipo'}
-            </Button>
+            <div className="drawer-actions">
+              <Button
+                variant={drawer.isActive ? 'danger' : 'secondary'}
+                onClick={() => void toggle(drawer)}
+              >
+                {drawer.isActive ? 'Desactivar tipo' : 'Activar tipo'}
+              </Button>
+              {trashRepository && (
+                <DeleteAction
+                  label="Eliminar tipo"
+                  what="este tipo"
+                  listName="Tipos de presupuesto y reserva"
+                  note="Los presupuestos y reservas anteriores conservan su tipo."
+                  onDelete={async () => {
+                    await trashItem(
+                      trashRepository,
+                      context.businessId,
+                      'event_type',
+                      drawer.id,
+                    );
+                    setDrawer(null);
+                    setRefresh((n) => n + 1);
+                    onMutation?.();
+                  }}
+                />
+              )}
+            </div>
           </section>
         )}
       </FormDrawer>
@@ -398,11 +426,14 @@ export function EventsPage({
 
 export function ResourcesPage({
   repository,
+  trashRepository,
   serviceCatalogRepository,
   refreshToken,
   onMutation,
 }: {
   repository: EventRepository;
+  /** Habilita «Eliminar» (Papelera). */
+  trashRepository?: TrashRepository;
   serviceCatalogRepository?: ServiceCatalogRepository;
   refreshToken?: number;
   onMutation?: () => void;
@@ -529,12 +560,33 @@ export function ResourcesPage({
         {drawer && drawer !== 'new' && (
           <section className="drawer-section">
             <h3>Estado</h3>
-            <Button
-              variant={drawer.isActive ? 'danger' : 'secondary'}
-              onClick={() => void toggle(drawer)}
-            >
-              {drawer.isActive ? 'Desactivar equipo' : 'Activar equipo'}
-            </Button>
+            <div className="drawer-actions">
+              <Button
+                variant={drawer.isActive ? 'danger' : 'secondary'}
+                onClick={() => void toggle(drawer)}
+              >
+                {drawer.isActive ? 'Desactivar equipo' : 'Activar equipo'}
+              </Button>
+              {trashRepository && (
+                <DeleteAction
+                  label="Eliminar equipo"
+                  what="este equipo"
+                  listName="Recursos"
+                  note="Las reservas anteriores conservan el equipo."
+                  onDelete={async () => {
+                    await trashItem(
+                      trashRepository,
+                      context.businessId,
+                      'resource',
+                      drawer.id,
+                    );
+                    setDrawer(null);
+                    setRefresh((n) => n + 1);
+                    onMutation?.();
+                  }}
+                />
+              )}
+            </div>
           </section>
         )}
       </FormDrawer>
@@ -602,14 +654,11 @@ export function ResourceCalendarPage({
         ]}
         onView={setView}
         period={
-          <input
-            aria-label="Fecha de disponibilidad"
-            type="date"
+          <DatePicker
+            label="Fecha de disponibilidad"
             value={dateKey(date)}
-            onChange={(event) => {
-              const [year, month, day] = event.target.value
-                .split('-')
-                .map(Number);
+            onChange={(next) => {
+              const [year, month, day] = next.split('-').map(Number);
               if (year && month && day) setDate(new Date(year, month - 1, day));
             }}
           />

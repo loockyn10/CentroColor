@@ -31,6 +31,9 @@ import {
   Sheet,
   StatusBadge,
   useFlash,
+  Select,
+  FilterBar,
+  FilterSelect,
 } from '@centrocolor/ui';
 import { plotterQuoteStatus, statusMeta } from './status';
 import { useBusinessContext } from './auth';
@@ -622,10 +625,7 @@ export function ServiceCatalogPage({
       <Card className="config-list-selector">
         <label>
           Lista de precios
-          <select
-            value={listId}
-            onChange={(event) => setListId(event.target.value)}
-          >
+          <Select value={listId} onChange={(next) => setListId(next)}>
             {lists
               .filter((list) => list.isActive)
               .map((list) => (
@@ -633,7 +633,7 @@ export function ServiceCatalogPage({
                   {list.name}
                 </option>
               ))}
-          </select>
+          </Select>
         </label>
         <div className="config-list-selector__actions">
           <Button variant="secondary" onClick={() => setListsOpen(true)}>
@@ -709,16 +709,13 @@ export function ServiceCatalogPage({
           <div className="price-toolbar">
             <label>
               Tamaño
-              <select
-                value={serviceId}
-                onChange={(e) => setServiceId(e.target.value)}
-              >
+              <Select value={serviceId} onChange={(next) => setServiceId(next)}>
                 {labServices.map((x) => (
                   <option key={x.id} value={x.id}>
                     {x.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           {!serviceId ? (
@@ -1215,6 +1212,8 @@ export function PlotterPage({
   const [rods, setRods] = useState<0 | 1 | 2>(0);
   const [fold, setFold] = useState<'none' | 'top' | 'both'>('none');
   const [notes, setNotes] = useState('');
+  const [quoteQuery, setQuoteQuery] = useState('');
+  const [quoteStatus, setQuoteStatus] = useState('');
   const flash = useFlash();
   const reload = async () => {
     try {
@@ -1334,6 +1333,15 @@ export function PlotterPage({
       ? (customers.find((x) => x.id === id)?.fullName ?? 'Cliente')
       : 'Sin cliente';
   const result = typeof calculation === 'string' ? null : calculation;
+  const quoteNeedle = quoteQuery.trim().toLocaleLowerCase('es');
+  const shownQuotes = quotes.filter(
+    (quote) =>
+      (!quoteStatus || quote.status === quoteStatus) &&
+      (!quoteNeedle ||
+        `${quote.snapshot.materialName} ${customerName(quote.customerId)}`
+          .toLocaleLowerCase('es')
+          .includes(quoteNeedle)),
+  );
   return (
     <>
       <PageHeader title="Plotter" />
@@ -1344,9 +1352,9 @@ export function PlotterPage({
             <h3>Cliente</h3>
             <label>
               Cliente (opcional)
-              <select
+              <Select
                 value={customerId}
-                onChange={(e) => setCustomerId(e.target.value)}
+                onChange={(next) => setCustomerId(next)}
               >
                 <option value="">Sin cliente</option>
                 {customers.map((x) => (
@@ -1354,7 +1362,7 @@ export function PlotterPage({
                     {x.fullName}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             <p className="meta">
               Lista de precios: {list?.name ?? 'sin configurar'}
@@ -1364,11 +1372,11 @@ export function PlotterPage({
             <h3>Material y medidas</h3>
             <label>
               Material
-              <select
+              <Select
                 value={materialId}
-                onChange={(e) => {
-                  const next = materials.find((x) => x.id === e.target.value);
-                  setMaterialId(e.target.value);
+                onChange={(nextId) => {
+                  const next = materials.find((x) => x.id === nextId);
+                  setMaterialId(nextId);
                   setMdf(false);
                   setCanvasStretcher(false);
                   if (
@@ -1385,7 +1393,7 @@ export function PlotterPage({
                       {x.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <div className="form-row">
               <label>
@@ -1440,26 +1448,26 @@ export function PlotterPage({
             <div className="form-row">
               <label>
                 Varillas
-                <select
-                  value={rods}
-                  onChange={(e) => setRods(Number(e.target.value) as 0 | 1 | 2)}
+                <Select
+                  value={String(rods)}
+                  onChange={(next) => setRods(Number(next) as 0 | 1 | 2)}
                 >
                   <option value={0}>Sin varillas</option>
                   <option value={1}>Superior</option>
                   <option value={2}>Superior + inferior</option>
-                </select>
+                </Select>
               </label>
               {isBanner && (
                 <label>
                   Doblez de lona
-                  <select
+                  <Select
                     value={fold}
-                    onChange={(e) => setFold(e.target.value as typeof fold)}
+                    onChange={(next) => setFold(next as typeof fold)}
                   >
                     <option value="none">Sin doblez</option>
                     <option value="top">Arriba</option>
                     <option value="both">Arriba + abajo</option>
-                  </select>
+                  </Select>
                 </label>
               )}
             </div>
@@ -1524,12 +1532,44 @@ export function PlotterPage({
         <div className="section-head">
           <h2>Cotizaciones guardadas</h2>
         </div>
+        {quotes.length > 0 && (
+          <FilterBar
+            label="Filtrar cotizaciones"
+            search={
+              <input
+                type="search"
+                aria-label="Buscar cotizaciones"
+                value={quoteQuery}
+                onChange={(e) => setQuoteQuery(e.target.value)}
+                placeholder="Material o cliente"
+              />
+            }
+            dirty={quoteQuery !== '' || quoteStatus !== ''}
+            onClear={() => {
+              setQuoteQuery('');
+              setQuoteStatus('');
+            }}
+          >
+            <FilterSelect
+              label="Estado"
+              allLabel="Todos los estados"
+              value={quoteStatus}
+              onChange={setQuoteStatus}
+              options={['quoted', 'accepted', 'completed'].map((value) => ({
+                value,
+                label: statusMeta(plotterQuoteStatus, value).label,
+              }))}
+            />
+          </FilterBar>
+        )}
         <Card className="card--flush">
           {quotes.length === 0 ? (
             <EmptyState icon="ruler" title="Todavía no hay cotizaciones" />
+          ) : shownQuotes.length === 0 ? (
+            <EmptyState icon="search" title="Sin resultados" />
           ) : (
             <div className="rows catalog-rows">
-              {quotes.map((quote) => {
+              {shownQuotes.map((quote) => {
                 const state = statusMeta(plotterQuoteStatus, quote.status);
                 return (
                   <div className="price-row" key={quote.id}>

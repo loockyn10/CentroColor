@@ -20,6 +20,7 @@ import {
   PageHeader,
   Sheet,
   StatusBadge,
+  FilterSelect,
 } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
@@ -56,6 +57,7 @@ export function StockPage({
   const branchId = context.branchId;
   const canManage = context.role === 'owner' || context.role === 'admin';
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [balances, setBalances] = useState<Record<string, number>>({});
@@ -79,7 +81,12 @@ export function StockPage({
     const timer = setTimeout(
       () => {
         void Promise.all([
-          productRepository.list(context.businessId, query, 100),
+          productRepository.list(
+            context.businessId,
+            query,
+            100,
+            categoryFilter ? { categoryId: categoryFilter } : {},
+          ),
           productRepository.listCategories(context.businessId),
         ])
           .then(async ([items, groups]) => {
@@ -120,6 +127,7 @@ export function StockPage({
     context.businessId,
     branchId,
     query,
+    categoryFilter,
     refresh,
     refreshToken,
   ]);
@@ -224,6 +232,12 @@ export function StockPage({
       )}
       <FilterBar
         label="Filtrar stock"
+        dirty={query !== '' || categoryFilter !== '' || view !== 'all'}
+        onClear={() => {
+          setQuery('');
+          setCategoryFilter('');
+          setView('all');
+        }}
         search={
           <div className="search-field">
             <Icon name="search" />
@@ -237,6 +251,16 @@ export function StockPage({
           </div>
         }
       >
+        <FilterSelect
+          label="Categoría"
+          allLabel="Todas las categorías"
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          options={categories.map((category) => ({
+            value: category.id,
+            label: category.name,
+          }))}
+        />
         {filters.map(([value, label, count]) => (
           <Chip
             key={value}

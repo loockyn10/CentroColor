@@ -1,7 +1,7 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { BusinessContext } from '@centrocolor/application';
-import { navigation, PageHeader } from '@centrocolor/ui';
+import { navigation, PageHeader, useHistoryNavigation } from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -15,6 +15,7 @@ import {
   CobrosPage,
   PanelShell,
   ProductsPage,
+  TrashPage,
   NewSalePage,
   SalesPage,
   StockPage,
@@ -49,6 +50,7 @@ import { SupabaseFramingRepository } from './supabase-framing-repository';
 import { SupabasePhotoRepository } from './supabase-photo-repository';
 import { SupabaseServiceCatalogRepository } from './supabase-service-catalog-repository';
 import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repository';
+import { SupabaseTrashRepository } from './supabase-trash-repository';
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
 import { DriveSettingsPage } from './drive-settings';
 import { publicRoute } from './public-routes';
@@ -63,14 +65,22 @@ function PosSection({
   productRepository,
   saleRepository,
   inventoryRepository,
+  trashRepository,
 }: {
   section: 'products' | 'new-sale' | 'sales' | 'stock';
+  trashRepository: SupabaseTrashRepository;
   productRepository: SupabaseProductRepository;
   saleRepository: SupabaseSaleRepository;
   inventoryRepository: SupabaseInventoryRepository;
 }) {
   if (section === 'products')
-    return <ProductsPage repository={productRepository} storage="cloud" />;
+    return (
+      <ProductsPage
+        repository={productRepository}
+        trashRepository={trashRepository}
+        storage="cloud"
+      />
+    );
   if (section === 'new-sale')
     return (
       <NewSalePage
@@ -100,6 +110,13 @@ function App() {
   const [openPhotoJobId, setOpenPhotoJobId] = useState<string | null>(null);
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
   const [newJobCustomerId, setNewJobCustomerId] = useState<string | null>(null);
+  // Atrás del navegador vuelve al módulo anterior (o cierra el detalle abierto) sin salir de la app.
+  useHistoryNavigation(activeId, (id) => {
+    setOpenPhotoJobId(null);
+    setOpenCustomerId(null);
+    setNewJobCustomerId(null);
+    setActiveId(id);
+  });
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
   const [busy, setBusy] = useState(false);
@@ -119,6 +136,7 @@ function App() {
   const [serviceCatalogRepository] = useState(
     () => new SupabaseServiceCatalogRepository(),
   );
+  const [trashRepository] = useState(() => new SupabaseTrashRepository());
   const [paymentRepository] = useState(
     () => new SupabaseWorkPaymentRepository(),
   );
@@ -305,9 +323,14 @@ function App() {
             <div className="catalog-stack">
               <AppointmentTypesPage
                 repository={appointmentRepository}
+                trashRepository={trashRepository}
                 embedded
               />
-              <EventTypesPage repository={eventRepository} embedded />
+              <EventTypesPage
+                repository={eventRepository}
+                trashRepository={trashRepository}
+                embedded
+              />
             </div>
           </>
         ) : activeId === 'events' ? (
@@ -320,6 +343,7 @@ function App() {
         ) : activeId === 'resources' ? (
           <ResourcesPage
             repository={eventRepository}
+            trashRepository={trashRepository}
             serviceCatalogRepository={serviceCatalogRepository}
           />
         ) : activeId === 'resource-calendar' ? (
@@ -332,9 +356,17 @@ function App() {
             paymentRepository={paymentRepository}
           />
         ) : activeId === 'mouldings' ? (
-          <FramingCatalogPage repository={framingRepository} kind="mouldings" />
+          <FramingCatalogPage
+            repository={framingRepository}
+            trashRepository={trashRepository}
+            kind="mouldings"
+          />
         ) : activeId === 'materials' ? (
-          <FramingCatalogPage repository={framingRepository} kind="materials" />
+          <FramingCatalogPage
+            repository={framingRepository}
+            trashRepository={trashRepository}
+            kind="materials"
+          />
         ) : activeId === 'new-photo-job' ? (
           <NewPhotoJobPage
             repository={photoRepository}
@@ -399,10 +431,13 @@ function App() {
           activeId === 'stock' ? (
           <PosSection
             section={activeId}
+            trashRepository={trashRepository}
             productRepository={productRepository}
             saleRepository={saleRepository}
             inventoryRepository={inventoryRepository}
           />
+        ) : activeId === 'trash' ? (
+          <TrashPage repository={trashRepository} />
         ) : activeId === 'settings' ? (
           <>
             <PageHeader title="Integraciones" />

@@ -945,3 +945,25 @@ a.oprow:hover {
   ) {
   width: 100%;
 }
+
+/* ───────── Volver (navegación interna) ───────── */
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--touch);
+  margin: 0 0 var(--s-2) calc(var(--s-2) * -1);
+  padding: 0 var(--s-3) 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-800);
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  font-weight: 650;
+  -webkit-tap-highlight-color: transparent;
+}
+.back-button:hover {
+  background: var(--paper-100);
+  color: var(--ink-950);
+}

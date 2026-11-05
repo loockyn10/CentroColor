@@ -21,6 +21,7 @@ import {
   type PriceList,
 } from '@centrocolor/domain';
 import {
+  BackButton,
   Button,
   Card,
   EmptyState,
@@ -30,6 +31,10 @@ import {
   PageHeader,
   StatusBadge,
   takeCreateIntent,
+  useBackLayer,
+  Select,
+  FilterBar,
+  FilterSelect,
 } from '@centrocolor/ui';
 import { eventStatus, photoJobStatus, statusMeta } from './status';
 import { useBusinessContext } from './auth';
@@ -96,9 +101,15 @@ export function CustomersPage({
 }) {
   const { businessId, branchId, role } = useBusinessContext();
   const [query, setQuery] = useState('');
+  // Estado del cliente: '' = todos. (Los clientes no usan Papelera: se desactivan.)
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive'>(
+    '',
+  );
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [mode, setMode] = useState<'idle' | 'detail'>('idle');
+  // Atrás del navegador cierra la ficha (en pantallas angostas la ficha reemplaza al listado).
+  useBackLayer(mode === 'detail', () => setMode('idle'));
   const [form, setForm] = useState<'new' | 'edit' | null>(null);
   const [draftList, setDraftList] = useState('');
   const [events, setEvents] = useState<EventSummary[]>([]);
@@ -282,6 +293,11 @@ export function CustomersPage({
       ? (priceLists.find((list) => list.id === id)?.name ?? 'Lista asignada')
       : 'Público (predeterminada)';
 
+  const shownCustomers = customers.filter(
+    (customer) =>
+      !statusFilter ||
+      (statusFilter === 'active' ? customer.isActive : !customer.isActive),
+  );
   return (
     <>
       <PageHeader
@@ -302,27 +318,54 @@ export function CustomersPage({
         className={`customers ${mode === 'idle' ? '' : 'has-detail'}`.trim()}
       >
         <section className="customers-list" aria-label="Listado de clientes">
-          <div className="search-field">
-            <Icon name="search" />
-            <input
-              type="search"
-              aria-label="Buscar clientes"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Nombre, teléfono, email o documento"
+          <FilterBar
+            label="Filtrar clientes"
+            search={
+              <div className="search-field">
+                <Icon name="search" />
+                <input
+                  type="search"
+                  aria-label="Buscar clientes"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Nombre, teléfono, email o documento"
+                />
+              </div>
+            }
+            dirty={query !== '' || statusFilter !== ''}
+            onClear={() => {
+              setQuery('');
+              setStatusFilter('');
+            }}
+          >
+            <FilterSelect
+              label="Estado"
+              allLabel="Todos los estados"
+              value={statusFilter}
+              onChange={(value) =>
+                setStatusFilter(value as '' | 'active' | 'inactive')
+              }
+              options={[
+                { value: 'active', label: 'Activos' },
+                { value: 'inactive', label: 'Inactivos' },
+              ]}
             />
-          </div>
+          </FilterBar>
           <Card className="card--flush">
             {loading ? (
               <p className="pad muted">Cargando clientes…</p>
-            ) : customers.length === 0 ? (
+            ) : shownCustomers.length === 0 ? (
               <EmptyState
                 icon="users"
-                title={query ? 'Sin resultados' : 'Todavía no hay clientes'}
+                title={
+                  query || statusFilter
+                    ? 'Sin resultados'
+                    : 'Todavía no hay clientes'
+                }
               />
             ) : (
               <div className="rows">
-                {customers.map((customer) => (
+                {shownCustomers.map((customer) => (
                   <button
                     className={`oprow customer-row ${selected?.id === customer.id && mode === 'detail' ? 'is-selected' : ''}`.trim()}
                     style={{ ['--cols' as string]: 'minmax(0, 1fr) auto' }}
@@ -357,13 +400,11 @@ export function CustomersPage({
 
         {mode === 'detail' && selected && (
           <section className="customers-detail" aria-label="Ficha de cliente">
-            <button
+            <BackButton
               className="customer-back"
-              type="button"
+              label="Clientes"
               onClick={() => setMode('idle')}
-            >
-              ← Clientes
-            </button>
+            />
             <Card>
               <header className="ficha-head">
                 <div>
@@ -581,10 +622,10 @@ export function CustomersPage({
         {form === 'edit' && serviceCatalogRepository && (
           <label>
             Lista de precios
-            <select
+            <Select
               value={draftList}
               disabled={role === 'staff' || !repository.assignPriceList}
-              onChange={(event) => setDraftList(event.target.value)}
+              onChange={(next) => setDraftList(next)}
             >
               <option value="">Público (predeterminada)</option>
               {priceLists
@@ -594,7 +635,7 @@ export function CustomersPage({
                     {list.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
         )}
         <label>

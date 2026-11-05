@@ -23,6 +23,7 @@ const moulding = (x: any): FrameMoulding => ({
   salePricePerMeterCents: x.sale_price_per_meter_cents,
   wastePercent: x.waste_percent,
   isActive: x.is_active,
+  deletedAt: x.deleted_at ?? null,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
 });
@@ -36,6 +37,7 @@ const material = (x: any): FrameMaterial => ({
   salePriceCents: x.sale_price_cents,
   wastePercent: x.waste_percent,
   isActive: x.is_active,
+  deletedAt: x.deleted_at ?? null,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
 });
@@ -78,6 +80,7 @@ export class SupabaseFramingRepository implements FramingRepository {
       .from('frame_mouldings')
       .select('*')
       .eq('business_id', b)
+      .is('deleted_at', null)
       .order('name');
     if (!all) q = q.eq('is_active', true);
     const { data, error } = await q;
@@ -138,6 +141,7 @@ export class SupabaseFramingRepository implements FramingRepository {
       .from('frame_materials')
       .select('*')
       .eq('business_id', b)
+      .is('deleted_at', null)
       .order('name');
     if (!all) q = q.eq('is_active', true);
     const { data, error } = await q;

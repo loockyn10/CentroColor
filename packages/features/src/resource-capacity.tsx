@@ -9,7 +9,7 @@ import type {
   LedPreset,
   Resource,
 } from '@centrocolor/domain';
-import { Button, FormDrawer, InlineMessage } from '@centrocolor/ui';
+import { Button, FormDrawer, InlineMessage, Select } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { CatalogRow, CatalogSection } from './configuration-ui';
 
@@ -328,9 +328,9 @@ export function ResourceCapacityPanel({
       >
         <label>
           Equipo físico
-          <select
+          <Select
             value={controllerResource}
-            onChange={(event) => setControllerResource(event.target.value)}
+            onChange={(next) => setControllerResource(next)}
           >
             <option value="">Seleccionar</option>
             {resources.map((resource) => (
@@ -338,7 +338,7 @@ export function ResourceCapacityPanel({
                 {resource.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label>
           Máximo de píxeles

@@ -48,7 +48,12 @@ export {
   scanBarcode,
   completeSale,
 } from './pos';
-export type { ProductRepository, SaleRepository, ScanResult } from './pos';
+export type {
+  ProductListFilter,
+  ProductRepository,
+  SaleRepository,
+  ScanResult,
+} from './pos';
 export { recordStockChange, stockWarnings } from './inventory';
 export type { InventoryRepository } from './inventory';
 export { syncStockMovements } from './stock-sync';
@@ -186,3 +191,6 @@ export type {
   PlotterQuote,
   PlotterQuoteStatus,
 } from './services';
+
+export { describeTrashItem, listTrash, restoreItem, trashItem } from './trash';
+export type { TrashRepository } from './trash';

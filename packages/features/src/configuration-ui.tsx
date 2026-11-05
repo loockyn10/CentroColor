@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import {
+  BackButton,
   Button,
   Card,
   Icon,
   StatusBadge,
+  useBackLayer,
   type StatusTone,
 } from '@centrocolor/ui';
 import { money } from './format';
@@ -121,12 +123,11 @@ export function PriceFamilyDetail({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  useBackLayer(true, onBack);
   return (
     <section className="price-detail" aria-label={title}>
+      <BackButton label="Precios" onClick={onBack} />
       <div className="price-detail__head">
-        <Button variant="ghost" icon="chevL" onClick={onBack}>
-          Precios
-        </Button>
         <div className="price-detail__title">
           <h2>{title}</h2>
           <span className="price-list-chip">Lista: {listName}</span>

@@ -19,6 +19,7 @@ type Row = {
   name?: string;
   default_duration_minutes?: number;
   is_active?: number;
+  deleted_at?: string | null;
   branch_id?: string;
   customer_id?: string;
   appointment_type_id?: string | null;
@@ -52,6 +53,7 @@ function decode(type: AppointmentSyncType, row: Row): AppointmentSyncEntity {
       name: row.name!,
       defaultDurationMinutes: row.default_duration_minutes!,
       isActive: row.is_active === 1,
+      deletedAt: row.deleted_at ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -98,7 +100,7 @@ export interface AppointmentConflict {
 function describe(type: AppointmentSyncType, entity: AppointmentSyncEntity) {
   if (type === 'appointment_type') {
     const value = entity as AppointmentType;
-    return `${value.name} · ${value.defaultDurationMinutes} min · ${value.isActive ? 'activo' : 'inactivo'}`;
+    return `${value.name} · ${value.defaultDurationMinutes} min · ${value.deletedAt ? 'en la Papelera' : value.isActive ? 'activo' : 'inactivo'}`;
   }
   const value = entity as Appointment;
   return `${value.title} · ${new Date(value.startsAt).toLocaleString('es-AR')} · ${value.status}`;
@@ -189,10 +191,10 @@ export class SQLiteAppointmentSyncAdapter implements AppointmentSyncLocalPort {
       const value = entity as AppointmentType;
       const result = await db.execute(
         `INSERT INTO appointment_types
-         (id,business_id,name,default_duration_minutes,is_active,created_at,updated_at,sync_origin,cloud_updated_at)
-         VALUES(?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET
+         (id,business_id,name,default_duration_minutes,is_active,deleted_at,created_at,updated_at,sync_origin,cloud_updated_at)
+         VALUES(?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET
          name=excluded.name,default_duration_minutes=excluded.default_duration_minutes,
-         is_active=excluded.is_active,created_at=excluded.created_at,updated_at=excluded.updated_at,
+         is_active=excluded.is_active,deleted_at=excluded.deleted_at,created_at=excluded.created_at,updated_at=excluded.updated_at,
          sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at
          WHERE appointment_types.business_id=excluded.business_id${guard}`,
         [
@@ -201,6 +203,7 @@ export class SQLiteAppointmentSyncAdapter implements AppointmentSyncLocalPort {
           value.name,
           value.defaultDurationMinutes,
           value.isActive ? 1 : 0,
+          value.deletedAt ?? null,
           value.createdAt,
           value.updatedAt,
           value.updatedAt,
@@ -367,12 +370,13 @@ export class SQLiteAppointmentSyncAdapter implements AppointmentSyncLocalPort {
     if (type === 'appointment_type') {
       const value = cloud as AppointmentType;
       result = await db.execute(
-        `UPDATE appointment_types SET name=?,default_duration_minutes=?,is_active=?,
+        `UPDATE appointment_types SET name=?,default_duration_minutes=?,is_active=?,deleted_at=?,
          updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
         [
           value.name,
           value.defaultDurationMinutes,
           value.isActive ? 1 : 0,
+          value.deletedAt ?? null,
           value.updatedAt,
           value.updatedAt,
           value.businessId,

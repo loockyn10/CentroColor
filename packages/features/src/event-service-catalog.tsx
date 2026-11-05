@@ -4,7 +4,7 @@ import type {
   ServiceCatalogRepository,
 } from '@centrocolor/application';
 import type { EventOffer, EventOfferRate, Resource } from '@centrocolor/domain';
-import { Button, Card, InlineMessage } from '@centrocolor/ui';
+import { Button, Card, InlineMessage, Select } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 const errorText = (e: unknown) =>
@@ -208,21 +208,21 @@ export function EventCatalogPanel({
             </label>
             <label>
               Proyección
-              <select
+              <Select
                 value={fabricProjection}
-                onChange={(e) =>
-                  setFabricProjection(e.target.value as 'front' | 'rear')
+                onChange={(next) =>
+                  setFabricProjection(next as 'front' | 'rear')
                 }
               >
                 <option value="front">Delantera</option>
                 <option value="rear">Trasera</option>
-              </select>
+              </Select>
             </label>
             <label>
               Pantalla física
-              <select
+              <Select
                 value={fabricPrimary}
-                onChange={(e) => setFabricPrimary(e.target.value)}
+                onChange={(next) => setFabricPrimary(next)}
               >
                 <option value="">Seleccionar</option>
                 {resources
@@ -232,13 +232,13 @@ export function EventCatalogPanel({
                       {x.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label>
               Proyector (opcional)
-              <select
+              <Select
                 value={fabricProjector}
-                onChange={(e) => setFabricProjector(e.target.value)}
+                onChange={(next) => setFabricProjector(next)}
               >
                 <option value="">Sin proyector</option>
                 {resources
@@ -248,7 +248,7 @@ export function EventCatalogPanel({
                       {x.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <Button
               disabled={!fabricName.trim() || !fabricPrimary}
@@ -382,27 +382,27 @@ function OfferRow({
               </label>
               <label>
                 Proyección
-                <select
+                <Select
                   value={draft.projection ?? 'front'}
-                  onChange={(e) =>
+                  onChange={(next) =>
                     setDraft({
                       ...draft,
-                      projection: e.target.value as 'front' | 'rear',
+                      projection: next as 'front' | 'rear',
                     })
                   }
                 >
                   <option value="front">Delantera</option>
                   <option value="rear">Trasera</option>
-                </select>
+                </Select>
               </label>
               <label>
                 Pantalla física
-                <select
+                <Select
                   value={draft.primaryResourceId ?? ''}
-                  onChange={(e) =>
+                  onChange={(next) =>
                     setDraft({
                       ...draft,
-                      primaryResourceId: e.target.value || null,
+                      primaryResourceId: next || null,
                     })
                   }
                 >
@@ -412,17 +412,17 @@ function OfferRow({
                       {x.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <label>
                 Proyector
-                <select
+                <Select
                   value={draft.projectorResourceId ?? ''}
-                  onChange={(e) =>
+                  onChange={(next) =>
                     setDraft({
                       ...draft,
-                      projectorResourceId: e.target.value || null,
-                      withProjector: Boolean(e.target.value),
+                      projectorResourceId: next || null,
+                      withProjector: Boolean(next),
                     })
                   }
                 >
@@ -432,7 +432,7 @@ function OfferRow({
                       {x.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </label>
               <Button
                 onClick={() =>

@@ -19,6 +19,7 @@ type CategoryRow = {
   business_id: string;
   name: string;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -60,6 +61,7 @@ export const categoryFromCloud = (row: CategoryRow): ProductCategory => ({
   businessId: row.business_id,
   name: row.name,
   isActive: row.is_active,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -99,7 +101,11 @@ export const itemFromCloud = (row: ItemRow): SaleItem => ({
 
 function details(type: PosMutableType, entity: PosMutable) {
   if (type === 'category')
-    return { name: entity.name, is_active: entity.isActive };
+    return {
+      name: entity.name,
+      is_active: entity.isActive,
+      deleted_at: entity.deletedAt ?? null,
+    };
   const product = entity as Product;
   return {
     name: product.name,
@@ -108,6 +114,7 @@ function details(type: PosMutableType, entity: PosMutable) {
     cost_price_cents: product.costPriceCents,
     category_id: product.categoryId,
     is_active: product.isActive,
+    deleted_at: product.deletedAt ?? null,
     tracks_inventory: product.tracksInventory,
   };
 }

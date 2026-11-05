@@ -52,6 +52,8 @@ import {
   Sheet,
   StatusBadge,
   useFlash,
+  Select,
+  DateTimePicker,
 } from '@centrocolor/ui';
 import { CatalogRow } from './configuration-ui';
 import { CustomerField } from './editor-parts';
@@ -371,16 +373,16 @@ export function PhotoServicesPage({
           </label>
           <label>
             Tipo
-            <select
+            <Select
               value={type}
-              onChange={(e) => setType(e.target.value as PhotoServiceType)}
+              onChange={(next) => setType(next as PhotoServiceType)}
             >
               {photoServiceTypes.map((x) => (
                 <option key={x} value={x}>
                   {typeLabel[x]}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
         <label>
@@ -413,18 +415,16 @@ export function PhotoServicesPage({
           <h3>Operación</h3>
           <label>
             Flujo operativo
-            <select
+            <Select
               value={workflowRoute}
-              onChange={(e) =>
-                setWorkflowRoute(e.target.value as PhotoWorkflowRoute)
-              }
+              onChange={(next) => setWorkflowRoute(next as PhotoWorkflowRoute)}
             >
               {photoWorkflowRoutes.map((x) => (
                 <option key={x} value={x}>
                   {routeLabel[x]}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="check-row">
             <input
@@ -768,10 +768,9 @@ export function NewPhotoJobPage({
             )}
             <label className="span-6">
               Entrega prometida
-              <input
-                type="datetime-local"
+              <DateTimePicker
                 value={promised}
-                onChange={(e) => setPromised(e.target.value)}
+                onChange={(next) => setPromised(next)}
               />
             </label>
             <label className="check-row span-3">
@@ -797,12 +796,11 @@ export function NewPhotoJobPage({
               <h3>Servicios</h3>
             </div>
             <div className="editor-line__actions">
-              <select
-                aria-label="Agregar servicio"
-                defaultValue=""
-                onChange={(e) => {
-                  addService(e.target.value);
-                  e.target.value = '';
+              <Select
+                label="Agregar servicio"
+                value=""
+                onChange={(next) => {
+                  if (next) addService(next);
                 }}
               >
                 <option value="">+ Agregar servicio</option>
@@ -826,7 +824,7 @@ export function NewPhotoJobPage({
                         </option>,
                       ],
                 )}
-              </select>
+              </Select>
               <Button variant="secondary" icon="plus" onClick={addCustom}>
                 Concepto personalizado
               </Button>
@@ -1393,10 +1391,9 @@ export function PhotoJobsPage({
                 <div className="config-editor-form__grid">
                   <label>
                     Entrega prometida
-                    <input
-                      type="datetime-local"
+                    <DateTimePicker
                       value={editPromised}
-                      onChange={(e) => setEditPromised(e.target.value)}
+                      onChange={(next) => setEditPromised(next)}
                     />
                   </label>
                   <label className="check-row">

@@ -25,6 +25,9 @@ import {
   PageHeader,
   Sheet,
   StatusBadge,
+  Select,
+  DateTimePicker,
+  FilterSelect,
 } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { plural } from './format';
@@ -246,24 +249,23 @@ export function PaymentAccountPanel({
           </label>
           <label>
             Medio
-            <select
+            <Select
               value={method}
-              onChange={(e) => setMethod(e.target.value as WorkPaymentMethod)}
+              onChange={(next) => setMethod(next as WorkPaymentMethod)}
             >
               {workPaymentMethods.map((x) => (
                 <option key={x} value={x}>
                   {methodLabel[x]}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label>
             Fecha/hora
-            <input
+            <DateTimePicker
               required
-              type="datetime-local"
               value={occurred}
-              onChange={(e) => setOccurred(e.target.value)}
+              onChange={(next) => setOccurred(next)}
             />
           </label>
           <label>
@@ -476,6 +478,7 @@ export function CobrosPage({
   const [names, setNames] = useState<Record<string, string>>({});
   const [stateFilter, setStateFilter] = useState<StateFilter>('all');
   const [origin, setOrigin] = useState<OriginFilter>('all');
+  const [query, setQuery] = useState('');
   const [open, setOpen] = useState<WorkAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -533,10 +536,15 @@ export function CobrosPage({
       ),
     [accounts],
   );
+  const needle = query.trim().toLocaleLowerCase('es');
   const visible = sorted.filter(
     (row) =>
       (stateFilter === 'all' || finishedStatuses.has(row.sourceStatus)) &&
-      (origin === 'all' || row.sourceType === origin),
+      (origin === 'all' || row.sourceType === origin) &&
+      (!needle ||
+        `${names[row.customerId] ?? ''} ${row.description}`
+          .toLocaleLowerCase('es')
+          .includes(needle)),
   );
   const totalDue = sorted.reduce((sum, row) => sum + row.balanceCents, 0);
 
@@ -565,20 +573,35 @@ export function CobrosPage({
       {error && <InlineMessage tone="error">{error}</InlineMessage>}
       <FilterBar
         label="Filtrar cobros"
+        search={
+          <input
+            type="search"
+            aria-label="Buscar cobros"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Cliente o descripción"
+          />
+        }
+        dirty={query !== '' || origin !== 'all' || stateFilter !== 'all'}
+        onClear={() => {
+          setQuery('');
+          setOrigin('all');
+          setStateFilter('all');
+        }}
         end={
-          <select
-            aria-label="Origen de la deuda"
+          <FilterSelect
+            label="Origen"
+            allLabel="Todos los orígenes"
+            allValue="all"
             value={origin}
-            onChange={(event) => setOrigin(event.target.value as OriginFilter)}
-          >
-            <option value="all">Todos los orígenes</option>
-            {(['photo_job', 'event', 'frame_job'] as const).map((type) => (
-              <option key={type} value={type}>
-                {sourceLabel[type]}s (
-                {sorted.filter((r) => r.sourceType === type).length})
-              </option>
-            ))}
-          </select>
+            onChange={(next) => setOrigin(next as OriginFilter)}
+            options={(['photo_job', 'event', 'frame_job'] as const).map(
+              (type) => ({
+                value: type,
+                label: `${sourceLabel[type]}s (${sorted.filter((r) => r.sourceType === type).length})`,
+              }),
+            )}
+          />
         }
       >
         <Chip

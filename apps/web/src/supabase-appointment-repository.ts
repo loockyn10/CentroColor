@@ -19,6 +19,7 @@ type TypeRow = {
   name: string;
   default_duration_minutes: number;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -44,6 +45,7 @@ const fromType = (row: TypeRow): AppointmentType => ({
   name: row.name,
   defaultDurationMinutes: row.default_duration_minutes,
   isActive: row.is_active,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -83,6 +85,7 @@ export class SupabaseAppointmentRepository implements AppointmentRepository {
       .from('appointment_types')
       .select('*')
       .eq('business_id', businessId)
+      .is('deleted_at', null)
       .order('is_active', { ascending: false })
       .order('name');
     if (!includeInactive) query = query.eq('is_active', true);

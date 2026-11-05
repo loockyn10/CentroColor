@@ -4,7 +4,7 @@ import type {
   ServiceCatalogRepository,
 } from '@centrocolor/application';
 import type { EventOffer, EventOfferRate, Resource } from '@centrocolor/domain';
-import { Button, FormDrawer, InlineMessage } from '@centrocolor/ui';
+import { Button, FormDrawer, InlineMessage, Select } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 import { MoneyField, PriceRow, PriceSection } from './configuration-ui';
 
@@ -258,15 +258,13 @@ export function EventPricingCatalog({
         </div>
         <label>
           Proyección
-          <select
+          <Select
             value={fabricProjection}
-            onChange={(event) =>
-              setFabricProjection(event.target.value as 'front' | 'rear')
-            }
+            onChange={(next) => setFabricProjection(next as 'front' | 'rear')}
           >
             <option value="front">Delantera</option>
             <option value="rear">Trasera</option>
-          </select>
+          </Select>
         </label>
         <ResourceSelect
           label="Pantalla física"
@@ -435,18 +433,18 @@ function OfferRow({
             </div>
             <label>
               Proyección
-              <select
+              <Select
                 value={draft.projection ?? 'front'}
-                onChange={(event) =>
+                onChange={(next) =>
                   setDraft({
                     ...draft,
-                    projection: event.target.value as 'front' | 'rear',
+                    projection: next as 'front' | 'rear',
                   })
                 }
               >
                 <option value="front">Delantera</option>
                 <option value="rear">Trasera</option>
-              </select>
+              </Select>
             </label>
             <ResourceSelect
               label="Pantalla física"
@@ -507,7 +505,7 @@ function ResourceSelect({
   return (
     <label>
       {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select value={value} onChange={(next) => onChange(next)}>
         <option value="">{optional ? 'Sin asignar' : 'Seleccionar'}</option>
         {resources
           .filter((resource) => resource.isActive)
@@ -516,7 +514,7 @@ function ResourceSelect({
               {resource.name}
             </option>
           ))}
-      </select>
+      </Select>
     </label>
   );
 }

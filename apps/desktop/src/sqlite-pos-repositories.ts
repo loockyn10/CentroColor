@@ -1,6 +1,7 @@
 import Database from '@tauri-apps/plugin-sql';
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  ProductListFilter,
   ProductRepository,
   SaleRepository,
 } from '@centrocolor/application';
@@ -12,6 +13,7 @@ import type {
   SaleItem,
 } from '@centrocolor/domain';
 import { normalizeCategoryName } from '@centrocolor/domain';
+import { productListQuery } from './product-query';
 
 const database = () => Database.load('sqlite:centrocolor.db');
 
@@ -24,6 +26,7 @@ type ProductRow = {
   cost_price_cents: number | null;
   category_id: string | null;
   is_active: number;
+  deleted_at: string | null;
   tracks_inventory: number;
   created_at: string;
   updated_at: string;
@@ -33,6 +36,7 @@ type CategoryRow = {
   business_id: string;
   name: string;
   is_active: number;
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -71,6 +75,7 @@ function productFromRow(row: ProductRow): Product {
     costPriceCents: row.cost_price_cents,
     categoryId: row.category_id,
     isActive: row.is_active === 1,
+    deletedAt: row.deleted_at ?? null,
     tracksInventory: row.tracks_inventory === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -82,6 +87,7 @@ function categoryFromRow(row: CategoryRow): ProductCategory {
     businessId: row.business_id,
     name: row.name,
     isActive: row.is_active === 1,
+    deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -144,15 +150,11 @@ export class SQLiteProductRepository implements ProductRepository {
     businessId: string,
     query: string,
     limit: number,
+    filter: ProductListFilter = {},
   ): Promise<Product[]> {
     const db = await database();
-    const term = `%${query.trim().replace(/[\\%_]/g, '\\$&')}%`;
-    const rows = await db.select<ProductRow[]>(
-      `SELECT * FROM products WHERE business_id = ? AND
-       (name LIKE ? ESCAPE '\\' OR barcode LIKE ? ESCAPE '\\')
-       ORDER BY is_active DESC, name COLLATE NOCASE, id LIMIT ?`,
-      [businessId, term, term, limit],
-    );
+    const { sql, args } = productListQuery(businessId, query, limit, filter);
+    const rows = await db.select<ProductRow[]>(sql, args);
     return rows.map(productFromRow);
   }
 
@@ -162,7 +164,7 @@ export class SQLiteProductRepository implements ProductRepository {
   ): Promise<Product | null> {
     const db = await database();
     const rows = await db.select<ProductRow[]>(
-      'SELECT * FROM products WHERE business_id = ? AND barcode = ? LIMIT 1',
+      'SELECT * FROM products WHERE business_id = ? AND barcode = ? AND deleted_at IS NULL LIMIT 1',
       [businessId, barcode],
     );
     return rows[0] ? productFromRow(rows[0]) : null;
@@ -254,7 +256,7 @@ export class SQLiteProductRepository implements ProductRepository {
   async listCategories(businessId: string): Promise<ProductCategory[]> {
     const db = await database();
     const rows = await db.select<CategoryRow[]>(
-      'SELECT * FROM product_categories WHERE business_id = ? ORDER BY is_active DESC, name COLLATE NOCASE',
+      'SELECT * FROM product_categories WHERE business_id = ? AND deleted_at IS NULL ORDER BY is_active DESC, name COLLATE NOCASE',
       [businessId],
     );
     return rows.map(categoryFromRow);

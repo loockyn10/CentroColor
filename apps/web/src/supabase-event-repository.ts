@@ -25,6 +25,7 @@ type TypeRow = {
   business_id: string;
   name: string;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -83,6 +84,7 @@ const fromType = (r: TypeRow): EventType => ({
   businessId: r.business_id,
   name: r.name,
   isActive: r.is_active,
+  deletedAt: r.deleted_at ?? null,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
 });
@@ -182,6 +184,7 @@ export class SupabaseEventRepository implements EventRepository {
       .from('event_types')
       .select('*')
       .eq('business_id', businessId)
+      .is('deleted_at', null)
       .order('is_active', { ascending: false })
       .order('name');
     if (!includeInactive) q = q.eq('is_active', true);
@@ -230,6 +233,7 @@ export class SupabaseEventRepository implements EventRepository {
       .from('resources')
       .select('*')
       .eq('business_id', businessId)
+      .is('deleted_at', null)
       .order('is_active', { ascending: false })
       .order('name');
     if (!includeInactive) q = q.eq('is_active', true);

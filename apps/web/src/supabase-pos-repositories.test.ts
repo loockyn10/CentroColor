@@ -15,6 +15,7 @@ const product: Product = {
   costPriceCents: 800,
   categoryId: null,
   isActive: true,
+  deletedAt: null,
   tracksInventory: false,
   createdAt: '2026-09-20T10:00:00Z',
   updatedAt: '2026-09-20T10:00:00Z',
@@ -88,6 +89,8 @@ function query(data: unknown) {
     insert: vi.fn(),
     select: vi.fn(),
     eq: vi.fn(),
+    is: vi.fn(),
+    or: vi.fn(),
     order: vi.fn(),
     limit: vi.fn(),
     range: vi.fn(),
@@ -100,6 +103,8 @@ function query(data: unknown) {
     'insert',
     'select',
     'eq',
+    'is',
+    'or',
     'order',
     'limit',
     'range',
@@ -122,6 +127,56 @@ describe('Web POS Cloud repositories', () => {
       expect.objectContaining({ id: 'p', business_id: 'b' }),
     );
     expect(list.eq).toHaveBeenCalledWith('business_id', 'b');
+  });
+
+  it('never lists products in the trash (deleted_at) and keeps them reachable by id', async () => {
+    const list = query([productRow]);
+    const get = query({ ...productRow, deleted_at: '2026-11-05T10:00:00Z' });
+    const from = vi.fn().mockReturnValueOnce(list).mockReturnValueOnce(get);
+    const repository = new SupabaseProductRepository({
+      from,
+    } as unknown as SupabaseClient);
+    await repository.list('b', '', 20);
+    expect(list.is).toHaveBeenCalledWith('deleted_at', null);
+    // El historial puede resolver un producto eliminado: `get` no filtra por deleted_at.
+    const found = await repository.get('b', 'p');
+    expect(found?.deletedAt).toBe('2026-11-05T10:00:00Z');
+    expect(found?.isActive).toBe(true); // eliminado no es inactivo
+    expect(get.is).not.toHaveBeenCalled();
+  });
+
+  it('combines search, category and status filters on the server', async () => {
+    const list = query([productRow]);
+    const from = vi.fn().mockReturnValueOnce(list);
+    const repository = new SupabaseProductRepository({
+      from,
+    } as unknown as SupabaseClient);
+    await repository.list('b', 'alb', 20, {
+      categoryId: 'cat-1',
+      status: 'inactive',
+    });
+    expect(list.eq).toHaveBeenCalledWith('category_id', 'cat-1');
+    expect(list.eq).toHaveBeenCalledWith('is_active', false);
+    expect(list.is).toHaveBeenCalledWith('deleted_at', null);
+    expect(list.or).toHaveBeenCalledWith(
+      expect.stringContaining('name.ilike.%alb%'),
+    );
+  });
+
+  it('filters uncategorized products and excludes the trash from barcode lookups', async () => {
+    const uncategorized = query([productRow]);
+    const barcode = query(productRow);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(uncategorized)
+      .mockReturnValueOnce(barcode);
+    const repository = new SupabaseProductRepository({
+      from,
+    } as unknown as SupabaseClient);
+    await repository.list('b', '', 20, { uncategorized: true });
+    expect(uncategorized.is).toHaveBeenCalledWith('category_id', null);
+    await repository.findByBarcode('b', 'X');
+    expect(barcode.is).toHaveBeenCalledWith('deleted_at', null);
   });
 
   it('sends checkout as one RPC and loads history with item snapshots', async () => {

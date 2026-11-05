@@ -12,7 +12,12 @@ import {
   syncWorkPayments,
   type BusinessContext,
 } from '@centrocolor/application';
-import { InlineMessage, navigation, PageHeader } from '@centrocolor/ui';
+import {
+  InlineMessage,
+  navigation,
+  PageHeader,
+  useHistoryNavigation,
+} from '@centrocolor/ui';
 import {
   AuthStatePage,
   AppointmentTypesPage,
@@ -26,6 +31,7 @@ import {
   LoginPage,
   PlaceholderPage,
   ProductsPage,
+  TrashPage,
   NewSalePage,
   SalesPage,
   StockPage,
@@ -112,6 +118,7 @@ import {
   SQLitePhotoFileSyncAdapter,
 } from './photo-file-sync-adapters';
 import { SQLiteWorkPaymentRepository } from './sqlite-work-payment-repository';
+import { SQLiteTrashRepository } from './sqlite-trash-repository';
 import { SQLiteWorkPaymentSyncAdapter } from './sqlite-work-payment-sync-adapter';
 import { CloudWorkPaymentSyncAdapter } from './cloud-work-payment-sync-adapter';
 
@@ -133,6 +140,7 @@ const serviceCatalogRepository = new SQLiteServiceCatalogRepository();
 const photoSyncLocal = new SQLitePhotoSyncAdapter();
 const photoFileSyncLocal = new SQLitePhotoFileSyncAdapter();
 const workPaymentRepository = new SQLiteWorkPaymentRepository();
+const trashRepository = new SQLiteTrashRepository();
 const workPaymentSyncLocal = new SQLiteWorkPaymentSyncAdapter();
 
 type Gate = 'loading' | 'login' | 'no-access' | 'ready' | 'error';
@@ -142,6 +150,13 @@ function App() {
   const [openCustomerId, setOpenCustomerId] = useState<string | null>(null);
   const [newJobCustomerId, setNewJobCustomerId] = useState<string | null>(null);
   const [activeId, setActiveId] = useState('home');
+  // Atrás del sistema vuelve al módulo anterior (o cierra el detalle abierto) sin salir de la app.
+  useHistoryNavigation(activeId, (id) => {
+    setOpenPhotoJobId(null);
+    setOpenCustomerId(null);
+    setNewJobCustomerId(null);
+    setActiveId(id);
+  });
   const [gate, setGate] = useState<Gate>('loading');
   const [context, setContext] = useState<BusinessContext | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1130,6 +1145,7 @@ function App() {
             <div className="catalog-stack">
               <AppointmentTypesPage
                 repository={appointmentRepository}
+                trashRepository={trashRepository}
                 refreshToken={dataRefresh}
                 embedded
                 onMutation={() => {
@@ -1139,6 +1155,7 @@ function App() {
               />
               <EventTypesPage
                 repository={eventRepository}
+                trashRepository={trashRepository}
                 embedded
                 onMutation={() => {
                   void refreshSyncSummary(context.businessId);
@@ -1162,6 +1179,7 @@ function App() {
         ) : activeId === 'resources' ? (
           <ResourcesPage
             repository={eventRepository}
+            trashRepository={trashRepository}
             serviceCatalogRepository={serviceCatalogRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
@@ -1187,6 +1205,7 @@ function App() {
         ) : activeId === 'mouldings' ? (
           <FramingCatalogPage
             repository={framingRepository}
+            trashRepository={trashRepository}
             kind="mouldings"
             onMutation={() => setDataRefresh((x) => x + 1)}
           />
@@ -1263,6 +1282,7 @@ function App() {
         ) : activeId === 'materials' ? (
           <FramingCatalogPage
             repository={framingRepository}
+            trashRepository={trashRepository}
             kind="materials"
             onMutation={() => setDataRefresh((x) => x + 1)}
           />
@@ -1296,6 +1316,15 @@ function App() {
               if (cloudSessionReady) void runSync(context);
             }}
           />
+        ) : activeId === 'trash' ? (
+          <TrashPage
+            repository={trashRepository}
+            onMutation={() => {
+              void refreshSyncSummary(context.businessId);
+              setDataRefresh((x) => x + 1);
+              if (cloudSessionReady) void runSync(context);
+            }}
+          />
         ) : activeId === 'settings' ? (
           <>
             <PageHeader title="Integraciones" />
@@ -1306,6 +1335,7 @@ function App() {
         ) : activeId === 'products' ? (
           <ProductsPage
             repository={productRepository}
+            trashRepository={trashRepository}
             refreshToken={dataRefresh}
             onMutation={() => {
               void refreshSyncSummary(context.businessId);

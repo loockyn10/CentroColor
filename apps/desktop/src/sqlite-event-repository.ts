@@ -25,6 +25,7 @@ type TypeRow = {
   business_id: string;
   name: string;
   is_active: number;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -96,6 +97,7 @@ const fromType = (row: TypeRow): EventType => ({
   businessId: row.business_id,
   name: row.name,
   isActive: row.is_active === 1,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -200,7 +202,7 @@ export class SQLiteEventRepository implements EventRepository {
     const db = await database();
     return (
       await db.select<TypeRow[]>(
-        `SELECT * FROM event_types WHERE business_id=? ${includeInactive ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name COLLATE NOCASE,id`,
+        `SELECT * FROM event_types WHERE business_id=? AND deleted_at IS NULL ${includeInactive ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name COLLATE NOCASE,id`,
         [businessId],
       )
     ).map(fromType);
@@ -248,7 +250,7 @@ export class SQLiteEventRepository implements EventRepository {
     const db = await database();
     return (
       await db.select<ResourceRow[]>(
-        `SELECT * FROM resources WHERE business_id=? ${includeInactive ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name COLLATE NOCASE,id`,
+        `SELECT * FROM resources WHERE business_id=? AND deleted_at IS NULL ${includeInactive ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name COLLATE NOCASE,id`,
         [businessId],
       )
     ).map(fromResource);

@@ -3,6 +3,8 @@ export interface ProductCategory {
   businessId: string;
   name: string;
   isActive: boolean;
+  /** Papelera: fecha de eliminación (reversible). `null`/ausente = no eliminado. No es lo mismo que inactivo. */
+  deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -16,6 +18,8 @@ export interface Product {
   costPriceCents: number | null;
   categoryId: string | null;
   isActive: boolean;
+  /** Papelera: fecha de eliminación (reversible). `null`/ausente = no eliminado. No es lo mismo que inactivo. */
+  deletedAt?: string | null;
   tracksInventory: boolean;
   createdAt: string;
   updatedAt: string;

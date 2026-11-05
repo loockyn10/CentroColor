@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { PageTabsContext } from './page-tabs';
 import { Icon, type IconName } from './icons';
+import { BackButton, useBackLayer } from './back-navigation';
 
 // El logo real es cuadrado y circular: se muestra siempre con width = height.
 const logo192 = new URL(
@@ -125,10 +126,20 @@ export function PageHeader({
   description,
   actions,
   primaryAction,
+  onBack,
+  backLabel,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
+  /**
+   * Cuando la pantalla reemplaza a otra (listado → detalle → edición): «← Volver» en la misma
+   * posición de siempre, sobre el título. También conecta el botón Atrás del navegador. Las
+   * páginas raíz no lo llevan.
+   */
+  onBack?: () => void;
+  /** Nombre del destino, sólo para lectores de pantalla («Volver a Ventas»). */
+  backLabel?: string;
   /** Acciones secundarias (menor peso). */
   actions?: ReactNode;
   /** La única acción primaria de la pantalla: va última, a la derecha. */
@@ -137,6 +148,7 @@ export function PageHeader({
   const tabs = useContext(PageTabsContext);
   const hasTabs = Boolean(tabs?.tabs);
   const claim = tabs?.claim;
+  useBackLayer(Boolean(onBack), () => onBack?.());
   useLayoutEffect(() => {
     if (!hasTabs || !claim) return;
     claim(true);
@@ -144,6 +156,9 @@ export function PageHeader({
   }, [hasTabs, claim]);
   return (
     <>
+      {onBack && (
+        <BackButton onClick={onBack} label={backLabel} className="page-back" />
+      )}
       <header
         className={`page-head ${hasTabs ? 'page-head--tabbed' : ''}`.trim()}
       >

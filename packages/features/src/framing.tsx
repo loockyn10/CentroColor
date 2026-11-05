@@ -6,6 +6,8 @@ import {
   newQuote,
   type FramingRepository,
   type WorkPaymentRepository,
+  trashItem,
+  type TrashRepository,
 } from '@centrocolor/application';
 import {
   centimetersToMillimeters,
@@ -23,6 +25,8 @@ import {
   Sheet,
   StatusBadge,
   useFlash,
+  Select,
+  DeleteAction,
 } from '@centrocolor/ui';
 import { CatalogRow, CatalogSection } from './configuration-ui';
 import { frameJobStatus, statusMeta } from './status';
@@ -42,10 +46,13 @@ const unitLabel: Record<string, string> = {
 };
 export function FramingCatalogPage({
   repository,
+  trashRepository,
   kind,
   onMutation,
 }: {
   repository: FramingRepository;
+  /** Habilita «Eliminar» (Papelera). */
+  trashRepository?: TrashRepository;
   kind: 'mouldings' | 'materials';
   onMutation?: () => void;
 }) {
@@ -124,6 +131,34 @@ export function FramingCatalogPage({
                   },
                 ]}
                 active={x.isActive}
+                actions={
+                  trashRepository &&
+                  (c.role === 'owner' || c.role === 'admin') ? (
+                    <DeleteAction
+                      label="Eliminar"
+                      what={`${kind === 'mouldings' ? 'esta' : 'este'} ${noun}`}
+                      listName={
+                        kind === 'mouldings' ? 'Varillas' : 'Materiales'
+                      }
+                      gender={kind === 'mouldings' ? 'f' : 'm'}
+                      size="sm"
+                      variant="ghost"
+                      note="Las cotizaciones anteriores conservan su detalle."
+                      onDelete={async () => {
+                        await trashItem(
+                          trashRepository,
+                          c.businessId,
+                          kind === 'mouldings'
+                            ? 'frame_moulding'
+                            : 'frame_material',
+                          x.id,
+                        );
+                        load();
+                        onMutation?.();
+                      }}
+                    />
+                  ) : undefined
+                }
               />
             ))}
           </div>
@@ -253,10 +288,10 @@ export function NewFrameQuotePage({
           </section>
           <section className="drawer-section">
             <h3>Varilla</h3>
-            <select
-              aria-label="Varilla"
+            <Select
+              label="Varilla"
               value={mouldingId}
-              onChange={(e) => setMouldingId(e.target.value)}
+              onChange={(next) => setMouldingId(next)}
             >
               {mouldings.map((x) => (
                 <option key={x.id} value={x.id}>
@@ -264,7 +299,7 @@ export function NewFrameQuotePage({
                   {x.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </section>
           <section className="drawer-section">
             <h3>Componentes</h3>

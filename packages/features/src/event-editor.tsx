@@ -31,6 +31,8 @@ import {
   Segmented,
   Sheet,
   StatusBadge,
+  Select,
+  DateTimePicker,
 } from '@centrocolor/ui';
 import { CustomerField } from './editor-parts';
 import { useBusinessContext } from './auth';
@@ -184,7 +186,34 @@ export function EventEditor({
         ? repository.getEventBundle(context.businessId, eventId)
         : Promise.resolve(null),
     ])
-      .then(([t, r, b]) => {
+      .then(async ([t, r, b]) => {
+        if (b) {
+          // Lo que ya usa este presupuesto sigue visible aunque esté en la Papelera.
+          if (
+            b.event.eventTypeId &&
+            !t.some((x) => x.id === b.event.eventTypeId)
+          ) {
+            t = [
+              ...t,
+              {
+                id: b.event.eventTypeId,
+                businessId: context.businessId,
+                name: `${b.event.eventTypeName ?? 'Tipo'} (eliminado)`,
+                isActive: false,
+                deletedAt: b.event.updatedAt,
+                createdAt: b.event.createdAt,
+                updatedAt: b.event.updatedAt,
+              },
+            ];
+          }
+          const missing = [
+            ...new Set(b.reservations.map((x) => x.resourceId)),
+          ].filter((id) => !r.some((x) => x.id === id));
+          const found = await Promise.all(
+            missing.map((id) => repository.getResource(context.businessId, id)),
+          );
+          r = [...r, ...found.filter((x) => x !== null)];
+        }
         if (!live) return;
         setTypes(t);
         setResources(r);
@@ -543,10 +572,7 @@ export function EventEditor({
             </label>
             <label className="span-6">
               Tipo
-              <select
-                value={typeId}
-                onChange={(e) => setTypeId(e.target.value)}
-              >
+              <Select value={typeId} onChange={(next) => setTypeId(next)}>
                 <option value="">Sin tipo</option>
                 {types
                   .filter((x) => x.isActive || x.id === typeId)
@@ -555,38 +581,36 @@ export function EventEditor({
                       {x.name}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
             <label className="span-4 half">
               Inicio *
-              <input
+              <DateTimePicker
                 required
-                type="datetime-local"
                 value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
+                onChange={(next) => setStartsAt(next)}
               />
             </label>
             <label className="span-4 half">
               Fin *
-              <input
+              <DateTimePicker
                 required
-                type="datetime-local"
                 value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
+                onChange={(next) => setEndsAt(next)}
               />
             </label>
             <label className="span-4">
               Estado
-              <select
+              <Select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as EventStatus)}
+                onChange={(next) => setStatus(next as EventStatus)}
               >
                 {eventStatuses.map((x) => (
                   <option key={x} value={x}>
                     {statusLabels[x]}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {!showMore && (
               <div className="editor-grid__more span-4">
@@ -754,15 +778,15 @@ export function EventEditor({
                     >
                       <label className="editor-mini span-5">
                         Recurso
-                        <select
+                        <Select
                           value={item.resourceId}
                           disabled={!item.isActive}
-                          onChange={(e) => {
+                          onChange={(next) => {
                             const selected = resources.find(
-                              (r) => r.id === e.target.value,
+                              (r) => r.id === next,
                             );
                             setReservation(index, {
-                              resourceId: e.target.value,
+                              resourceId: next,
                               priceCents: selected?.defaultPriceCents ?? 0,
                             });
                           }}
@@ -777,7 +801,7 @@ export function EventEditor({
                                 {x.name}
                               </option>
                             ))}
-                        </select>
+                        </Select>
                       </label>
                       <label className="editor-mini span-3">
                         Precio
@@ -812,26 +836,24 @@ export function EventEditor({
                       </div>
                       <label className="editor-mini span-4">
                         Inicio
-                        <input
-                          type="datetime-local"
+                        <DateTimePicker
                           value={localInput(item.startsAt)}
                           disabled={!item.isActive}
-                          onChange={(e) =>
+                          onChange={(next) =>
                             setReservation(index, {
-                              startsAt: new Date(e.target.value).toISOString(),
+                              startsAt: new Date(next).toISOString(),
                             })
                           }
                         />
                       </label>
                       <label className="editor-mini span-4">
                         Fin
-                        <input
-                          type="datetime-local"
+                        <DateTimePicker
                           value={localInput(item.endsAt)}
                           disabled={!item.isActive}
-                          onChange={(e) =>
+                          onChange={(next) =>
                             setReservation(index, {
-                              endsAt: new Date(e.target.value).toISOString(),
+                              endsAt: new Date(next).toISOString(),
                             })
                           }
                         />

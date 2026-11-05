@@ -19,6 +19,7 @@ type TypeRow = {
   name: string;
   default_duration_minutes: number;
   is_active: number;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -45,6 +46,7 @@ const fromType = (row: TypeRow): AppointmentType => ({
   name: row.name,
   defaultDurationMinutes: row.default_duration_minutes,
   isActive: row.is_active === 1,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -73,7 +75,7 @@ export class SQLiteAppointmentRepository implements AppointmentRepository {
   async listTypes(businessId: string, includeInactive = false) {
     const db = await database();
     const rows = await db.select<TypeRow[]>(
-      `SELECT * FROM appointment_types WHERE business_id=? ${includeInactive ? '' : 'AND is_active=1'}
+      `SELECT * FROM appointment_types WHERE business_id=? AND deleted_at IS NULL ${includeInactive ? '' : 'AND is_active=1'}
        ORDER BY is_active DESC,name COLLATE NOCASE,id`,
       [businessId],
     );

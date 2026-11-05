@@ -51,6 +51,7 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       businessId: row.business_id,
       name: row.name as string,
       isActive: row.is_active === 1,
+      deletedAt: (row.deleted_at as string | null | undefined) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } as EventType;
@@ -62,6 +63,7 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       description: row.description as string | null,
       defaultPriceCents: row.default_price_cents as number | null,
       isActive: row.is_active === 1,
+      deletedAt: (row.deleted_at as string | null | undefined) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } as Resource;
@@ -123,11 +125,13 @@ const pending = (type: EventSyncType, row: Row): PendingEventChange => ({
   localRevision: row.local_revision,
   cloudUpdatedAt: row.cloud_updated_at,
 });
+const withTrash = (name: string, x: { deletedAt?: string | null }) =>
+  x.deletedAt ? `${name} · en la Papelera` : name;
 const describe = (type: EventSyncType, x: EventSyncEntity) =>
   type === 'event_type'
-    ? (x as EventType).name
+    ? withTrash((x as EventType).name, x as EventType)
     : type === 'resource'
-      ? (x as Resource).name
+      ? withTrash((x as Resource).name, x as Resource)
       : type === 'event'
         ? (x as Event).title
         : type === 'event_service_item'
@@ -289,12 +293,13 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     if (type === 'event_type') {
       const x = entity as EventType;
       result = await db.execute(
-        `INSERT INTO event_types(id,business_id,name,is_active,created_at,updated_at,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,is_active=excluded.is_active,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE event_types.business_id=excluded.business_id${guard}`,
+        `INSERT INTO event_types(id,business_id,name,is_active,deleted_at,created_at,updated_at,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,is_active=excluded.is_active,deleted_at=excluded.deleted_at,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE event_types.business_id=excluded.business_id${guard}`,
         [
           x.id,
           x.businessId,
           x.name,
           x.isActive ? 1 : 0,
+          x.deletedAt ?? null,
           x.createdAt,
           x.updatedAt,
           x.updatedAt,
@@ -303,7 +308,7 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     } else if (type === 'resource') {
       const x = entity as Resource;
       result = await db.execute(
-        `INSERT INTO resources(id,business_id,name,description,default_price_cents,is_active,created_at,updated_at,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,default_price_cents=excluded.default_price_cents,is_active=excluded.is_active,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE resources.business_id=excluded.business_id${guard}`,
+        `INSERT INTO resources(id,business_id,name,description,default_price_cents,is_active,deleted_at,created_at,updated_at,sync_origin,cloud_updated_at) VALUES(?,?,?,?,?,?,?,?,?,'remote',?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,description=excluded.description,default_price_cents=excluded.default_price_cents,is_active=excluded.is_active,deleted_at=excluded.deleted_at,created_at=excluded.created_at,updated_at=excluded.updated_at,sync_origin='remote',cloud_updated_at=excluded.cloud_updated_at WHERE resources.business_id=excluded.business_id${guard}`,
         [
           x.id,
           x.businessId,
@@ -311,6 +316,7 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
           x.description,
           x.defaultPriceCents,
           x.isActive ? 1 : 0,
+          x.deletedAt ?? null,
           x.createdAt,
           x.updatedAt,
           x.updatedAt,
@@ -512,10 +518,11 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     if (type === 'event_type') {
       const value = cloud as EventType;
       result = await db.execute(
-        `UPDATE event_types SET name=?,is_active=?,created_at=?,updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
+        `UPDATE event_types SET name=?,is_active=?,deleted_at=?,created_at=?,updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
         [
           value.name,
           value.isActive ? 1 : 0,
+          value.deletedAt ?? null,
           value.createdAt,
           value.updatedAt,
           value.updatedAt,
@@ -525,12 +532,13 @@ export class SQLiteEventSyncAdapter implements EventSyncLocalPort {
     } else if (type === 'resource') {
       const value = cloud as Resource;
       result = await db.execute(
-        `UPDATE resources SET name=?,description=?,default_price_cents=?,is_active=?,created_at=?,updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
+        `UPDATE resources SET name=?,description=?,default_price_cents=?,is_active=?,deleted_at=?,created_at=?,updated_at=?,cloud_updated_at=?,sync_origin='remote' ${guard}`,
         [
           value.name,
           value.description,
           value.defaultPriceCents,
           value.isActive ? 1 : 0,
+          value.deletedAt ?? null,
           value.createdAt,
           value.updatedAt,
           value.updatedAt,

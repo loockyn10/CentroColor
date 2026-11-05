@@ -44,3 +44,4 @@ export {
   LoginPage,
   useBusinessContext,
 } from './auth';
+export { TrashPage, filterTrash } from './trash';

@@ -33,6 +33,7 @@ const legacyViews = [
   'resources',
   'stock',
   'settings',
+  'trash',
 ];
 
 const render = (activeId: string, extra = {}) =>
@@ -83,6 +84,7 @@ describe('navegación funcional del panel', () => {
       'Recursos',
       'Tipos y parámetros',
       'Integraciones',
+      'Papelera',
     ]);
   });
 

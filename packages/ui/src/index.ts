@@ -35,10 +35,23 @@ export {
 export { StatusBadge, type StatusTone } from './status';
 export {
   ConfirmDialog,
+  DeleteAction,
+  DeleteDialog,
   EntityRow,
   FilterBar,
+  FilterDate,
+  FilterSelect,
   FormDrawer,
   IntegrationCard,
+  type FilterOption,
 } from './patterns';
+export { Select, optionsFromChildren, type SelectOption } from './select';
+export { DatePicker, DateTimePicker } from './date-picker';
+export {
+  BackButton,
+  useBackLayer,
+  useHistoryNavigation,
+} from './back-navigation';
+export * as dateUtils from './date-utils';
 export { requestCreate, takeCreateIntent } from './create-intent';
 export { Sheet } from './sheet';

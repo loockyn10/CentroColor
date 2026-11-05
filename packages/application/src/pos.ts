@@ -14,9 +14,30 @@ import {
   type SaleItem,
 } from '@centrocolor/domain';
 
+/** Filtros del listado de Productos. Los eliminados (Papelera) nunca se incluyen. */
+export interface ProductListFilter {
+  /** Sólo productos de esta categoría. */
+  categoryId?: string;
+  /** Sólo productos sin categoría. */
+  uncategorized?: boolean;
+  /** Activo / Inactivo (un producto eliminado no es «inactivo»: está en la Papelera). */
+  status?: 'active' | 'inactive';
+}
+
 export interface ProductRepository {
-  list(businessId: string, query: string, limit: number): Promise<Product[]>;
+  /**
+   * Productos no eliminados que coinciden con la búsqueda (nombre o código) y los filtros.
+   * Activos primero.
+   */
+  list(
+    businessId: string,
+    query: string,
+    limit: number,
+    filter?: ProductListFilter,
+  ): Promise<Product[]>;
+  /** Por id, incluso si está en la Papelera: el historial debe poder resolverlo. */
   get(businessId: string, id: string): Promise<Product | null>;
+  /** Sólo productos no eliminados: un código de un producto eliminado cuenta como desconocido. */
   findByBarcode(businessId: string, barcode: string): Promise<Product | null>;
   create(product: Product): Promise<Product>;
   update(
@@ -31,6 +52,7 @@ export interface ProductRepository {
     active: boolean,
     expectedUpdatedAt?: string,
   ): Promise<Product>;
+  /** Categorías no eliminadas, activas primero. */
   listCategories(businessId: string): Promise<ProductCategory[]>;
   createCategory(category: ProductCategory): Promise<ProductCategory>;
   updateCategory(

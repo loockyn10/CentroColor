@@ -1,0 +1,335 @@
+/*
+ * Controles propios de CentroColor: Select, DatePicker/DateTimePicker y su panel flotante.
+ * Reemplazan a los controles nativos (<select>, <input type="date">), cuya lista abierta pertenece
+ * al sistema operativo. Mismos tokens que los inputs: grafito, crema, amarillo de marca.
+ */
+
+/* ───────── Disparador (parece un input) ───────── */
+.cc-select {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+.cc-select__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  width: 100%;
+  min-width: 0;
+  min-height: var(--touch);
+  padding: 0.55rem 0.8rem;
+  border: 1.5px solid var(--ink-500);
+  border-radius: var(--r-sm);
+  background: var(--paper-0);
+  color: var(--ink-900);
+  font: inherit;
+  font-size: 1rem; /* 16px: evita el zoom de iOS */
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.cc-select--sm .cc-select__trigger {
+  min-height: 40px;
+  padding: 0.3rem 0.5rem 0.3rem 0.65rem;
+  gap: 0.35rem;
+  font-size: var(--fs-sm);
+}
+.cc-select--sm .cc-select__prefix {
+  font-size: var(--fs-xs);
+}
+.cc-select__trigger:hover:not(:disabled) {
+  border-color: var(--ink-900);
+}
+.cc-select__trigger[aria-expanded='true'] {
+  border-color: var(--ink-900);
+  background: #fff;
+}
+.cc-select__trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--paper-100);
+}
+.cc-select__trigger[aria-invalid='true'] {
+  border-color: var(--red-700);
+  background: var(--red-100);
+}
+.cc-select__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-select__value--placeholder {
+  color: var(--ink-500);
+}
+.cc-select__chevron {
+  flex: none;
+  color: var(--ink-700);
+  transition: transform 0.12s ease;
+}
+.cc-select__trigger[aria-expanded='true'] .cc-select__chevron {
+  transform: rotate(180deg);
+}
+.datefield .cc-select__trigger[aria-expanded='true'] .cc-select__chevron {
+  transform: none;
+}
+/* Campo invisible que conserva la validación `required` del navegador. */
+.cc-select__required {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ───────── Panel flotante ───────── */
+.popover-scrim {
+  display: none;
+}
+.popover {
+  position: fixed;
+  z-index: 400;
+  top: var(--pop-top);
+  bottom: var(--pop-bottom);
+  left: var(--pop-left);
+  width: var(--pop-width);
+  max-height: var(--pop-max);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1.5px solid var(--ink-900);
+  border-radius: var(--r-md);
+  background: var(--paper-0);
+  box-shadow:
+    var(--sh-hard-sm),
+    0 12px 28px -12px rgb(24 22 19 / 35%);
+  animation: pop-in 0.12s ease;
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@media (max-width: 640px) {
+  /* Pantallas angostas: hoja inferior con telón, objetivos táctiles amplios. */
+  .popover-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 399;
+    background: rgb(17 15 12 / 46%);
+  }
+  .popover {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    max-height: min(70dvh, 520px);
+    border-width: 1.5px 0 0;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    padding-bottom: var(--safe-bottom);
+    box-shadow: 0 -12px 40px rgb(17 15 12 / 30%);
+    animation: sheet-up 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+}
+
+/* ───────── Lista de opciones ───────── */
+.cc-select__list {
+  overflow-y: auto;
+  padding: var(--s-1);
+  overscroll-behavior: contain;
+}
+.cc-select__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: var(--touch);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--r-xs);
+  color: var(--ink-900);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.cc-select__option[data-active] {
+  background: var(--y-100);
+}
+.cc-select__option[aria-selected='true'] {
+  font-weight: 750;
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+.cc-select__option[aria-disabled='true'] {
+  color: var(--ink-300);
+  cursor: not-allowed;
+}
+.cc-select__empty {
+  padding: var(--s-3);
+  color: var(--ink-500);
+}
+
+/* ───────── Calendario ───────── */
+.calendar-pop {
+  min-width: 304px;
+}
+.calendar {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  overflow-y: auto;
+}
+.calendar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+.calendar__title {
+  text-transform: capitalize;
+  font-size: var(--fs-md);
+}
+.calendar__nav {
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-900);
+}
+.calendar__nav:hover {
+  background: var(--paper-100);
+}
+.calendar__grid {
+  display: grid;
+  gap: 2px;
+}
+.calendar__row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+}
+.calendar__row > span {
+  display: grid;
+}
+.calendar__dow {
+  padding: 4px 0;
+  text-align: center;
+  color: var(--ink-500);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+}
+.calendar__day {
+  width: 100%;
+  min-height: 40px;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-900);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+@media (max-width: 640px) {
+  .calendar__day {
+    min-height: var(--touch);
+  }
+}
+.calendar__day:hover:not(:disabled) {
+  background: var(--y-100);
+}
+.calendar__day[data-outside] {
+  color: var(--ink-300);
+  font-weight: 450;
+}
+.calendar__day[data-today] {
+  border-color: var(--ink-700);
+}
+.calendar__day[data-selected] {
+  background: var(--brand);
+  border-color: var(--ink-900);
+  color: var(--ink-950);
+  font-weight: 800;
+}
+.calendar__day:disabled {
+  color: var(--ink-300);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+.calendar__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  padding-top: var(--s-2);
+  border-top: 1px solid var(--line);
+}
+.calendar__action {
+  min-height: 40px;
+  padding: 0 var(--s-3);
+  border: 1.5px solid var(--ink-600);
+  border-radius: var(--r-sm);
+  background: var(--paper-0);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.calendar__action:hover:not(:disabled) {
+  background: var(--paper-100);
+  border-color: var(--ink-900);
+}
+.calendar__action--primary {
+  background: var(--brand);
+  border-color: var(--ink-900);
+}
+.calendar__action--primary:hover:not(:disabled) {
+  background: var(--brand-press);
+}
+.calendar__time {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  width: 100%;
+}
+.timefield {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 700;
+}
+.timefield__part {
+  width: 3rem !important;
+  min-width: 0;
+  min-height: 40px !important;
+  padding: 0 !important;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ───────── Filtros de listado ───────── */
+.filter-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.filter-field > span:first-child {
+  color: var(--ink-700);
+}
+.cc-select__prefix {
+  flex: none;
+  color: var(--ink-500);
+  font-size: var(--fs-sm);
+  font-weight: 650;
+}
+.cc-select__prefix::after {
+  content: ':';
+}

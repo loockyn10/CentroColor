@@ -18,6 +18,7 @@ type TypeRow = {
   name: string;
   default_duration_minutes: number;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -42,6 +43,7 @@ const decodeType = (row: TypeRow): AppointmentType => ({
   name: row.name,
   defaultDurationMinutes: row.default_duration_minutes,
   isActive: row.is_active,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -73,6 +75,7 @@ function details(type: AppointmentSyncType, entity: AppointmentSyncEntity) {
       name: value.name,
       default_duration_minutes: value.defaultDurationMinutes,
       is_active: value.isActive,
+      deleted_at: value.deletedAt ?? null,
     };
   }
   const value = entity as Appointment;

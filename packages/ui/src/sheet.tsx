@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from './primitives';
 import { Icon } from './icons';
+import { useBackLayer } from './back-navigation';
 
 /** Hojas abiertas, de la más antigua a la más nueva: sólo la última atiende teclado y foco. */
 const openSheets: HTMLElement[] = [];
@@ -31,6 +32,8 @@ export function Sheet({
   const titleId = useId();
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  // Atrás del navegador / gesto del teléfono cierra la hoja en lugar de salir de la app.
+  useBackLayer(open, () => closeRef.current());
 
   useEffect(() => {
     if (!open) return;

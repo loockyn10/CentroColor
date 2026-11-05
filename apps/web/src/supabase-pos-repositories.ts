@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
+  ProductListFilter,
   ProductRepository,
   SaleRepository,
 } from '@centrocolor/application';
@@ -18,6 +19,7 @@ type CategoryRow = {
   business_id: string;
   name: string;
   is_active: boolean;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -58,6 +60,7 @@ const categoryFromRow = (row: CategoryRow): ProductCategory => ({
   businessId: row.business_id,
   name: row.name,
   isActive: row.is_active,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -121,12 +124,20 @@ export class SupabaseProductRepository implements ProductRepository {
     businessId: string,
     query: string,
     limit: number,
+    filter: ProductListFilter = {},
   ): Promise<Product[]> {
     const term = query.replace(/[%,()"\\]/g, '').trim();
+    // Los productos de la Papelera (deleted_at) no aparecen en ningún listado.
     let request = this.client
       .from('products')
       .select('*')
-      .eq('business_id', businessId);
+      .eq('business_id', businessId)
+      .is('deleted_at', null);
+    if (filter.categoryId)
+      request = request.eq('category_id', filter.categoryId);
+    if (filter.uncategorized) request = request.is('category_id', null);
+    if (filter.status)
+      request = request.eq('is_active', filter.status === 'active');
     if (term)
       request = request.or(`name.ilike.%${term}%,barcode.ilike.%${term}%`);
     const { data, error } = await request
@@ -145,6 +156,7 @@ export class SupabaseProductRepository implements ProductRepository {
       .select('*')
       .eq('business_id', businessId)
       .eq('barcode', barcode)
+      .is('deleted_at', null)
       .maybeSingle();
     if (error) throw error;
     return data ? productFromRow(data as ProductRow) : null;
@@ -205,6 +217,7 @@ export class SupabaseProductRepository implements ProductRepository {
       .from('product_categories')
       .select('*')
       .eq('business_id', businessId)
+      .is('deleted_at', null)
       .order('is_active', { ascending: false })
       .order('name');
     if (error) throw error;

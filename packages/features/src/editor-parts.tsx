@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import type { Customer } from '@centrocolor/domain';
-import { Button, Segmented } from '@centrocolor/ui';
+import { Button, Segmented, Select } from '@centrocolor/ui';
 
 /**
  * Cliente de un turno o presupuesto: búsqueda y selección en una sola fila y alta rápida bajo
@@ -39,18 +39,14 @@ export function CustomerField({
       </label>
       <label>
         Cliente *
-        <select
-          required
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        >
+        <Select required value={value} onChange={(next) => onChange(next)}>
           <option value="">Seleccionar…</option>
           {customers.map((customer) => (
             <option key={customer.id} value={customer.id}>
               {customer.fullName}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <div className="customer-field__new">
         <Button

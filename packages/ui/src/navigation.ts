@@ -184,6 +184,15 @@ export const navModules: NavModule[] = [
     group: 'Configuración',
     subs: [{ id: 'settings', label: 'Integraciones' }],
   },
+  {
+    // Papelera: secundaria y discreta, al final de Configuración. No es un módulo operativo.
+    id: 'trash',
+    label: 'Papelera',
+    short: 'Papelera',
+    icon: 'trash',
+    group: 'Configuración',
+    subs: [{ id: 'trash', label: 'Papelera' }],
+  },
 ];
 
 /** Todas las vistas alcanzables, planas. */

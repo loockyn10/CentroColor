@@ -1,5 +1,29 @@
 # Handoff
 
+## UX/UI transversal — navegación, Papelera, filtros y controles propios (05/11/2026)
+
+Sprint transversal de patrones compartidos (no parches por pantalla). Sin cambios en reglas comerciales, sin SQL remoto, sin commit ni push. Detalle de patrones en `docs/UX_GRAMMAR.md`; decisiones 101–104 en `docs/DECISIONS.md`; modelo en `docs/DATA_MODEL.md`.
+
+**Qué hay:** (1) **Volver global:** `PageHeader onBack` («← Volver» sobre el título, siempre en el mismo lugar), `BackButton` y un administrador de historial (`packages/ui/src/nav-history.ts` + `useHistoryNavigation`/`useBackLayer`) que hace que **Atrás del navegador cierre el detalle/hoja o vuelva al módulo anterior** en lugar de salir de la app; `Sheet` ya lo usa. La causa del caso de Ventas era un botón `← Volver a ventas` oculto por CSS en ≥1100 px. (2) **Papelera:** eliminar ≠ inactivo; `deleted_at` en 7 catálogos; «Configuración → Papelera» lista y restaura. (3) **Filtros:** `FilterBar` único (wrap sin `min-width`, 2 por fila en mobile, «Limpiar») con `FilterSelect`/`FilterDate`; aplicado a Productos, Turnos, Calendario, Ventas, Stock, Clientes, Cobros, Plotter y la propia Papelera. (4) **Controles propios:** `Select`, `DatePicker`, `DateTimePicker` (sobre `Popover` en portal; hoja inferior en mobile) reemplazan a los 36 `<select>` y 12 `<input type=date/datetime-local>` nativos. (5) **Agenda mobile:** sin desborde en Calendario, Turnos y Disponibilidad (medido a 390 px).
+
+### Despliegue: qué requiere acción (informado explícitamente)
+
+- **VERSIONADO EN REPO (creado, no aplicado):** `supabase/migrations/20261105000000_catalog_trash.sql` (Cloud) y su gemela `apps/desktop/src-tauri/migrations/0020_catalog_trash.sql` (registrada como versión 20 en `apps/desktop/src-tauri/src/lib.rs`).
+- **APLICADO REMOTAMENTE:** **no**. No se ejecutó ningún SQL remoto ni `db push`, ni siquiera el dry-run. Pasos, en este orden: `pnpm exec supabase db push --dry-run` y, si lista sólo `20261105000000_catalog_trash.sql`, `pnpm exec supabase db push`.
+- **ORDEN IMPORTANTE:** aplicar la migración **antes** de publicar la Web nueva o instalar el Desktop nuevo. La Web nueva consulta `deleted_at` (PostgREST falla si la columna no existe) y el sync de Desktop envía `deleted_at` en cada alta/edición de productos, categorías, tipos, recursos y marquetería. Con la migración aplicada, una Web o un Desktop **viejos** siguen funcionando, pero **no ocultan** los elementos eliminados hasta actualizarse.
+- **VERIFICADO EN PRODUCCIÓN:** **nada**. Lo verificado fue local (ver `CURRENT_STATE`): tests, PGlite con las migraciones reales, SQLite en memoria y navegador con repositorios en memoria.
+- **Edge Functions:** ninguna modificada; no requieren redeploy por este trabajo (siguen vigentes los pendientes históricos de arriba). Los servicios fotográficos no usan Papelera justamente para no tocar las funciones públicas.
+- **Desktop:** requiere **reinstalar** (instalador nuevo de `pnpm build:desktop`): trae la UI nueva y ejecuta `0020_catalog_trash` al abrirse. **Web:** requiere volver a publicar en Vercel.
+
+### Decisiones de dominio y deuda que quedaron fuera
+
+- **Sin Papelera (a propósito):** ventas, pagos, movimientos de stock, reservas/turnos/pedidos/cotizaciones históricos (auditoría); clientes (siguen con Activo/Inactivo); **servicios fotográficos**, variantes y escalones de precio, listas de precios, tarifas y ofertas/LED (los expone el flujo público `/imprimir` y las funciones SQL/Edge de pedidos públicos filtran por `is_active`/`is_public`; habría que reescribirlas y redesplegarlas) y **materiales de plotter** (las reglas de precio dependen de su código). Quedan con Activo/Inactivo.
+- **Nombre de categoría reservado:** `UNIQUE(business_id,name)` de `product_categories` incluye eliminadas (rehacerlo en SQLite exige reconstruir la tabla). Crear una categoría con el nombre de una eliminada falla; hay que restaurarla o cambiar el nombre. El código de barras, en cambio, sí queda libre mientras el producto está en la Papelera (índice parcial); restaurar uno cuyo código ya usa otro producto vivo falla con mensaje claro.
+- **No hay «Eliminar definitivamente»:** la fila se conserva para no romper referencias; una purga segura (sin referencias históricas) queda como decisión futura.
+- Productos de una categoría eliminada conservan `category_id` y se muestran sin categoría; restaurar la categoría los reengancha. Los listados de Ventas/Stock/Clientes aplican sus filtros sobre las últimas 100 filas cargadas (límite previo de esas pantallas).
+- Sin datepicker propio para años lejanos más allá de las flechas de mes y RePág/AvPág (sirve para fechas de agenda y entrega).
+- **No verificado:** ventana Tauri real, sincronización real Desktop↔Cloud de eliminar/restaurar (sólo triggers y adaptadores por prueba), producción, tablet física, lector de pantalla.
+
 ## UX/UI — fase 8: limpieza y cierre global (29/10/2026)
 
 Cierre de la pasada UX/UI (fases 0–8; informe y cierre en `docs/UX_AUDIT.md`, gramática en `docs/UX_GRAMMAR.md`). Sin cambios de reglas de negocio, dominio, sync, migraciones ni SQL remoto, y sin commit. En esta fase: Pedidos (detalle con estado único, edición bajo demanda, cancelación con diálogo, archivos con `Button`), Nuevo pedido (`CustomerField`, líneas rotuladas, pie con total), Servicios fotográficos (catálogo + drawer), Stock (sin tarjetas duplicadas; «Movimientos» en una hoja), Ventas/POS (sólo botones y mensajes con los componentes comunes; el flujo de escaneo, carrito y cobro no cambió), anulación de pagos con diálogo propio, poda de CSS sin uso (~1 100 líneas) y de los primitivos `Badge`/`StateLine`. Verificación local: `pnpm lint`, `pnpm typecheck`, `pnpm test` (568/568), `pnpm build`, `pnpm build:desktop` y `git diff --check`; 24 vistas sin desborde horizontal a 390 px (arnés con repositorios en memoria).

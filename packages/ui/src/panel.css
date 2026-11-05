@@ -204,17 +204,10 @@
   font-size: 0.8125rem;
 }
 .customer-back {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--touch);
-  margin-bottom: 8px;
-  padding: 0;
-  border: 0;
-  background: none;
-  font-weight: 650;
-  text-decoration: underline;
+  margin-bottom: var(--s-2);
 }
 @media (min-width: 1100px) {
+  /* En escritorio la ficha convive con el listado: no hay nada a lo que volver. */
   .customer-back {
     display: none;
   }

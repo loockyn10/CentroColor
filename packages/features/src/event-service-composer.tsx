@@ -26,7 +26,7 @@ import {
   type TravelPricingSettings,
   type TravelQuote,
 } from '@centrocolor/domain';
-import { Button, InlineMessage } from '@centrocolor/ui';
+import { Button, InlineMessage, Select } from '@centrocolor/ui';
 import { useBusinessContext } from './auth';
 
 const errorText = (e: unknown) =>
@@ -488,10 +488,7 @@ export function EventServiceComposer({
         <div className="form-row">
           <label>
             Servicio
-            <select
-              value={offerId}
-              onChange={(e) => setOfferId(e.target.value)}
-            >
+            <Select value={offerId} onChange={(next) => setOfferId(next)}>
               <option value="">Seleccionar…</option>
               {offers
                 .filter((x) => x.isActive)
@@ -500,16 +497,13 @@ export function EventServiceComposer({
                     {x.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           {offer?.kind === 'led_screen' && (
             <>
               <label>
                 Tamaño habitual
-                <select
-                  value={presetId}
-                  onChange={(e) => setPresetId(e.target.value)}
-                >
+                <Select value={presetId} onChange={(next) => setPresetId(next)}>
                   <option value="">Personalizado</option>
                   {presets
                     .filter((x) => x.isActive)
@@ -518,7 +512,7 @@ export function EventServiceComposer({
                         {x.name}
                       </option>
                     ))}
-                </select>
+                </Select>
               </label>
               {!presetId && (
                 <>
@@ -543,15 +537,13 @@ export function EventServiceComposer({
           {offer?.kind === 'fabric_screen' && offer.withProjector && (
             <label>
               Variante
-              <select
+              <Select
                 value={includeProjector ? 'with' : 'without'}
-                onChange={(event) =>
-                  setIncludeProjector(event.target.value === 'with')
-                }
+                onChange={(next) => setIncludeProjector(next === 'with')}
               >
                 <option value="without">Sin proyector</option>
                 <option value="with">Con proyector</option>
-              </select>
+              </Select>
             </label>
           )}
         </div>
@@ -620,9 +612,9 @@ export function EventServiceComposer({
           {prepared.offer.kind === 'led_screen' && (
             <label>
               Controlador
-              <select
+              <Select
                 value={controllerId}
-                onChange={(e) => setControllerId(e.target.value)}
+                onChange={(next) => setControllerId(next)}
               >
                 {controllers
                   .filter((x) =>
@@ -634,7 +626,7 @@ export function EventServiceComposer({
                         x.resourceId}
                     </option>
                   ))}
-              </select>
+              </Select>
             </label>
           )}
           <span>

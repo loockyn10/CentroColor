@@ -39,6 +39,7 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       businessId: row.business_id,
       name: row.name as string,
       isActive: row.is_active as boolean,
+      deletedAt: (row.deleted_at as string | null | undefined) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } as EventType;
@@ -50,6 +51,7 @@ function decode(type: EventSyncType, row: Row): EventSyncEntity {
       description: row.description as string | null,
       defaultPriceCents: row.default_price_cents as number | null,
       isActive: row.is_active as boolean,
+      deletedAt: (row.deleted_at as string | null | undefined) ?? null,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     } as Resource;
@@ -108,7 +110,11 @@ function details(
 ): Record<string, unknown> {
   if (type === 'event_type') {
     const x = entity as EventType;
-    return { name: x.name, is_active: x.isActive };
+    return {
+      name: x.name,
+      is_active: x.isActive,
+      deleted_at: x.deletedAt ?? null,
+    };
   }
   if (type === 'resource') {
     const x = entity as Resource;
@@ -117,6 +123,7 @@ function details(
       description: x.description,
       default_price_cents: x.defaultPriceCents,
       is_active: x.isActive,
+      deleted_at: x.deletedAt ?? null,
     };
   }
   if (type === 'event') {

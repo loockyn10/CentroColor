@@ -888,3 +888,90 @@ button.price-family:active {
     box-shadow: var(--sh-lift);
   }
 }
+
+/* ───────── Filtros: wrap sin desborde (reemplaza reglas con ancho fijo) ───────── */
+.filter-bar > * {
+  min-width: 0;
+}
+.filter-bar__filters {
+  flex: 0 1 auto;
+}
+.filter-bar__filters > .filter-control {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+.filter-bar__end {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.filter-bar__end > .filter-control {
+  flex: 0 1 200px;
+  min-width: 0;
+}
+.filter-inline {
+  min-width: 0;
+  max-width: 100%;
+}
+.filter-inline input {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .filter-bar {
+    gap: var(--s-2);
+  }
+  .filter-bar__search {
+    flex: 1 1 100%;
+    max-width: none;
+  }
+  .filter-bar__filters,
+  .filter-bar__end {
+    flex: 1 1 100%;
+    margin-left: 0;
+    width: 100%;
+  }
+  /* Dos filtros por fila; un tercero baja a la fila siguiente. */
+  .filter-bar__filters > .filter-control,
+  .filter-bar__end > .filter-control {
+    flex: 1 1 calc(50% - var(--s-2));
+  }
+  .filter-bar__filters > .btn,
+  .filter-bar__end > .btn {
+    flex: 0 0 auto;
+  }
+}
+
+/* Agenda: barra de período sin desborde; el selector de fecha ocupa un ancho razonable. */
+.agenda-nav {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.agenda-period {
+  min-width: 0;
+}
+.agenda-period .cc-select {
+  width: 11.5rem;
+  max-width: 100%;
+}
+.agenda-bar__end > .filter-control {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .agenda-bar__end > .filter-control {
+    flex: 1 1 100%;
+  }
+}
+
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+/* El campo de búsqueda ocupa todo el ancho de su casilla del FilterBar. */
+.filter-bar__search > input,
+.filter-bar__search .search-field {
+  width: 100%;
+  max-width: none;
+}

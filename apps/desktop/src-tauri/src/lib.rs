@@ -378,6 +378,7 @@ pub fn run() {
         Migration { version: 17, description: "create_service_catalog", sql: include_str!("../migrations/0017_service_catalog.sql"), kind: MigrationKind::Up },
         Migration { version: 18, description: "create_event_services", sql: include_str!("../migrations/0018_event_services.sql"), kind: MigrationKind::Up },
         Migration { version: 19, description: "create_pricing_ux", sql: include_str!("../migrations/0019_pricing_ux.sql"), kind: MigrationKind::Up },
+        Migration { version: 20, description: "create_catalog_trash", sql: include_str!("../migrations/0020_catalog_trash.sql"), kind: MigrationKind::Up },
     ];
 
     tauri::Builder::default()

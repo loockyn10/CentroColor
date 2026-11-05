@@ -21,6 +21,7 @@ const moulding = (x: any): FrameMoulding => ({
   salePricePerMeterCents: x.sale_price_per_meter_cents,
   wastePercent: x.waste_percent,
   isActive: bool(x.is_active),
+  deletedAt: x.deleted_at ?? null,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
   code: x.code,
@@ -35,6 +36,7 @@ const material = (x: any): FrameMaterial => ({
   salePriceCents: x.sale_price_cents,
   wastePercent: x.waste_percent,
   isActive: bool(x.is_active),
+  deletedAt: x.deleted_at ?? null,
   createdAt: x.created_at,
   updatedAt: x.updated_at,
 });
@@ -68,7 +70,7 @@ export class SQLiteFramingRepository implements FramingRepository {
       await (
         await db()
       ).select<any[]>(
-        `SELECT * FROM frame_mouldings WHERE business_id=? ${all ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name`,
+        `SELECT * FROM frame_mouldings WHERE business_id=? AND deleted_at IS NULL ${all ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name`,
         [b],
       )
     ).map(moulding);
@@ -126,7 +128,7 @@ export class SQLiteFramingRepository implements FramingRepository {
       await (
         await db()
       ).select<any[]>(
-        `SELECT * FROM frame_materials WHERE business_id=? ${all ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name`,
+        `SELECT * FROM frame_materials WHERE business_id=? AND deleted_at IS NULL ${all ? '' : 'AND is_active=1'} ORDER BY is_active DESC,name`,
         [b],
       )
     ).map(material);

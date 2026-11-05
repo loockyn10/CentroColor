@@ -12,6 +12,9 @@ import {
   type SaleRepository,
   type InventoryRepository,
   stockWarnings,
+  trashItem,
+  type ProductListFilter,
+  type TrashRepository,
 } from '@centrocolor/application';
 import {
   cartTotal,
@@ -27,12 +30,17 @@ import {
 import {
   Button,
   Card,
+  DeleteAction,
   EmptyState,
   FilterBar,
+  FilterSelect,
   InlineMessage,
   PageHeader,
   Sheet,
   StatusBadge,
+  Select,
+  FilterDate,
+  dateUtils,
 } from '@centrocolor/ui';
 import { CatalogRow } from './configuration-ui';
 import { useBusinessContext } from './auth';
@@ -188,10 +196,7 @@ function ProductForm({
       </label>
       <label>
         Categoría
-        <select
-          value={categoryId}
-          onChange={(event) => setCategoryId(event.target.value)}
-        >
+        <Select value={categoryId} onChange={(next) => setCategoryId(next)}>
           <option value="">Sin categoría</option>
           {categories
             .filter(
@@ -202,7 +207,7 @@ function ProductForm({
                 {category.name}
               </option>
             ))}
-        </select>
+        </Select>
       </label>
       <label>
         <input
@@ -232,10 +237,13 @@ function ProductForm({
 
 export function ProductsPage({
   repository,
+  trashRepository,
   onMutation,
   refreshToken,
 }: {
   repository: ProductRepository;
+  /** Habilita «Eliminar» (Papelera) en productos y categorías. */
+  trashRepository?: TrashRepository;
   /** Se acepta por compatibilidad: la pantalla ya no muestra dónde se guardan los datos. */
   storage?: 'local' | 'cloud';
   onMutation?: () => void;
@@ -245,6 +253,11 @@ export function ProductsPage({
   const scanner = useScanCoordinator();
   const { alta } = useScanState();
   const [query, setQuery] = useState('');
+  // Filtros del listado: '' = todos; categoría 'none' = sin categoría.
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'active' | 'inactive'>(
+    '',
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [selected, setSelected] = useState<Product | null>(null);
@@ -262,8 +275,12 @@ export function ProductsPage({
     let live = true;
     const timer = setTimeout(
       () => {
+        const filter: ProductListFilter = {};
+        if (categoryFilter === 'none') filter.uncategorized = true;
+        else if (categoryFilter) filter.categoryId = categoryFilter;
+        if (statusFilter) filter.status = statusFilter;
         void Promise.all([
-          repository.list(businessId, query, 100),
+          repository.list(businessId, query, 100, filter),
           repository.listCategories(businessId),
         ])
           .then(([items, groups]) => {
@@ -282,7 +299,15 @@ export function ProductsPage({
       live = false;
       clearTimeout(timer);
     };
-  }, [repository, businessId, query, refresh, refreshToken]);
+  }, [
+    repository,
+    businessId,
+    query,
+    categoryFilter,
+    statusFilter,
+    refresh,
+    refreshToken,
+  ]);
 
   useEffect(() => {
     // Código desconocido escaneado en cualquier módulo: se abre el alta con el barcode capturado.
@@ -407,7 +432,7 @@ export function ProductsPage({
         <InlineMessage tone="error">{error}</InlineMessage>
       )}
       <FilterBar
-        label="Buscar productos"
+        label="Filtrar productos"
         search={
           <input
             type="search"
@@ -417,12 +442,50 @@ export function ProductsPage({
             placeholder="Nombre o código de barras"
           />
         }
-      />
+        dirty={query !== '' || categoryFilter !== '' || statusFilter !== ''}
+        onClear={() => {
+          setQuery('');
+          setCategoryFilter('');
+          setStatusFilter('');
+        }}
+      >
+        <FilterSelect
+          label="Categoría"
+          allLabel="Todas las categorías"
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          options={[
+            ...categories.map((category) => ({
+              value: category.id,
+              label: category.isActive
+                ? category.name
+                : `${category.name} (inactiva)`,
+            })),
+            { value: 'none', label: 'Sin categoría' },
+          ]}
+        />
+        <FilterSelect
+          label="Estado"
+          allLabel="Todos los estados"
+          value={statusFilter}
+          onChange={(value) =>
+            setStatusFilter(value as '' | 'active' | 'inactive')
+          }
+          options={[
+            { value: 'active', label: 'Activos' },
+            { value: 'inactive', label: 'Inactivos' },
+          ]}
+        />
+      </FilterBar>
       <Card className="card--flush">
         {products.length === 0 ? (
           <EmptyState
             icon="box"
-            title={query ? 'Sin resultados' : 'Todavía no hay productos'}
+            title={
+              query || categoryFilter || statusFilter
+                ? 'Sin resultados'
+                : 'Todavía no hay productos'
+            }
           />
         ) : (
           <div className="rows catalog-rows">
@@ -492,15 +555,37 @@ export function ProductsPage({
             {mode === 'edit' && selected && (
               <section className="drawer-section">
                 <h3>Estado</h3>
-                <Button
-                  variant={selected.isActive ? 'danger' : 'secondary'}
-                  disabled={busy}
-                  onClick={() => void toggle(selected)}
-                >
-                  {selected.isActive
-                    ? 'Desactivar producto'
-                    : 'Reactivar producto'}
-                </Button>
+                <div className="drawer-actions">
+                  <Button
+                    variant={selected.isActive ? 'danger' : 'secondary'}
+                    disabled={busy}
+                    onClick={() => void toggle(selected)}
+                  >
+                    {selected.isActive
+                      ? 'Desactivar producto'
+                      : 'Reactivar producto'}
+                  </Button>
+                  {trashRepository && (
+                    <DeleteAction
+                      label="Eliminar producto"
+                      what="este producto"
+                      listName="Productos"
+                      note="Las ventas anteriores siguen mostrándolo."
+                      onDelete={async () => {
+                        await trashItem(
+                          trashRepository,
+                          businessId,
+                          'product',
+                          selected.id,
+                        );
+                        setMode('list');
+                        setSelected(null);
+                        setRefresh((value) => value + 1);
+                        onMutation?.();
+                      }}
+                    />
+                  )}
+                </div>
               </section>
             )}
           </>
@@ -589,6 +674,28 @@ export function ProductsPage({
                 >
                   {category.isActive ? 'Desactivar' : 'Reactivar'}
                 </Button>
+                {trashRepository && (
+                  <DeleteAction
+                    label="Eliminar"
+                    what="esta categoría"
+                    listName="Categorías"
+                    gender="f"
+                    size="sm"
+                    variant="ghost"
+                    note="Sus productos quedan sin categoría."
+                    onDelete={async () => {
+                      await trashItem(
+                        trashRepository,
+                        businessId,
+                        'product_category',
+                        category.id,
+                      );
+                      if (categoryFilter === category.id) setCategoryFilter('');
+                      setRefresh((value) => value + 1);
+                      onMutation?.();
+                    }}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -1097,17 +1204,17 @@ export function NewSalePage({
             ))}
             <label>
               Forma de pago
-              <select
+              <Select
                 autoFocus
                 value={payment}
-                onChange={(event) => setPayment(event.target.value)}
+                onChange={(next) => setPayment(next)}
               >
                 {payments.map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
             {error && <InlineMessage tone="error">{error}</InlineMessage>}
             <div className="pos-actions">
@@ -1156,6 +1263,10 @@ export function SalesPage({
     items: SaleItem[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Filtros del listado: se aplican sobre las últimas 100 ventas cargadas.
+  const [method, setMethod] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   useEffect(() => {
     let live = true;
     void repository
@@ -1178,6 +1289,13 @@ export function SalesPage({
       setError(message(failure));
     }
   }
+  const shownSales = sales.filter((sale) => {
+    if (method && sale.paymentMethod !== method) return false;
+    const day = dateUtils.todayKey(new Date(sale.createdAt));
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  });
   return (
     <>
       <PageHeader
@@ -1186,17 +1304,12 @@ export function SalesPage({
             ? `Venta ${detail.sale.id.slice(0, 8).toUpperCase()}`
             : 'Ventas'
         }
+        onBack={detail ? () => setDetail(null) : undefined}
+        backLabel="Ventas"
       />
       {error && <InlineMessage tone="error">{error}</InlineMessage>}
       {detail ? (
         <Card className="pos-history-detail">
-          <button
-            className="customer-back"
-            type="button"
-            onClick={() => setDetail(null)}
-          >
-            ← Volver a ventas
-          </button>
           <p>
             {new Date(detail.sale.createdAt).toLocaleString('es-AR')} ·{' '}
             {
@@ -1227,40 +1340,82 @@ export function SalesPage({
           </div>
         </Card>
       ) : (
-        <Card className="pos-list-card">
-          <div className="pos-sale-head">
-            <span>Fecha</span>
-            <span>Venta</span>
-            <span>Total</span>
-            <span>Pago</span>
-            <span>Usuario</span>
-            <span>Estado</span>
-          </div>
-          {sales.length === 0 && (
-            <EmptyState icon="receipt" title="Todavía no hay ventas" />
-          )}
-          {sales.map((sale) => (
-            <button
-              className="pos-sale-row"
-              type="button"
-              key={sale.id}
-              onClick={() => void open(sale.id)}
-            >
-              <span>{new Date(sale.createdAt).toLocaleString('es-AR')}</span>
-              <strong>{sale.id.slice(0, 8).toUpperCase()}</strong>
-              <span>{formatCents(sale.totalCents)}</span>
-              <span>
-                {payments.find(([value]) => value === sale.paymentMethod)?.[1]}
-              </span>
-              <span>
-                {sale.createdBy === context.userId
-                  ? context.profile.displayName || context.userId.slice(0, 8)
-                  : sale.createdBy.slice(0, 8)}
-              </span>
-              <span>Completada</span>
-            </button>
-          ))}
-        </Card>
+        <>
+          <FilterBar
+            label="Filtrar ventas"
+            dirty={method !== '' || from !== '' || to !== ''}
+            onClear={() => {
+              setMethod('');
+              setFrom('');
+              setTo('');
+            }}
+          >
+            <FilterSelect
+              label="Pago"
+              allLabel="Todas las formas de pago"
+              value={method}
+              onChange={setMethod}
+              options={payments.map(([value, label]) => ({ value, label }))}
+            />
+            <FilterDate
+              label="Desde"
+              value={from}
+              max={to || undefined}
+              onChange={setFrom}
+            />
+            <FilterDate
+              label="Hasta"
+              value={to}
+              min={from || undefined}
+              onChange={setTo}
+            />
+          </FilterBar>
+          <Card className="pos-list-card">
+            <div className="pos-sale-head">
+              <span>Fecha</span>
+              <span>Venta</span>
+              <span>Total</span>
+              <span>Pago</span>
+              <span>Usuario</span>
+              <span>Estado</span>
+            </div>
+            {shownSales.length === 0 && (
+              <EmptyState
+                icon="receipt"
+                title={
+                  sales.length === 0
+                    ? 'Todavía no hay ventas'
+                    : 'No hay ventas con esos filtros'
+                }
+              />
+            )}
+            {shownSales.map((sale) => (
+              <button
+                className="pos-sale-row"
+                type="button"
+                key={sale.id}
+                onClick={() => void open(sale.id)}
+              >
+                <span>{new Date(sale.createdAt).toLocaleString('es-AR')}</span>
+                <strong>{sale.id.slice(0, 8).toUpperCase()}</strong>
+                <span>{formatCents(sale.totalCents)}</span>
+                <span>
+                  {
+                    payments.find(
+                      ([value]) => value === sale.paymentMethod,
+                    )?.[1]
+                  }
+                </span>
+                <span>
+                  {sale.createdBy === context.userId
+                    ? context.profile.displayName || context.userId.slice(0, 8)
+                    : sale.createdBy.slice(0, 8)}
+                </span>
+                <span>Completada</span>
+              </button>
+            ))}
+          </Card>
+        </>
       )}
     </>
   );

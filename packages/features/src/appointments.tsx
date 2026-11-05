@@ -10,6 +10,8 @@ import {
   type AppointmentRepository,
   type AppointmentSummary,
   type CustomerRepository,
+  trashItem,
+  type TrashRepository,
 } from '@centrocolor/application';
 import {
   appointmentStatuses,
@@ -24,11 +26,16 @@ import {
   ConfirmDialog,
   EmptyState,
   FilterBar,
+  FilterDate,
+  FilterSelect,
   FormDrawer,
   InlineMessage,
   PageHeader,
   StatusBadge,
   takeCreateIntent,
+  Select,
+  DateTimePicker,
+  DeleteAction,
 } from '@centrocolor/ui';
 import { AgendaBar, CustomerField } from './editor-parts';
 import { CatalogRow, CatalogSection } from './configuration-ui';
@@ -145,9 +152,14 @@ function AppointmentEditor({
     let live = true;
     void repository
       .listTypes(context.businessId, true)
-      .then((rows) => {
-        if (live)
-          setTypes(rows.filter((row) => row.isActive || row.id === typeId));
+      .then(async (rows) => {
+        const visible = rows.filter((row) => row.isActive || row.id === typeId);
+        // Un tipo enviado a la Papelera deja de ofrecerse, pero el turno que ya lo usa lo conserva.
+        if (typeId && !visible.some((row) => row.id === typeId)) {
+          const current = await repository.getType(context.businessId, typeId);
+          if (current) visible.push(current);
+        }
+        if (live) setTypes(visible);
       })
       .catch((failure: unknown) => live && setError(errorText(failure)));
     return () => {
@@ -342,17 +354,15 @@ function AppointmentEditor({
           </div>
           <label className="span-5">
             Tipo de turno
-            <select
-              value={typeId}
-              onChange={(event) => chooseType(event.target.value)}
-            >
+            <Select value={typeId} onChange={(next) => chooseType(next)}>
               <option value="">Sin tipo</option>
               {types.map((type) => (
                 <option key={type.id} value={type.id}>
                   {type.name} · {type.defaultDurationMinutes} min
+                  {type.deletedAt ? ' (eliminado)' : ''}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           <label className="span-6">
             Título *
@@ -364,16 +374,15 @@ function AppointmentEditor({
           </label>
           <label className="span-6 half">
             Inicio *
-            <input
+            <DateTimePicker
               required
-              type="datetime-local"
               value={startsAt}
-              onChange={(event) => {
+              onChange={(next) => {
                 const oldStart = new Date(startsAt);
                 const oldEnd = new Date(endsAt);
-                const nextStart = new Date(event.target.value);
+                const nextStart = new Date(next);
                 const duration = oldEnd.getTime() - oldStart.getTime();
-                setStartsAt(event.target.value);
+                setStartsAt(next);
                 if (duration > 0 && !Number.isNaN(nextStart.valueOf()))
                   setEndsAt(
                     localInput(new Date(nextStart.getTime() + duration)),
@@ -384,12 +393,11 @@ function AppointmentEditor({
           </label>
           <label className="span-6 half">
             Fin *
-            <input
+            <DateTimePicker
               required
-              type="datetime-local"
               value={endsAt}
-              onChange={(event) => {
-                setEndsAt(event.target.value);
+              onChange={(next) => {
+                setEndsAt(next);
                 setConfirmOverlap(false);
               }}
             />
@@ -560,24 +568,18 @@ export function CalendarPage({
         onToday={() => setDate(startOfDay(new Date()))}
         onNext={() => setDate(addDays(date, view === 'day' ? 1 : 7))}
         end={
-          <select
-            aria-label="Filtrar por estado"
-            value={status ?? 'all'}
-            onChange={(event) =>
-              setStatus(
-                event.target.value === 'all'
-                  ? null
-                  : (event.target.value as AppointmentStatus),
-              )
+          <FilterSelect
+            label="Estado"
+            allLabel="Todos los estados"
+            value={status ?? ''}
+            onChange={(next) =>
+              setStatus(next === '' ? null : (next as AppointmentStatus))
             }
-          >
-            <option value="all">Todos los estados</option>
-            {appointmentStatuses.map((value) => (
-              <option key={value} value={value}>
-                {statusLabels[value]}
-              </option>
-            ))}
-          </select>
+            options={appointmentStatuses.map((value) => ({
+              value,
+              label: statusLabels[value],
+            }))}
+          />
         }
       />
       {error && <InlineMessage tone="error">{error}</InlineMessage>}
@@ -664,8 +666,10 @@ export function AppointmentsPage({
   const today = startOfDay(new Date());
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<AppointmentStatus | null>(null);
-  const [fromDate, setFromDate] = useState(dateKey(addDays(today, -30)));
-  const [toDate, setToDate] = useState(dateKey(addDays(today, 90)));
+  const defaultFrom = dateKey(addDays(today, -30));
+  const defaultTo = dateKey(addDays(today, 90));
+  const [fromDate, setFromDate] = useState(defaultFrom);
+  const [toDate, setToDate] = useState(defaultTo);
   const [rows, setRows] = useState<AppointmentSummary[]>([]);
   const [selected, setSelected] = useState<Appointment | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -737,45 +741,44 @@ export function AppointmentsPage({
             placeholder="Cliente o título"
           />
         }
-        end={
-          <>
-            <label className="filter-inline">
-              Desde
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(event) => setFromDate(event.target.value)}
-              />
-            </label>
-            <label className="filter-inline">
-              Hasta
-              <input
-                type="date"
-                value={toDate}
-                onChange={(event) => setToDate(event.target.value)}
-              />
-            </label>
-            <select
-              aria-label="Filtrar por estado"
-              value={status ?? 'all'}
-              onChange={(event) =>
-                setStatus(
-                  event.target.value === 'all'
-                    ? null
-                    : (event.target.value as AppointmentStatus),
-                )
-              }
-            >
-              <option value="all">Todos los estados</option>
-              {appointmentStatuses.map((value) => (
-                <option key={value} value={value}>
-                  {statusLabels[value]}
-                </option>
-              ))}
-            </select>
-          </>
+        dirty={
+          query !== '' ||
+          status !== null ||
+          fromDate !== defaultFrom ||
+          toDate !== defaultTo
         }
-      />
+        onClear={() => {
+          setQuery('');
+          setStatus(null);
+          setFromDate(defaultFrom);
+          setToDate(defaultTo);
+        }}
+      >
+        <FilterDate
+          label="Desde"
+          value={fromDate}
+          max={toDate || undefined}
+          onChange={(next) => setFromDate(next || defaultFrom)}
+        />
+        <FilterDate
+          label="Hasta"
+          value={toDate}
+          min={fromDate || undefined}
+          onChange={(next) => setToDate(next || defaultTo)}
+        />
+        <FilterSelect
+          label="Estado"
+          allLabel="Todos los estados"
+          value={status ?? ''}
+          onChange={(next) =>
+            setStatus(next === '' ? null : (next as AppointmentStatus))
+          }
+          options={appointmentStatuses.map((value) => ({
+            value,
+            label: statusLabels[value],
+          }))}
+        />
+      </FilterBar>
       {error && <InlineMessage tone="error">{error}</InlineMessage>}
       <Card className="appointment-list-card">
         {rows.length === 0 ? (
@@ -821,11 +824,14 @@ export function AppointmentsPage({
 
 export function AppointmentTypesPage({
   repository,
+  trashRepository,
   refreshToken,
   onMutation,
   embedded = false,
 }: {
   repository: AppointmentRepository;
+  /** Habilita «Eliminar» (Papelera). */
+  trashRepository?: TrashRepository;
   refreshToken?: number;
   onMutation?: () => void;
   embedded?: boolean;
@@ -959,12 +965,33 @@ export function AppointmentTypesPage({
         {drawer && drawer !== 'new' && (
           <section className="drawer-section">
             <h3>Estado</h3>
-            <Button
-              variant={drawer.isActive ? 'danger' : 'secondary'}
-              onClick={() => void toggle(drawer)}
-            >
-              {drawer.isActive ? 'Desactivar tipo' : 'Activar tipo'}
-            </Button>
+            <div className="drawer-actions">
+              <Button
+                variant={drawer.isActive ? 'danger' : 'secondary'}
+                onClick={() => void toggle(drawer)}
+              >
+                {drawer.isActive ? 'Desactivar tipo' : 'Activar tipo'}
+              </Button>
+              {trashRepository && (
+                <DeleteAction
+                  label="Eliminar tipo"
+                  what="este tipo de turno"
+                  listName="Tipos de turno"
+                  note="Los turnos anteriores conservan su tipo."
+                  onDelete={async () => {
+                    await trashItem(
+                      trashRepository,
+                      context.businessId,
+                      'appointment_type',
+                      drawer.id,
+                    );
+                    setDrawer(null);
+                    setRefresh((value) => value + 1);
+                    onMutation?.();
+                  }}
+                />
+              )}
+            </div>
           </section>
         )}
       </FormDrawer>
