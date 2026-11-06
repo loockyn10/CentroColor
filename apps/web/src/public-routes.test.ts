@@ -4,6 +4,7 @@ import { PanelShell } from '@centrocolor/features';
 import { PhotoUploadPortal } from './photo-upload-portal';
 import { PrintOrderPortal } from './public-order/print-order-portal';
 import { OrderTracking } from './public-order/order-tracking';
+import { PrivacyPolicy } from './public-order/privacy';
 import { ReceivedRedirect } from './public-order/received-redirect';
 
 describe('rutas públicas: sin login y sin shell administrativo', () => {
@@ -14,6 +15,11 @@ describe('rutas públicas: sin login y sin shell administrativo', () => {
     expect(publicRoute('/pedido/abc123')?.type).toBe(OrderTracking);
     expect(publicRoute('/pedido/abc123')?.props.token).toBe('abc123');
     expect(publicRoute('/enviar/tok-1')?.type).toBe(PhotoUploadPortal);
+  });
+
+  it('/privacidad es pública (la pide Google para el consentimiento OAuth)', () => {
+    expect(publicRoute('/privacidad')?.type).toBe(PrivacyPolicy);
+    expect(publicRoute('/privacidad/')?.type).toBe(PrivacyPolicy);
   });
 
   it('el escáner global vive sólo en PanelShell: ninguna ruta pública lo monta', () => {

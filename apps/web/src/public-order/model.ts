@@ -280,3 +280,20 @@ export const loadRememberedOrder = (): RememberedOrder | null =>
       ? (value as RememberedOrder)
       : null;
   }, null);
+
+/** What reached storage after a round of uploads (drives the "partial" screen). */
+export function uploadOutcome(
+  entries: { id: string }[],
+  progress: Record<string, { status: string } | undefined>,
+) {
+  const done = entries.filter((x) => progress[x.id]?.status === 'done').length;
+  const failed = entries.length - done;
+  return {
+    done,
+    failed,
+    /** Nothing arrived: the order must never be confirmed (it would be empty). */
+    none: done === 0,
+    /** Only when at least one photo arrived may the customer send the order without the rest. */
+    canSendWithout: done > 0 && failed > 0,
+  };
+}

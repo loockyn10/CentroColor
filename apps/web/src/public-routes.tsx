@@ -1,6 +1,7 @@
 import { PhotoUploadPortal } from './photo-upload-portal';
 import { PrintOrderPortal } from './public-order/print-order-portal';
 import { OrderTracking } from './public-order/order-tracking';
+import { PrivacyPolicy } from './public-order/privacy';
 import { ReceivedRedirect } from './public-order/received-redirect';
 
 /**
@@ -12,6 +13,7 @@ export function publicRoute(pathname: string) {
   if (upload)
     return <PhotoUploadPortal token={decodeURIComponent(upload[1]!)} />;
   if (/^\/imprimir\/?$/.test(pathname)) return <PrintOrderPortal />;
+  if (/^\/privacidad\/?$/.test(pathname)) return <PrivacyPolicy />;
   if (/^\/imprimir\/recibido\/?$/.test(pathname)) return <ReceivedRedirect />;
   const tracking = pathname.match(/^\/pedido\/([^/]+)\/?$/);
   if (tracking)

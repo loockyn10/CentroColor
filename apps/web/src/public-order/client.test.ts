@@ -106,6 +106,57 @@ describe('subida de una foto', () => {
   });
 });
 
+describe('el servicio de carga no responde (Drive sin conexión)', () => {
+  const unavailable = () =>
+    Object.assign(
+      new PublicOrderError(
+        'El servicio de carga no está disponible por el momento.',
+        'storage_unavailable',
+      ),
+    );
+
+  it('cada foto informa el error comprensible del servidor y la cola devuelve ambas como fallidas', async () => {
+    const deps: UploadDeps = {
+      call: vi
+        .fn()
+        .mockRejectedValue(unavailable()) as unknown as UploadDeps['call'],
+      uploadChunks: vi.fn() as unknown as UploadDeps['uploadChunks'],
+    };
+    const failures = await runPool(['a', 'b'], 2, async (id) => {
+      await uploadPhoto('tok', { ...target, id }, () => undefined, {
+        deps,
+        attempts: 2,
+      });
+    });
+    expect(failures).toHaveLength(2);
+    expect((failures[0]!.error as PublicOrderError).code).toBe(
+      'storage_unavailable',
+    );
+    expect((failures[0]!.error as Error).message).toContain(
+      'no está disponible',
+    );
+    // Nunca se llegó a enviar bytes a Drive.
+    expect(deps.uploadChunks).not.toHaveBeenCalled();
+  });
+
+  it('un reintento posterior puede tener éxito con la misma foto', async () => {
+    const call = vi
+      .fn()
+      .mockRejectedValueOnce(unavailable())
+      .mockResolvedValueOnce(session(1))
+      .mockResolvedValueOnce({ ok: true });
+    const deps: UploadDeps = {
+      call: call as unknown as UploadDeps['call'],
+      uploadChunks: vi
+        .fn()
+        .mockResolvedValue(undefined) as unknown as UploadDeps['uploadChunks'],
+    };
+    await expect(
+      uploadPhoto('tok', target, () => undefined, { deps, attempts: 2 }),
+    ).resolves.toBeUndefined();
+  });
+});
+
 describe('cola de subidas', () => {
   it('nunca supera el límite de concurrencia y devuelve los fallos sin rechazar', async () => {
     let active = 0;

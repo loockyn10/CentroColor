@@ -19,6 +19,7 @@ import {
   trackingHeadline,
   trackingStepIndex,
   trackingSteps,
+  uploadOutcome,
   type CatalogService,
   type CustomerForm,
   type PhotoEntry,
@@ -275,5 +276,38 @@ describe('precio por copia del tramo aplicado', () => {
     expect(
       deriveLines(catalog, ['s10'], [entry('a', 's10', 2)])[0]!.unitPriceCents,
     ).toBe(50000);
+  });
+});
+
+describe('resultado de las subidas', () => {
+  const ids = [{ id: 'a' }, { id: 'b' }];
+
+  it('si ninguna foto llegó no se puede enviar el pedido sin ellas', () => {
+    const out = uploadOutcome(ids, {
+      a: { status: 'failed' },
+      b: { status: 'failed' },
+    });
+    expect(out).toMatchObject({ done: 0, failed: 2, none: true });
+    expect(out.canSendWithout).toBe(false);
+  });
+
+  it('con fotos pendientes de subir tampoco cuenta como enviable', () => {
+    expect(uploadOutcome(ids, {}).canSendWithout).toBe(false);
+  });
+
+  it('con al menos una recibida y otra fallida se puede enviar sin las fallidas', () => {
+    const out = uploadOutcome(ids, {
+      a: { status: 'done' },
+      b: { status: 'failed' },
+    });
+    expect(out).toMatchObject({ done: 1, failed: 1, none: false });
+    expect(out.canSendWithout).toBe(true);
+  });
+
+  it('si llegaron todas no hay nada que omitir', () => {
+    expect(
+      uploadOutcome(ids, { a: { status: 'done' }, b: { status: 'done' } })
+        .canSendWithout,
+    ).toBe(false);
   });
 });

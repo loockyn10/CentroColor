@@ -74,6 +74,9 @@ export function PublicShell({
         <div className="pt-foot-in">
           <Logo size={56} decorative />
           <strong>{name} · Revelado e impresión de fotos</strong>
+          <a className="pt-foot-link" href="/privacidad">
+            Política de privacidad
+          </a>
         </div>
       </footer>
     </div>

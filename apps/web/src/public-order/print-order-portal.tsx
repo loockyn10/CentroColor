@@ -23,6 +23,7 @@ import {
   MAX_FILES_PER_ORDER,
   missingForConfirm,
   orderTotal,
+  uploadOutcome,
   paymentNote,
   BANK_ALIAS,
   PRINT_AFTER_PAYMENT,
@@ -272,11 +273,14 @@ export function PrintOrderPortal() {
   }
 
   async function skipFailed() {
-    const kept = entries.filter((x) => progress[x.id]?.status === 'done');
-    if (!kept.length) {
-      setNotice('Ninguna foto llegó. Reintentá o volvé a empezar.');
+    // Never confirm an empty order: without at least one received photo there is nothing to send.
+    if (!uploadOutcome(entries, progress).canSendWithout) {
+      setNotice(
+        'Ninguna foto llegó todavía, así que no se puede enviar el pedido. Reintentá.',
+      );
       return;
     }
+    const kept = entries.filter((x) => progress[x.id]?.status === 'done');
     setEntries(kept);
     setPhase('sending');
     try {
@@ -431,8 +435,8 @@ export function PrintOrderPortal() {
     );
 
   if (phase === 'sending' || phase === 'partial') {
-    const states = entries.map((x) => progress[x.id]?.status ?? 'waiting');
-    const done = states.filter((x) => x === 'done').length;
+    const outcome = uploadOutcome(entries, progress);
+    const done = outcome.done;
     const failed = entries.filter((x) => progress[x.id]?.status === 'failed');
     const percent = entries.length
       ? Math.round(
@@ -465,10 +469,15 @@ export function PrintOrderPortal() {
               </>
             ) : (
               <>
-                <h2>Algunas fotos no se pudieron enviar</h2>
+                <h2>
+                  {outcome.none
+                    ? 'No se pudo enviar ninguna foto'
+                    : 'Algunas fotos no se pudieron enviar'}
+                </h2>
                 <p>
-                  Llegaron {done} de {entries.length}. Podés reintentar las que
-                  faltan o enviar el pedido sólo con las que llegaron.
+                  {outcome.none
+                    ? 'Tu pedido todavía no se confirmó y tus fotos siguen acá. Reintentá en unos minutos; si el problema sigue, avisanos por WhatsApp.'
+                    : `Llegaron ${done} de ${entries.length}. Podés reintentar las que faltan o enviar el pedido sólo con las que llegaron.`}
                 </p>
               </>
             )}
@@ -500,9 +509,15 @@ export function PrintOrderPortal() {
                 <Button variant="primary" onClick={() => void retryFailed()}>
                   Reintentar ({failed.length})
                 </Button>
-                <Button onClick={() => void skipFailed()}>
-                  Enviar sin esas fotos
-                </Button>
+                {outcome.canSendWithout ? (
+                  <Button onClick={() => void skipFailed()}>
+                    Enviar sin esas fotos
+                  </Button>
+                ) : (
+                  <Button onClick={() => setPhase('edit')}>
+                    Volver a mi pedido
+                  </Button>
+                )}
               </div>
             )}
           </section>

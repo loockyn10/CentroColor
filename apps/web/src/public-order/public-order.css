@@ -922,8 +922,9 @@
   margin: 0 auto;
   padding: 26px var(--gutter) 150px;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 8px 16px;
 }
 @media (min-width: 1000px) {
   .pt-foot-in {
@@ -1306,4 +1307,40 @@
   min-height: 32px;
   padding: 0 6px;
   text-decoration: underline;
+}
+
+/* Texto legal (/privacidad): columna legible, jerarquía clara. */
+.po-prose {
+  max-width: 760px;
+  margin-inline: auto;
+  gap: 10px;
+  line-height: 1.6;
+}
+.po-prose h1 {
+  margin: 0;
+}
+.po-prose h2 {
+  margin: 14px 0 0;
+  font-size: 1.15rem;
+}
+.po-prose p,
+.po-prose ul {
+  margin: 0;
+}
+.po-prose ul {
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 4px;
+}
+.po-prose-date {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+.pt-foot-link {
+  color: inherit;
+  text-decoration: underline;
+  font-size: var(--fs-sm);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
 }
