@@ -17,6 +17,11 @@ export type CatalogService = {
   heightMm: number | null;
   unitPriceCents: number;
   variantId?: string;
+  /** Size and paper as the catalog separates them (absent in an older server: see order-blocks). */
+  photoServiceId?: string;
+  sizeName?: string;
+  paper?: 'glossy' | 'matte';
+  paperLabel?: string;
   tiers?: Array<{
     minQuantity: number;
     maxQuantity: number | null;
@@ -109,8 +114,10 @@ export function deriveLines(
   entries: PhotoEntry[],
 ): OrderLine[] {
   const lines: OrderLine[] = [];
-  for (const service of catalog) {
-    if (!selectedIds.includes(service.id)) continue;
+  // In the order the customer added the blocks, not the catalog's.
+  for (const id of selectedIds) {
+    const service = catalog.find((x) => x.id === id);
+    if (!service) continue;
     const own = entries.filter((x) => x.serviceId === service.id);
     const copies = own.reduce((sum, x) => sum + x.copies, 0);
     const tier = service.tiers?.find(

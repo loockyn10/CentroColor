@@ -362,7 +362,9 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
 export type FakeDriveOptions = {
   accessError?: ApiError;
   getFileOverride?: (file: FileRow) => DriveFileMeta | ApiError;
-  failOn?: Partial<Record<'init' | 'manifest' | 'folders', ApiError>>;
+  failOn?: Partial<
+    Record<'init' | 'manifest' | 'folders' | 'rename', ApiError>
+  >;
 };
 
 export function createFakeDrive(
@@ -381,6 +383,7 @@ export function createFakeDrive(
     }[],
     manifests: [] as { parent: string; jobId: string; text: string }[],
     trashed: [] as string[],
+    renamed: [] as { id: string; name: string }[],
   };
   let ids = 0;
   const drive: DriveGateway = {
@@ -452,6 +455,10 @@ export function createFakeDrive(
     },
     async trashFile(_token, id) {
       record.trashed.push(id);
+    },
+    async renameFile(_token, id, name) {
+      if (options.failOn?.rename) throw options.failOn.rename;
+      record.renamed.push({ id, name });
     },
     async putManifest(_token, parent, jobId, text) {
       if (options.failOn?.manifest) throw options.failOn.manifest;

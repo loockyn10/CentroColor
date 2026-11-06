@@ -1,5 +1,13 @@
 # Handoff
 
+## `/imprimir`: cascada de tamaño/papel y nombres con copias (06/11/2026)
+
+Detalle en `docs/CURRENT_STATE.md`; decisión 106. Sin SQL remoto, sin commit ni push, **sin migraciones**.
+
+**Publicar (en este orden):** (1) redesplegar estas Edge Functions, una por una (comandos en `docs/PUBLIC_ORDERS_SETUP.md`). **Obligatorias:** `public-photo-order-submit` (renombrado, `uploadIds`) y `photo-upload-session` (actualiza las copias en un reintento). **Recomendada:** `public-photo-catalog` (envía tamaño y papel por separado; sin ella la Web los deduce del nombre y funciona igual). **No requieren redeploy:** `photo-upload-finalize`, `public-photo-order-start`, `public-photo-order-track`, `photo-upload-context`, `photo-upload-submit`, `photo-file-admin`, WhatsApp y OAuth. (2) Publicar la Web (Vercel). Funciones primero: una Web vieja contra funciones nuevas sigue funcionando (sin `uploadIds` no se retira nada y la numeración sale de la creación); una Web nueva contra funciones viejas sólo no renombra las fotos ni actualiza copias cambiadas en un reintento.
+
+**Prueba de humo real (pendiente):** `/imprimir` en el celular: 10×15 Brillo con 3 fotos (copias 3, 1, 5) y «Agregar otro» 13×18 Mate con 2; confirmar. En Drive, `Para imprimir/<tamaño · papel · Publico>/` debe tener `001_3copias.jpg`, `002_1copia.jpg`, `003_5copias.jpg` y en la otra carpeta su propia numeración desde 001, más `PEDIDO.txt` con los nombres. Verificar también que la cuenta de Drive conectada puede renombrar (no se probó contra Google).
+
 ## Corrección `/imprimir`: varios tamaños (06/11/2026)
 
 Detalle y causa raíz en `docs/CURRENT_STATE.md`; decisión 105 en `docs/DECISIONS.md`. Sin SQL remoto, sin commit ni push, **sin migraciones nuevas**.

@@ -14,13 +14,14 @@ import {
   orderRuleToApiError,
   parseStartPayload,
   parseSubmitPayload,
+  planFinalNames,
   priceOrder,
   type PublicOrderStartPayload,
   type PublicOrderSubmitPayload,
   type PublicOrderTokenPayload,
 } from './public-order-plan.ts';
 import { OrderRuleError, type PublicOrderStore } from './public-order-store.ts';
-import type { PhotoIntakeStore } from './store.ts';
+import type { FileRow, PhotoIntakeStore } from './store.ts';
 import {
   destinationId,
   randomToken,
@@ -73,6 +74,94 @@ async function guardRule<T>(work: () => Promise<T>) {
   }
 }
 
+/** Retires the uploaded files of a draft that the order no longer lists; returns the rest. */
+async function retireStaleUploads(
+  deps: PublicOrderDeps,
+  businessId: string,
+  jobId: string,
+  files: FileRow[],
+  keep: string[],
+) {
+  const wanted = new Set(keep);
+  const stale = files.filter((file) => !wanted.has(file.id));
+  if (!stale.length) return files;
+  const retired: FileRow[] = [];
+  for (const file of stale)
+    if (
+      await deps.intake.transitionFile(
+        businessId,
+        jobId,
+        file.id,
+        ['uploaded'],
+        'removed',
+      )
+    )
+      retired.push(file);
+  try {
+    const { token } = await deps.drive.access(businessId);
+    for (const file of retired)
+      await deps.drive.trashFile(token, file.drive_file_id).catch(() => {
+        /* the order is already correct; a leftover copy in Drive is only clutter */
+      });
+  } catch {
+    /* Drive busy: same */
+  }
+  const gone = new Set(stale.map((file) => file.id));
+  return files.filter((file) => !gone.has(file.id));
+}
+
+/**
+ * Gives every lab photo its final name (`001_3copias.jpg`) in Drive and in the database.
+ * Idempotent and safe to repeat after a failure: names come from a deterministic plan and a
+ * file already carrying its name is skipped, so a retry converges on the same folder content.
+ */
+async function nameFilesForPrinting(
+  deps: PublicOrderDeps,
+  token: string,
+  files: FileRow[],
+  ranking: string[] | null,
+) {
+  const byItem = new Map<string, FileRow[]>();
+  for (const file of files)
+    if (file.workflow_route === 'lab' && file.photo_job_item_id)
+      byItem.set(file.photo_job_item_id, [
+        ...(byItem.get(file.photo_job_item_id) ?? []),
+        file,
+      ]);
+  const plan = new Map<string, string>();
+  for (const group of byItem.values())
+    for (const [id, name] of planFinalNames(group, ranking)) plan.set(id, name);
+  const pending = files.filter(
+    (file) => plan.has(file.id) && plan.get(file.id) !== file.stored_filename,
+  );
+  let next = 0;
+  const failures: unknown[] = [];
+  const worker = async () => {
+    while (next < pending.length) {
+      const file = pending[next++]!;
+      const name = plan.get(file.id)!;
+      try {
+        await deps.drive.renameFile(token, file.drive_file_id, name);
+        await deps.intake.transitionFile(
+          file.business_id,
+          file.photo_job_id,
+          file.id,
+          ['uploaded'],
+          'uploaded',
+          { stored_filename: name },
+        );
+      } catch (cause) {
+        failures.push(cause);
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(4, pending.length) }, worker),
+  );
+  if (failures.length) throw failures[0];
+  return plan;
+}
+
 /** The price list. Anonymous and read-only; it comes from the administrative catalog. */
 export function handlePublicCatalog(request: Request, deps: PublicOrderDeps) {
   return run(request, deps, 'public_photo_catalog', async () => {
@@ -86,6 +175,16 @@ export function handlePublicCatalog(request: Request, deps: PublicOrderDeps) {
       services: services.map((x) => ({
         id: x.id,
         name: x.name,
+        // Size and paper arrive separately so the page can offer them one after the other. The
+        // paper label is the one the SQL appends to `name` (the size is what precedes it).
+        ...(x.photo_service_id && x.paper
+          ? {
+              photoServiceId: x.photo_service_id,
+              paper: x.paper,
+              paperLabel: x.paper === 'matte' ? 'Mate' : 'Brillo',
+              sizeName: x.name.replace(/ · (Mate|Brillo)$/, ''),
+            }
+          : {}),
         description: x.description,
         widthMm: x.width_mm,
         heightMm: x.height_mm,
@@ -271,11 +370,21 @@ export function handlePublicOrderSubmit(
           ])) > 0
         )
           throw orderRuleToApiError('uploads_pending');
-        const files = await deps.intake.listFiles(
+        let files = await deps.intake.listFiles(
           link.business_id,
           link.photo_job_id,
           'uploaded',
         );
+        // Photos the customer removed (or moved to another size) after sending them must not be
+        // printed nor billed: only what the browser lists is part of the order.
+        if (submit.uploadIds)
+          files = await retireStaleUploads(
+            deps,
+            link.business_id,
+            link.photo_job_id,
+            files,
+            submit.uploadIds,
+          );
         if (!files.length) throw orderRuleToApiError('no_files');
         // Never confirm an order as complete when a size lost photos: the database would
         // otherwise drop the empty size and bill only what arrived.
@@ -337,7 +446,21 @@ export function handlePublicOrderSubmit(
             quantity: copies.get(item.id) ?? item.quantity,
           })),
         };
-        const { text } = buildManifest(reconciled, files);
+        // The laboratory reads the quantity in the file name: it is set here, from the copies the
+        // order is priced with, never from anything the browser calls the file.
+        const finalNames = await nameFilesForPrinting(
+          deps,
+          folders.token,
+          files,
+          submit.uploadIds,
+        );
+        const { text } = buildManifest(
+          reconciled,
+          files.map((file) => ({
+            ...file,
+            final_name: finalNames.get(file.id),
+          })),
+        );
         await deps.drive.putManifest(
           folders.token,
           folders.root,

@@ -171,6 +171,7 @@ export function createFakeGoogle() {
       if (!record) return reply({ error: { code: 404 } }, 404);
       const patch = JSON.parse(text ?? '{}');
       if (typeof patch.trashed === 'boolean') record.trashed = patch.trashed;
+      if (typeof patch.name === 'string') record.name = patch.name;
       return reply({ id: record.id });
     }
     const upload = /^\/upload\/drive\/v3\/files\/([^/]+)$/.exec(path);

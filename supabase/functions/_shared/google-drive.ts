@@ -81,6 +81,8 @@ export interface DriveGateway {
   getFile(token: string, id: string): Promise<DriveFileMeta>;
   /** Moves a file or folder that this system created to the Drive trash (recoverable). */
   trashFile(token: string, id: string): Promise<void>;
+  /** Renames a file this system created. Idempotent; the content and the id never change. */
+  renameFile(token: string, id: string, name: string): Promise<void>;
   putManifest(
     token: string,
     parent: string,
@@ -464,6 +466,14 @@ export function createDriveGateway(deps: DriveGatewayDeps): DriveGateway {
     },
     async trashFile(token, id) {
       await trashOwnFolder(token, id);
+    },
+    async renameFile(token, id, name) {
+      await request(
+        'files.rename',
+        `${driveBase}/files/${encodeURIComponent(id)}?fields=id,name`,
+        token,
+        { method: 'PATCH', body: JSON.stringify({ name: sanitizeName(name) }) },
+      );
     },
     async putManifest(token, parent, jobId, text) {
       const q = `'${escapeDriveQuery(parent)}' in parents and trashed=false and name='PEDIDO.txt'`;

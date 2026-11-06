@@ -77,13 +77,13 @@ describe('cantidades y totales derivados de las fotos', () => {
     ]);
   });
 
-  it('ignora fotos de tamaños no elegidos y respeta el orden del catálogo', () => {
+  it('ignora fotos de tamaños no elegidos y respeta el orden en que se agregaron los bloques', () => {
     const lines = deriveLines(
       catalog,
       ['s20', 's10'],
       [entry('a', 's13', 5), entry('b', 's20', 1), entry('c', 's10', 1)],
     );
-    expect(lines.map((x) => x.service.id)).toEqual(['s10', 's20']);
+    expect(lines.map((x) => x.service.id)).toEqual(['s20', 's10']);
     expect(orderTotal(lines)).toBe(50000 + 250000);
   });
 

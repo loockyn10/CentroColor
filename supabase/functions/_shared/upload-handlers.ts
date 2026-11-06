@@ -338,8 +338,21 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
             link.business_id,
             previous,
           );
-          if (settled === 'uploaded')
+          if (settled === 'uploaded') {
+            // The photo is already in Drive, but the customer may have changed its quantity
+            // since: the stored copies are what prices the order and names the file, so the
+            // latest value wins.
+            if (previous.copies !== copies)
+              await deps.store.transitionFile(
+                link.business_id,
+                job.id,
+                previous.id,
+                ['uploaded'],
+                'uploaded',
+                { copies },
+              );
             return json({ uploadId: previous.id, alreadyUploaded: true });
+          }
         }
       }
 
@@ -521,10 +534,13 @@ export function handleUploadFinalize(request: Request, deps: PublicDeps) {
 
 export function buildManifest(
   job: Pick<JobContextRow, 'id' | 'customer_name' | 'items'>,
-  files: Pick<
+  files: (Pick<
     FileRow,
     'photo_job_item_id' | 'original_filename' | 'copies' | 'workflow_route'
-  >[],
+  > & {
+    /** The name the laboratory sees in Drive, when the file was renamed for printing. */
+    final_name?: string;
+  })[],
 ) {
   const lines = [
     `Cliente: ${job.customer_name}`,
@@ -535,6 +551,9 @@ export function buildManifest(
   for (const item of job.items.filter((x) => x.is_active)) {
     const own = files.filter((x) => x.photo_job_item_id === item.id);
     if (!own.length) continue;
+    // Renamed files read in the order they are numbered (001, 002…).
+    if (own.every((x) => x.final_name))
+      own.sort((a, b) => a.final_name!.localeCompare(b.final_name!));
     const dimensions =
       item.width_mm && item.height_mm
         ? ` (${item.width_mm / 10} x ${item.height_mm / 10} cm)`
@@ -542,7 +561,9 @@ export function buildManifest(
     lines.push(`${item.service_name_snapshot}${dimensions}`);
     for (const file of own)
       lines.push(
-        `${file.original_filename} | ${file.copies} ${file.copies === 1 ? 'copia' : 'copias'}`,
+        file.final_name
+          ? `${file.final_name} | ${file.copies} ${file.copies === 1 ? 'copia' : 'copias'} | original: ${file.original_filename}`
+          : `${file.original_filename} | ${file.copies} ${file.copies === 1 ? 'copia' : 'copias'}`,
       );
     const copies = own.reduce((sum, file) => sum + file.copies, 0);
     if (own[0]!.workflow_route === 'lab' && copies !== item.quantity)

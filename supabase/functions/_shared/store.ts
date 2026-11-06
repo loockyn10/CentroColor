@@ -94,6 +94,14 @@ export type FileRow = {
   created_at: string;
 };
 
+/** Columns a state transition may rewrite: the final name and copies are decided server-side. */
+export type FilePatch = {
+  mime_type?: string | null;
+  uploaded_at?: string;
+  copies?: number;
+  stored_filename?: string;
+};
+
 export type NewFile = Omit<
   FileRow,
   'id' | 'uploaded_at' | 'created_at' | 'status'
@@ -189,6 +197,6 @@ export interface PhotoIntakeStore {
     fileId: string,
     from: FileStatus[],
     to: FileStatus,
-    patch?: { mime_type?: string | null; uploaded_at?: string },
+    patch?: FilePatch,
   ): Promise<boolean>;
 }

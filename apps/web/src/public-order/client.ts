@@ -83,6 +83,11 @@ export type SubmitOptions = {
   expectedFiles?: Record<string, number>;
   /** The customer chose to send the order without the photos that failed. */
   acceptPartial?: boolean;
+  /**
+   * The uploads that make up the order, in display order. The server retires any other photo it
+   * holds for the draft and numbers the files of each folder in this order.
+   */
+  uploadIds?: string[];
 };
 export const submitOrder = (token: string, options: SubmitOptions = {}) =>
   request<SubmittedOrder>('public-photo-order-submit', { token, ...options });

@@ -555,8 +555,12 @@ describe('confirmación', () => {
     await placeOrder();
     const manifest = w.google.files.find((x) => x.name === 'PEDIDO.txt') as any;
     expect(manifest.text).toContain('Pedido web (autoservicio)');
-    expect(manifest.text).toContain('IMG_001.jpg | 2 copias');
-    expect(manifest.text).toContain('IMG_002.jpg | 1 copia');
+    expect(manifest.text).toContain(
+      '001_2copias.jpg | 2 copias | original: IMG_001.jpg',
+    );
+    expect(manifest.text).toContain(
+      '002_1copia.jpg | 1 copia | original: IMG_002.jpg',
+    );
     expect(manifest.text).not.toContain('copias enviadas de');
   });
 

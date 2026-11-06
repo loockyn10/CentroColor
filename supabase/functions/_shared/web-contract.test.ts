@@ -18,6 +18,10 @@ import {
   type PhotoEntry,
 } from '../../../apps/web/src/public-order/model';
 import {
+  catalogSizes,
+  orderedUploadIds,
+} from '../../../apps/web/src/public-order/order-blocks';
+import {
   SupabasePhotoJobNotificationRepository,
   SupabaseWhatsAppAdminRepository,
 } from '../../../apps/web/src/whatsapp-admin';
@@ -327,6 +331,131 @@ describe('cliente web del pedido público ↔ funciones reales', () => {
         )
       ).rows,
     ).toEqual([{ status: 'uploaded', n: 4 }]);
+  });
+
+  it('cascada tamaño → papel → fotos: Brillo y Mate del mismo tamaño, cantidad final en el nombre de cada archivo', async () => {
+    installNetwork();
+    const list = (
+      await w.db.query<any>(
+        `select id from public.price_lists where is_default and is_active`,
+      )
+    ).rows[0].id;
+    const glossy = (
+      await w.db.query<any>(
+        `select id from public.lab_variants where photo_service_id=$1 and paper='glossy'`,
+        [IDS.svc10x15],
+      )
+    ).rows[0].id;
+    const matte = (
+      await w.db.query<any>(
+        `insert into public.lab_variants(business_id,photo_service_id,channel,paper)
+         values($1,$2,'laboratory','matte') returning id`,
+        [IDS.business, IDS.svc10x15],
+      )
+    ).rows[0].id;
+    await w.db.query(
+      `insert into public.lab_price_tiers(business_id,variant_id,price_list_id,min_quantity,unit_price_cents)
+       values($1,$2,$3,1,55000)`,
+      [IDS.business, matte, list],
+    );
+
+    // El catálogo separa tamaño y papel y el cliente web los ofrece de a uno.
+    const catalog = await fetchCatalog();
+    const sizes = catalogSizes(catalog.services);
+    expect(sizes.map((x) => x.name)).toEqual(['10x15', '13x18', '20x30']);
+    expect(sizes[0]!.papers.map((x) => x.label)).toEqual(['Brillo', 'Mate']);
+    expect(sizes[1]!.papers.map((x) => x.label)).toEqual(['Brillo']);
+
+    const blocks = [glossy === IDS.svc10x15 ? glossy : IDS.svc10x15, matte];
+    const entries: PhotoEntry[] = [
+      { id: 'a', serviceId: blocks[0]!, file: photo('IMG_1.jpg'), copies: 3 },
+      { id: 'b', serviceId: blocks[0]!, file: photo('IMG_2.JPG'), copies: 1 },
+      { id: 'c', serviceId: blocks[1]!, file: photo('IMG_1.jpg'), copies: 2 },
+    ];
+    const customer = {
+      name: 'María García',
+      phone: '342 555 1234',
+      email: '',
+      notes: '',
+      whatsappOptIn: true,
+    };
+    const started = await startOrder(
+      startBody(
+        'client-key-aaaaaaaaaaaa',
+        customer,
+        deriveLines(catalog.services, blocks, entries),
+      ),
+    );
+    const destinations = new Map(
+      started.destinations.map((x) => [x.serviceId, x.destinationId]),
+    );
+    const attempts = new Map<string, string>();
+    const send = (list: PhotoEntry[]) =>
+      list.reduce(
+        (chain, entry) =>
+          chain.then(() =>
+            uploadPhoto(
+              started.uploadToken,
+              {
+                id: entry.id,
+                file: entry.file,
+                copies: entry.copies,
+                destinationId: destinations.get(entry.serviceId)!,
+                previousUploadId: attempts.get(entry.id),
+              },
+              () => undefined,
+              { onAttempt: (id) => attempts.set(entry.id, id) },
+            ),
+          ),
+        Promise.resolve(),
+      );
+    await send(entries);
+
+    // El cliente vuelve, pasa la primera foto de 3 a 5 copias y reenvía: sigue siendo una sola foto.
+    entries[0]!.copies = 5;
+    await send(entries);
+
+    const sent = entries;
+    const expectedFiles = Object.fromEntries(
+      started.destinations.map((d) => [
+        d.destinationId,
+        sent.filter((e) => e.serviceId === d.serviceId).length,
+      ]),
+    );
+    const uploadIds = orderedUploadIds(blocks, sent, attempts)!;
+    expect(uploadIds).toHaveLength(3);
+    const done = await submitOrder(started.uploadToken, {
+      expectedFiles,
+      uploadIds,
+    });
+    expect(done.items).toEqual([
+      { name: '10x15 · Brillo · Público', quantity: 6, totalCents: 300000 },
+      { name: '10x15 · Mate · Público', quantity: 2, totalCents: 110000 },
+    ]);
+    expect(done.totalCents).toBe(410000);
+
+    const live = w.google.files.filter(
+      (f) =>
+        !f.trashed &&
+        f.mimeType !== 'application/vnd.google-apps.folder' &&
+        f.name !== 'PEDIDO.txt',
+    );
+    const folderName = (id: string) =>
+      w.google.files.find((f) => f.id === id)!.name;
+    expect(
+      live.map((f) => `${folderName(f.parents[0]!)}/${f.name}`).sort(),
+    ).toEqual([
+      '10x15 · Brillo · Publico/001_5copias.jpg',
+      '10x15 · Brillo · Publico/002_1copia.JPG',
+      '10x15 · Mate · Publico/001_2copias.jpg',
+    ]);
+    expect(
+      (
+        await w.db.query<any>(
+          `select count(*)::int n from public.photo_job_files where status='uploaded'`,
+        )
+      ).rows[0].n,
+    ).toBe(3);
   });
 
   it('los errores del servidor llegan con su código y un mensaje legible', async () => {

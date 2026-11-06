@@ -12,6 +12,8 @@ export type PublicServiceRow = {
   sort_order: number;
   variant_id?: string;
   photo_service_id?: string;
+  /** Paper of the variant (`glossy` = Brillo, `matte` = Mate), straight from the catalog. */
+  paper?: 'glossy' | 'matte';
   tiers?: Array<{
     min_quantity: number;
     max_quantity: number | null;

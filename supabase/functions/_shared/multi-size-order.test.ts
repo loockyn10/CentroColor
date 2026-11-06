@@ -32,7 +32,7 @@ function visibleDrive() {
   const live = w.google.files.filter((f) => !f.trashed);
   const photos = live
     .filter((f) => f.mimeType !== FOLDER && f.name !== 'PEDIDO.txt')
-    .map((f) => relativePath(f.id).replace(/\/[0-9a-f]{8}-/, '/'))
+    .map((f) => relativePath(f.id))
     .sort();
   const folders = live
     .filter((f) => f.mimeType === FOLDER)
@@ -69,8 +69,8 @@ describe('un solo tamaño (no se rompe)', () => {
       { name: '10x15', quantity: 2, totalCents: 100000 },
     ]);
     expect(visibleDrive().photos).toEqual([
-      'Para imprimir/10x15/a.jpg',
-      'Para imprimir/10x15/b.jpg',
+      'Para imprimir/10x15/001_1copia.jpg',
+      'Para imprimir/10x15/002_1copia.jpg',
     ]);
   });
 });
@@ -91,10 +91,10 @@ describe('varios tamaños en el mismo pedido', () => {
     expect(done.status).toBe(200);
     expect(visibleDrive()).toEqual({
       photos: [
-        'Para imprimir/10x15/foto1.jpg',
-        'Para imprimir/10x15/foto2.jpg',
-        'Para imprimir/13x18/foto3.jpg',
-        'Para imprimir/13x18/foto4.jpg',
+        'Para imprimir/10x15/001_1copia.jpg',
+        'Para imprimir/10x15/002_1copia.jpg',
+        'Para imprimir/13x18/001_1copia.jpg',
+        'Para imprimir/13x18/002_1copia.jpg',
       ],
       folders: ['Para imprimir', 'Para imprimir/10x15', 'Para imprimir/13x18'],
     });
@@ -118,8 +118,8 @@ describe('varios tamaños en el mismo pedido', () => {
     });
     expect(done.status).toBe(200);
     expect(visibleDrive().photos).toEqual([
-      'Para imprimir/10x15/IMG_001.jpg',
-      'Para imprimir/13x18/IMG_001.jpg',
+      'Para imprimir/10x15/001_3copias.jpg',
+      'Para imprimir/13x18/001_1copia.jpg',
     ]);
     const files = await rows(
       `select i.service_name_snapshot name, f.original_filename file, f.copies, f.status
@@ -177,16 +177,11 @@ describe('subidas en paralelo (como las manda el navegador) con un Drive lento',
     });
     expect(done.status).toBe(200);
     const { photos, folders } = visibleDrive();
-    expect(photos).toEqual([
-      'Para imprimir/10x15/a1.jpg',
-      'Para imprimir/10x15/a2.jpg',
-      'Para imprimir/10x15/a3.jpg',
-      'Para imprimir/10x15/a4.jpg',
-      'Para imprimir/13x18/b1.jpg',
-      'Para imprimir/13x18/b2.jpg',
-      'Para imprimir/13x18/b3.jpg',
-      'Para imprimir/13x18/b4.jpg',
-    ]);
+    expect(photos).toEqual(
+      ['10x15', '13x18'].flatMap((size) =>
+        [1, 2, 3, 4].map((n) => `Para imprimir/${size}/00${n}_1copia.jpg`),
+      ),
+    );
     // Sin carpetas duplicadas visibles; las sobrantes quedaron en la papelera, vacías.
     expect(folders).toEqual([
       'Para imprimir',
@@ -243,10 +238,10 @@ describe('fallo parcial de subida', () => {
     expect(done.status).toBe(200);
     expect(done.body.totalCents).toBe(260000);
     expect(visibleDrive().photos).toEqual([
-      'Para imprimir/10x15/a1.jpg',
-      'Para imprimir/10x15/a2.jpg',
-      'Para imprimir/13x18/b1.jpg',
-      'Para imprimir/13x18/b2.jpg',
+      'Para imprimir/10x15/001_1copia.jpg',
+      'Para imprimir/10x15/002_1copia.jpg',
+      'Para imprimir/13x18/001_1copia.jpg',
+      'Para imprimir/13x18/002_1copia.jpg',
     ]);
   });
 
@@ -338,7 +333,10 @@ describe('reintentos sin duplicar fotos', () => {
     expect(await rows(`select status from public.photo_job_files`)).toEqual([
       { status: 'uploaded' },
     ]);
-    expect(visibleDrive().photos).toEqual(['Para imprimir/13x18/b1.jpg']);
+    // Todavía no se confirmó: el archivo conserva su nombre provisional (una sola copia en Drive).
+    expect(
+      visibleDrive().photos.map((x) => x.replace(/\/[0-9a-f]{8}-/, '/')),
+    ).toEqual(['Para imprimir/13x18/b1.jpg']);
   });
 
   it('si la subida quedó a medias, el reintento reemplaza el intento y deja una sola copia en Drive', async () => {
@@ -365,7 +363,10 @@ describe('reintentos sin duplicar fotos', () => {
       { status: 'failed', n: 1 },
       { status: 'uploaded', n: 1 },
     ]);
-    expect(visibleDrive().photos).toEqual(['Para imprimir/13x18/b1.jpg']);
+    // Todavía no se confirmó: el archivo conserva su nombre provisional (una sola copia en Drive).
+    expect(
+      visibleDrive().photos.map((x) => x.replace(/\/[0-9a-f]{8}-/, '/')),
+    ).toEqual(['Para imprimir/13x18/b1.jpg']);
   });
 
   it('un reintento que nombra el intento de OTRO tamaño no lo toca ni lo cuenta', async () => {

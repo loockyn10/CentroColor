@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from 'react';
 import { Button, Icon, Sheet } from '@centrocolor/ui';
 import {
   fetchCatalog,
@@ -35,7 +42,18 @@ import {
   type OrderLine,
   type PhotoEntry,
 } from './model';
-import { CopiesStepper, PrintFrame, Thumb } from './parts';
+import {
+  addBlock,
+  canAddBlock,
+  catalogSizes,
+  changeBlock,
+  freePapers,
+  orderedUploadIds,
+  prettySize,
+  removeBlock,
+  type SizeOption,
+} from './order-blocks';
+import { CopiesStepper, Thumb } from './parts';
 import { PublicShell, useDocumentMeta } from './shell';
 import './public-order.css';
 
@@ -54,20 +72,25 @@ const messageFor = (error: unknown) =>
 const plural = (n: number, one: string, many: string) =>
   `${n} ${n === 1 ? one : many}`;
 
-const dimensions = (service: CatalogService) =>
-  service.widthMm && service.heightMm
-    ? `${service.widthMm / 10} × ${service.heightMm / 10} cm`.replaceAll(
-        '.',
-        ',',
-      )
+const dimensions = (size: {
+  widthMm: number | null;
+  heightMm: number | null;
+}) =>
+  size.widthMm && size.heightMm
+    ? `${size.widthMm / 10} × ${size.heightMm / 10} cm`.replaceAll('.', ',')
     : null;
+
+/** What the customer is doing with the size/paper picker: adding a block or changing one. */
+type Picker = { mode: 'add' } | { mode: 'change'; serviceId: string } | null;
 
 export function PrintOrderPortal() {
   useDocumentMeta('Imprimí tus fotos · CentroColor', false);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Blocks of the order (one size on one paper each) in the order they were added.
   const [selected, setSelected] = useState<string[]>([]);
   const [entries, setEntries] = useState<PhotoEntry[]>([]);
+  const [picker, setPicker] = useState<Picker>({ mode: 'add' });
   const [customer, setCustomer] = useState<CustomerForm>({
     name: '',
     phone: '',
@@ -102,6 +125,7 @@ export function PrintOrderPortal() {
     void loadCatalog();
   }, []);
 
+  const sizes = useMemo(() => catalogSizes(catalog?.services ?? []), [catalog]);
   const lines = useMemo(
     () => deriveLines(catalog?.services ?? [], selected, entries),
     [catalog, selected, entries],
@@ -119,14 +143,31 @@ export function PrintOrderPortal() {
     window.setTimeout(() => setCopied(null), 2200);
   }
 
-  function toggleService(id: string) {
-    if (selected.includes(id)) {
-      const hasPhotos = entries.some((x) => x.serviceId === id);
-      if (hasPhotos && !window.confirm('¿Quitar este tamaño y sus fotos?'))
-        return;
-      setSelected((current) => current.filter((x) => x !== id));
-      setEntries((current) => current.filter((x) => x.serviceId !== id));
-    } else setSelected((current) => [...current, id]);
+  /** The customer picked a size and paper: a new block, or the new place of an existing one. */
+  function chooseService(serviceId: string) {
+    if (picker?.mode === 'change') {
+      const next = changeBlock(
+        { selected, entries },
+        picker.serviceId,
+        serviceId,
+      );
+      setSelected(next.selected);
+      setEntries(next.entries);
+    } else setSelected((current) => addBlock(current, serviceId));
+    setPicker(null);
+    setNotice(null);
+  }
+
+  function dropBlock(id: string) {
+    const hasPhotos = entries.some((x) => x.serviceId === id);
+    if (hasPhotos && !window.confirm('¿Quitar este bloque y sus fotos?'))
+      return;
+    const next = removeBlock({ selected, entries }, id);
+    setSelected(next.selected);
+    setEntries(next.entries);
+    if (!next.selected.length) setPicker({ mode: 'add' });
+    else if (picker?.mode === 'change' && picker.serviceId === id)
+      setPicker(null);
   }
 
   function addFiles(serviceId: string, list: FileList | null) {
@@ -201,8 +242,12 @@ export function PrintOrderPortal() {
       expectedFiles[destination.destinationId] = sent.filter(
         (x) => x.serviceId === destination.serviceId,
       ).length;
+    // The photos that make up the order, in the order shown: the server numbers the Drive files
+    // from it and retires anything else it still holds for this draft.
+    const uploadIds = orderedUploadIds(selected, sent, attempts.current);
     const done = await submitOrder(started.uploadToken, {
       expectedFiles,
+      ...(uploadIds ? { uploadIds } : {}),
       ...(acceptPartial ? { acceptPartial: true } : {}),
     });
     rememberOrder({
@@ -244,7 +289,7 @@ export function PrintOrderPortal() {
       // Take the customer to the first thing that is missing.
       const target = missing[0]!.startsWith('elegí')
         ? 'tamanos'
-        : missing[0]!.startsWith('agregá')
+        : missing[0]!.startsWith('agregá') || missing[0]!.startsWith('no hay')
           ? 'fotos'
           : 'datos';
       window.setTimeout(
@@ -283,8 +328,10 @@ export function PrintOrderPortal() {
       const fresh = await loadCatalog();
       if (fresh) {
         const ids = new Set(fresh.services.map((x) => x.id));
-        setSelected((current) => current.filter((x) => ids.has(x)));
+        const keep = selected.filter((x) => ids.has(x));
+        setSelected(keep);
         setEntries((current) => current.filter((x) => ids.has(x.serviceId)));
+        if (!keep.length) setPicker({ mode: 'add' });
       }
       setNotice(
         code === 'price_changed'
@@ -625,53 +672,78 @@ export function PrintOrderPortal() {
               <span className="pt-num" aria-hidden="true">
                 1
               </span>
-              <h2 id="h-tam">Elegí el tamaño</h2>
+              <h2 id="h-tam">Armá tu pedido</h2>
             </div>
-            <div className="sizes">
-              {catalog.services.map((service) => (
-                <SizeCard
-                  key={service.id}
-                  service={service}
-                  selected={selected.includes(service.id)}
-                  onToggle={() => toggleService(service.id)}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section id="fotos" aria-labelledby="h-fotos">
-            <div className="pt-step">
-              <span className="pt-num" aria-hidden="true">
-                2
-              </span>
-              <h2 id="h-fotos">Subí tus fotos</h2>
-            </div>
-            {!lines.length ? (
-              <div className="empty-box">
-                <Icon name="image" size={38} />
-                <strong>Primero elegí un tamaño</strong>
-              </div>
-            ) : (
-              lines.map((line) => (
-                <PhotoGroup
-                  key={line.service.id}
-                  line={line}
-                  entries={entries.filter(
-                    (x) => x.serviceId === line.service.id,
-                  )}
-                  onAdd={(files) => addFiles(line.service.id, files)}
-                  onCopies={(id, copies) => patchEntry(id, { copies })}
-                  onRemove={removeEntry}
-                  onRemoveSize={() => toggleService(line.service.id)}
-                />
-              ))
+            {lines.map((line, index) => (
+              <PhotoGroup
+                key={line.service.id}
+                anchor={
+                  line.files === 0 &&
+                  !lines.slice(0, index).some((x) => x.files === 0)
+                    ? 'fotos'
+                    : undefined
+                }
+                line={line}
+                entries={entries.filter((x) => x.serviceId === line.service.id)}
+                onAdd={(files) => addFiles(line.service.id, files)}
+                onCopies={(id, copies) => patchEntry(id, { copies })}
+                onRemove={removeEntry}
+                onRemoveBlock={() => dropBlock(line.service.id)}
+                onChange={() =>
+                  setPicker(
+                    picker?.mode === 'change' &&
+                      picker.serviceId === line.service.id
+                      ? null
+                      : { mode: 'change', serviceId: line.service.id },
+                  )
+                }
+                picker={
+                  picker?.mode === 'change' &&
+                  picker.serviceId === line.service.id ? (
+                    <ServicePicker
+                      sizes={sizes}
+                      selected={selected}
+                      ownId={line.service.id}
+                      onPick={chooseService}
+                      onCancel={() => setPicker(null)}
+                    />
+                  ) : null
+                }
+              />
+            ))}
+            {picker?.mode === 'add' && (
+              <section
+                className="grp grp--pick"
+                aria-label="Elegir tamaño y papel"
+              >
+                <div className="grp-body">
+                  <ServicePicker
+                    sizes={sizes}
+                    selected={selected}
+                    onPick={chooseService}
+                    onCancel={selected.length ? () => setPicker(null) : null}
+                  />
+                </div>
+              </section>
+            )}
+            {!picker && canAddBlock(sizes, selected) && (
+              <Button
+                className="add-block"
+                variant="secondary"
+                size="lg"
+                block
+                icon="plus"
+                onClick={() => setPicker({ mode: 'add' })}
+              >
+                Agregar otro tamaño o papel
+              </Button>
             )}
           </section>
 
           <section id="datos" aria-labelledby="h-datos">
             <div className="pt-step">
               <span className="pt-num" aria-hidden="true">
-                3
+                2
               </span>
               <h2 id="h-datos">Tus datos</h2>
             </div>
@@ -746,7 +818,7 @@ export function PrintOrderPortal() {
           >
             <div className="pt-step">
               <span className="pt-num" aria-hidden="true">
-                4
+                3
               </span>
               <h2 id="h-conf">Confirmá tu pedido</h2>
             </div>
@@ -790,67 +862,151 @@ export function PrintOrderPortal() {
 
 /* ───────────────────────────── pieces ───────────────────────────── */
 
-function SizeCard({
-  service,
+/** Price note of a catalog entry: where its first tier starts, when it is not at one copy. */
+const priceNote = (service: CatalogService) =>
+  service.tiers?.[0] && service.tiers[0].minQuantity > 1
+    ? ` desde ${service.tiers[0].minQuantity} copias`
+    : '';
+
+/**
+ * Size → paper, one question at a time. Only what the catalog offers is shown; a size on a paper
+ * already in the order is disabled, so the order never gets two identical blocks.
+ */
+function ServicePicker({
+  sizes,
   selected,
-  onToggle,
+  ownId,
+  onPick,
+  onCancel,
 }: {
-  service: CatalogService;
-  selected: boolean;
-  onToggle: () => void;
+  sizes: SizeOption[];
+  selected: string[];
+  ownId?: string;
+  onPick: (serviceId: string) => void;
+  onCancel: (() => void) | null;
 }) {
-  const dims = dimensions(service);
-  return (
-    <article className="size-card" data-selected={selected}>
-      <div className="size-stage">
-        {dims && <span className="dim">{dims}</span>}
-        <PrintFrame
-          widthMm={service.widthMm}
-          heightMm={service.heightMm}
-          label={dims ? `Proporción de ${service.name}: ${dims}` : service.name}
-        />
-      </div>
-      <div className="size-body">
-        <h3>{service.name}</h3>
-        {service.description && <p className="tag">{service.description}</p>}
-        <div className="size-price">
-          <b className="num">{formatMoney(service.unitPriceCents)}</b>
-          <small>
-            c/u
-            {service.tiers?.[0] && service.tiers[0].minQuantity > 1
-              ? ` desde ${service.tiers[0].minQuantity} copias`
-              : ''}
-          </small>
+  const [sizeKey, setSizeKey] = useState<string | null>(null);
+  const size = sizes.find((x) => x.key === sizeKey) ?? null;
+
+  if (size)
+    return (
+      <div className="pick" role="group" aria-label={`Papel para ${size.name}`}>
+        <div className="pick-head">
+          <button
+            type="button"
+            className="pick-back"
+            onClick={() => setSizeKey(null)}
+          >
+            <Icon name="chevL" /> Cambiar tamaño
+          </button>
+          <h3>¿Qué papel preferís?</h3>
+          <p className="pick-chosen">{prettySize(size.name)}</p>
         </div>
-        <button
-          type="button"
-          className="btn btn--primary btn--block"
-          aria-pressed={selected}
-          onClick={onToggle}
-        >
-          <Icon name={selected ? 'check' : 'plus'} />
-          {selected ? 'Elegido' : 'Elegir'}
-          <span className="sr-only"> tamaño {service.name}</span>
-        </button>
+        <div className="pick-grid pick-grid--papers">
+          {size.papers.map((paper) => {
+            const taken =
+              paper.service.id !== ownId && selected.includes(paper.service.id);
+            return (
+              <button
+                key={paper.service.id}
+                type="button"
+                className="pick-btn"
+                disabled={taken}
+                aria-pressed={paper.service.id === ownId}
+                onClick={() => onPick(paper.service.id)}
+              >
+                <strong>{paper.label}</strong>
+                <b className="num">
+                  {formatMoney(paper.service.unitPriceCents)}
+                </b>
+                <small>
+                  {taken
+                    ? 'Ya está en tu pedido'
+                    : `c/u${priceNote(paper.service)}`}
+                </small>
+              </button>
+            );
+          })}
+        </div>
+        {onCancel && (
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            Cancelar
+          </Button>
+        )}
       </div>
-    </article>
+    );
+
+  return (
+    <div className="pick" role="group" aria-label="Tamaño">
+      <div className="pick-head">
+        <h3>¿Qué tamaño querés imprimir?</h3>
+      </div>
+      <div className="pick-grid">
+        {sizes.map((option) => {
+          const free = freePapers(option, selected, ownId);
+          const cheapest = Math.min(
+            ...option.papers.map((x) => x.service.unitPriceCents),
+          );
+          const dims = dimensions(option);
+          return (
+            <button
+              key={option.key}
+              type="button"
+              className="pick-btn"
+              disabled={!free.length}
+              onClick={() =>
+                option.papers.length === 1
+                  ? onPick(option.papers[0]!.service.id)
+                  : setSizeKey(option.key)
+              }
+            >
+              <strong>{prettySize(option.name)}</strong>
+              {dims && <small>{dims}</small>}
+              <span className="pick-price">
+                {free.length ? (
+                  <>
+                    {option.papers.length > 1 && 'desde '}
+                    <b className="num">{formatMoney(cheapest)}</b> c/u
+                  </>
+                ) : (
+                  'Ya está en tu pedido'
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {onCancel && (
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          Cancelar
+        </Button>
+      )}
+    </div>
   );
 }
 
 function PhotoGroup({
   line,
   entries,
+  anchor,
+  picker,
   onAdd,
   onCopies,
   onRemove,
-  onRemoveSize,
+  onRemoveBlock,
+  onChange,
 }: {
   line: OrderLine;
   entries: PhotoEntry[];
+  /** DOM id, set on the first block still without photos so "confirm" can scroll to it. */
+  anchor?: string;
+  /** The size/paper picker while the customer changes this block. */
+  picker: ReactNode;
   onAdd: (files: FileList | null) => void;
   onCopies: (id: string, copies: number) => void;
   onRemove: (id: string) => void;
-  onRemoveSize: () => void;
+  onRemoveBlock: () => void;
+  onChange: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -861,28 +1017,52 @@ function PhotoGroup({
     onAdd(event.dataTransfer.files);
   };
   return (
-    <section className="grp" aria-label={`Fotos para ${service.name}`}>
+    <section
+      id={anchor}
+      className="grp"
+      aria-label={`Fotos para ${service.name}`}
+    >
       <div className="grp-head">
-        <h3>{service.name}</h3>
+        <h3>{prettySize(service.name)}</h3>
         <div className="meta">
           {plural(line.files, 'foto', 'fotos')} ·{' '}
           {plural(line.copies, 'copia', 'copias')}
+          {line.pricingAvailable !== false && line.copies > 0 && (
+            <small className="unit">
+              Precio por copia:{' '}
+              <b className="num">{formatMoney(line.unitPriceCents)}</b>
+            </small>
+          )}
         </div>
-        <div className="sub num">{formatMoney(line.totalCents)}</div>
+        <div className="sub num" aria-label="Subtotal">
+          <small>Subtotal</small> {formatMoney(line.totalCents)}
+        </div>
         {line.pricingAvailable === false && (
           <p role="alert">No hay tarifa para esta cantidad de copias.</p>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="trash"
-          aria-label={`Quitar el tamaño ${service.name}`}
-          onClick={onRemoveSize}
-        >
-          Quitar
-        </Button>
+        <div className="grp-tools">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="edit"
+            aria-label={`Cambiar tamaño o papel de ${service.name}`}
+            onClick={onChange}
+          >
+            Cambiar
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="trash"
+            aria-label={`Quitar ${service.name} y sus fotos`}
+            onClick={onRemoveBlock}
+          >
+            Quitar
+          </Button>
+        </div>
       </div>
       <div className="grp-body">
+        {picker}
         <div
           className={`drop ${over ? 'drop--over' : ''} ${entries.length ? 'drop--compact' : ''}`.trim()}
           onDragOver={(event) => {
@@ -933,12 +1113,15 @@ function PhotoGroup({
         </div>
         {entries.length > 0 && (
           <ul className="ph-grid" aria-label={`Fotos en ${service.name}`}>
-            {entries.map((entry) => (
+            {entries.map((entry, index) => (
               <li className="ph-card" key={entry.id}>
                 <div className="ph-thumb">
                   <div className="ph-frame">
                     <Thumb file={entry.file} />
                   </div>
+                  <span className="ph-num" aria-hidden="true">
+                    Foto {index + 1}
+                  </span>
                   <button
                     type="button"
                     className="ph-remove"
@@ -955,8 +1138,9 @@ function PhotoGroup({
                     <span>{entry.file.name}</span>
                     <span>{formatSize(entry.file.size)}</span>
                   </div>
+                  <span className="ph-lbl">Copias</span>
                   <CopiesStepper
-                    label={entry.file.name}
+                    label={`Foto ${index + 1} (${entry.file.name})`}
                     value={entry.copies}
                     onChange={(copies) => onCopies(entry.id, copies)}
                   />
@@ -989,7 +1173,7 @@ function Summary({
           <ul className="sum-lines">
             {lines.map((line) => (
               <li className="sum-line" key={line.service.id}>
-                <span className="sz">{line.service.name}</span>
+                <span className="sz">{prettySize(line.service.name)}</span>
                 <span className="pr num">{formatMoney(line.totalCents)}</span>
                 <span className="cp">
                   {plural(line.copies, 'copia', 'copias')} ·{' '}

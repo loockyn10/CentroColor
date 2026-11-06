@@ -24,6 +24,12 @@ export type PublicOrderSubmitPayload = PublicOrderTokenPayload & {
   expectedFiles?: Record<string, number>;
   /** The customer saw the failed photos and chose to send the order without them. */
   acceptPartial?: boolean;
+  /**
+   * The uploads that make up the order, in the order the customer sees them. Anything else the
+   * server holds for the draft (a photo removed or moved to another size after it was sent) is
+   * retired, and the position here is the order of the final file numbers. It never names a file.
+   */
+  uploadIds?: string[];
 };
 
 export const LIMITS = {
@@ -277,7 +283,10 @@ export function orderRuleToApiError(code: string) {
 export type ParsedSubmit = {
   expectedFiles: Record<string, number> | null;
   acceptPartial: boolean;
+  uploadIds: string[] | null;
 };
+
+const MAX_UPLOAD_IDS = 500;
 
 export function parseSubmitPayload(
   input: Partial<PublicOrderSubmitPayload>,
@@ -285,9 +294,23 @@ export function parseSubmitPayload(
   const acceptPartial = input.acceptPartial;
   if (acceptPartial !== undefined && typeof acceptPartial !== 'boolean')
     throw invalid('La solicitud no es válida.');
+  let uploadIds: string[] | null = null;
+  if (input.uploadIds !== undefined && input.uploadIds !== null) {
+    if (
+      !Array.isArray(input.uploadIds) ||
+      input.uploadIds.length > MAX_UPLOAD_IDS ||
+      input.uploadIds.some((id) => typeof id !== 'string' || !UUID.test(id))
+    )
+      throw invalid('La solicitud no es válida.');
+    uploadIds = [...new Set(input.uploadIds.map((id) => id.toLowerCase()))];
+  }
   const expected = input.expectedFiles;
   if (expected === undefined || expected === null)
-    return { expectedFiles: null, acceptPartial: acceptPartial === true };
+    return {
+      expectedFiles: null,
+      acceptPartial: acceptPartial === true,
+      uploadIds,
+    };
   if (
     typeof expected !== 'object' ||
     Array.isArray(expected) ||
@@ -300,7 +323,56 @@ export function parseSubmitPayload(
       throw invalid('La solicitud no es válida.');
     clean[key] = count;
   }
-  return { expectedFiles: clean, acceptPartial: acceptPartial === true };
+  return {
+    expectedFiles: clean,
+    acceptPartial: acceptPartial === true,
+    uploadIds,
+  };
+}
+
+/* ───────────────────────────── final file names ───────────────────────────── */
+
+export const copiesLabel = (copies: number) =>
+  `${copies}${copies === 1 ? 'copia' : 'copias'}`;
+
+/** `.jpg`, `.HEIC`… exactly as the customer's file had it; nothing when there is none. */
+export function fileExtension(name: string) {
+  return /\.[A-Za-z0-9]{1,8}$/.exec(name)?.[0] ?? '';
+}
+
+type NameableFile = {
+  id: string;
+  original_filename: string;
+  copies: number;
+  created_at: string;
+};
+
+/**
+ * The name each photo of ONE folder gets in Drive: `001_3copias.jpg`. The number is the photo's
+ * position in the order the customer sees (the position of its upload id in `ranking`), with
+ * creation time and id as deterministic tie-breakers, so parallel uploads never change it. The
+ * copies are the ones stored for the file, which are the ones the order is priced with. Names
+ * are unique within the folder because the number is.
+ */
+export function planFinalNames(
+  files: NameableFile[],
+  ranking: string[] | null = null,
+): Map<string, string> {
+  const rank = new Map((ranking ?? []).map((id, index) => [id, index]));
+  const ordered = [...files].sort(
+    (a, b) =>
+      (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+        (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) ||
+      a.created_at.localeCompare(b.created_at) ||
+      a.id.localeCompare(b.id),
+  );
+  const width = Math.max(3, String(ordered.length).length);
+  return new Map(
+    ordered.map((file, index) => [
+      file.id,
+      `${String(index + 1).padStart(width, '0')}_${copiesLabel(file.copies)}${fileExtension(file.original_filename)}`,
+    ]),
+  );
 }
 
 export type OrderGap = { name: string; uploaded: number; expected: number };

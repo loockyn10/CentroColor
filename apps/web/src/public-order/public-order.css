@@ -556,23 +556,182 @@
   }
 }
 
-.ph-grid {
+/* Cascada tamaño → papel → fotos: un bloque por tamaño y papel */
+.grp--pick {
+  background: var(--y-50);
+}
+.grp-tools {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.grp-tools .btn {
+  min-height: 44px;
+}
+.grp-head .meta .unit {
+  display: block;
+  margin-top: 2px;
+  font-weight: 600;
+  color: var(--ink-700, var(--text-muted));
+}
+.grp-head .meta .unit b {
+  font-weight: 800;
+}
+.grp-head .sub small {
+  display: block;
+  font-family: var(--font-body, inherit);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: right;
+}
+.pick {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.pick-head {
+  display: grid;
+  gap: 4px;
+}
+.pick-head h3 {
+  font-size: clamp(1.3rem, 5vw, 1.7rem);
+  letter-spacing: -0.02em;
+}
+.pick-chosen {
+  justify-self: start;
+  margin: 0;
+  padding: 2px 12px;
+  border-radius: var(--r-pill);
+  background: var(--ink-900);
+  color: var(--y-500);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.1rem;
+}
+.pick-back {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-900);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 124px), 1fr));
+  gap: 10px;
+}
+.pick-grid--papers {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 240px));
+}
+.pick-btn {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 96px;
+  padding: 12px 8px;
+  text-align: center;
+  color: var(--ink-900);
+  background: var(--paper-0);
+  border: 2px solid var(--ink-900);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-hard-sm);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    background-color 0.12s;
+}
+.pick-btn strong {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 6.5vw, 2rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.pick-btn small,
+.pick-btn .pick-price {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-wrap: balance;
+}
+.pick-btn .pick-price b,
+.pick-btn > b {
+  color: var(--ink-900);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+.pick-btn:hover:not(:disabled),
+.pick-btn:focus-visible {
+  background: var(--y-100);
+  box-shadow: var(--sh-hard);
+  transform: translate(-1px, -1px);
+}
+.pick-btn:focus-visible {
+  outline: 3px solid var(--y-500);
+  outline-offset: 2px;
+}
+.pick-btn[aria-pressed='true'] {
+  background: var(--y-500);
+}
+.pick-btn:disabled {
+  cursor: not-allowed;
+  background: var(--paper-100);
+  border-color: var(--line-strong);
+  box-shadow: none;
+  opacity: 0.75;
+}
+.add-block {
+  margin-top: 20px;
+  border-style: dashed;
+}
+.grp + .grp--pick,
+.grp + .add-block {
+  margin-top: 20px;
+}
+.ph-num {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--ink-900);
+  color: var(--y-500);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.ph-lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ph-grid {
+  /* Columnas según el ancho del propio bloque (no de la pantalla): con la columna de resumen al
+     lado, la mitad del ancho no alcanza para tres tarjetas con su selector de copias. */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 152px), 1fr));
   gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-@media (min-width: 640px) {
-  .ph-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-@media (min-width: 1000px) {
-  .ph-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
 }
 .ph-card {
   background: var(--paper-0);
@@ -630,6 +789,10 @@
 }
 .ph-body {
   display: grid;
+  grid-template-columns: minmax(
+    0,
+    1fr
+  ); /* sin esto el input fija el ancho mínimo y el selector desborda */
   gap: 8px;
   padding: 10px;
 }

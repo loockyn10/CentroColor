@@ -21,6 +21,7 @@ const toService = (x: any): PublicServiceRow => ({
   sort_order: x.sort_order,
   variant_id: x.variant_id,
   photo_service_id: x.photo_service_id,
+  ...(x.paper === 'glossy' || x.paper === 'matte' ? { paper: x.paper } : {}),
   tiers: x.tiers.map((tier: any) => ({
     min_quantity: Number(tier.min_quantity),
     max_quantity: tier.max_quantity === null ? null : Number(tier.max_quantity),
