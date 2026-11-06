@@ -207,9 +207,11 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
       track('photo_job_drive_folders.get');
       return state.folders.get(`${businessId}|${jobId}|${key}`) ?? null;
     },
-    async saveFolderId(businessId, jobId, key, id) {
-      track('photo_job_drive_folders.upsert');
-      state.folders.set(`${businessId}|${jobId}|${key}`, id);
+    async claimFolderId(businessId, jobId, key, id) {
+      track('photo_job_drive_folders.claim');
+      const mapKey = `${businessId}|${jobId}|${key}`;
+      if (!state.folders.has(mapKey)) state.folders.set(mapKey, id);
+      return state.folders.get(mapKey)!;
     },
     async setJobFolders(businessId, jobId, root, edited) {
       track('photo_jobs.set_drive_folders');
@@ -378,6 +380,7 @@ export function createFakeDrive(
       origin?: string | null;
     }[],
     manifests: [] as { parent: string; jobId: string; text: string }[],
+    trashed: [] as string[],
   };
   let ids = 0;
   const drive: DriveGateway = {
@@ -446,6 +449,9 @@ export function createFakeDrive(
           trashed: false,
         }
       );
+    },
+    async trashFile(_token, id) {
+      record.trashed.push(id);
     },
     async putManifest(_token, parent, jobId, text) {
       if (options.failOn?.manifest) throw options.failOn.manifest;

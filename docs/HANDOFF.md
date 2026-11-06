@@ -1,5 +1,13 @@
 # Handoff
 
+## Corrección `/imprimir`: varios tamaños (06/11/2026)
+
+Detalle y causa raíz en `docs/CURRENT_STATE.md`; decisión 105 en `docs/DECISIONS.md`. Sin SQL remoto, sin commit ni push, **sin migraciones nuevas**.
+
+**Publicar (en este orden):** (1) redesplegar las Edge Functions. Se determinó por quién **ejecuta** el código cambiado (`ensureFolders`/`claimFolderId`, `supersedeAttempt`, el chequeo de integridad del submit), no por quién lo importa: todas las que pasan por `runtime.ts` empaquetan los módulos modificados, pero sólo estas tres cambian de comportamiento. **Obligatorias:** `photo-upload-session` y `public-photo-order-submit`. **Recomendada** (su `ensureFolders` para `PEDIDO.txt` pasa a reclamar carpetas; sin redeploy conserva el comportamiento anterior en el flujo manual): `photo-upload-submit`. **Sin cambio funcional, no requieren redeploy:** `photo-upload-finalize`, `photo-upload-context`, `public-photo-order-start`, `public-photo-catalog`, `public-photo-order-track`, `photo-file-admin`, WhatsApp y OAuth. Comandos en `docs/PUBLIC_ORDERS_SETUP.md`. (2) Publicar la Web (Vercel). Funciones primero: un navegador viejo contra funciones nuevas recibe `order_incomplete` en lugar de un pedido incompleto confirmado en silencio, y uno nuevo contra funciones viejas sólo ve ignorados los campos extra.
+
+**Prueba de humo:** `/imprimir`, elegir 10x15 y 13x18, 2–3 fotos en cada una, confirmar: Drive debe tener `Para imprimir/<tamaño>/` por cada tamaño dentro de una única carpeta del pedido, junto a `PEDIDO.txt`.
+
 ## UX/UI transversal — navegación, Papelera, filtros y controles propios (05/11/2026)
 
 Sprint transversal de patrones compartidos (no parches por pantalla). Sin cambios en reglas comerciales, sin SQL remoto, sin commit ni push. Detalle de patrones en `docs/UX_GRAMMAR.md`; decisiones 101–104 en `docs/DECISIONS.md`; modelo en `docs/DATA_MODEL.md`.

@@ -114,12 +114,17 @@ export interface PhotoIntakeStore {
     jobId: string,
     key: string,
   ): Promise<string | null>;
-  saveFolderId(
+  /**
+   * Atomically records `driveFolderId` as THE folder of `key` unless another request already did,
+   * and returns the folder that won. Concurrent uploads of one order race to create the same
+   * folders: the first mapping stands and every caller continues with the same id.
+   */
+  claimFolderId(
     businessId: string,
     jobId: string,
     key: string,
     driveFolderId: string,
-  ): Promise<void>;
+  ): Promise<string>;
   setJobFolders(
     businessId: string,
     jobId: string,

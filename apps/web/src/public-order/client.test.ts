@@ -76,6 +76,59 @@ describe('subida de una foto', () => {
     expect(bodies[1]).toMatchObject({ previousUploadId: 'upload-1' });
   });
 
+  it('una segunda ronda nombra el intento anterior de esa foto y el servidor puede confirmar que ya llegó', async () => {
+    const bodies: unknown[] = [];
+    const attempts: string[] = [];
+    const deps: UploadDeps = {
+      call: vi.fn(async (name: string, body: unknown) => {
+        if (name === 'photo-upload-session') {
+          bodies.push(body);
+          return { uploadId: 'upload-1', alreadyUploaded: true };
+        }
+        return { ok: true };
+      }) as unknown as UploadDeps['call'],
+      uploadChunks: vi.fn() as unknown as UploadDeps['uploadChunks'],
+    };
+    const progress: number[] = [];
+    await uploadPhoto(
+      'tok',
+      { ...target, previousUploadId: 'upload-1' },
+      (n) => progress.push(n),
+      { deps, onAttempt: (id) => attempts.push(id) },
+    );
+    expect(bodies[0]).toMatchObject({ previousUploadId: 'upload-1' });
+    // Ya estaba guardada: no se envían bytes ni se confirma otra vez.
+    expect(deps.uploadChunks).not.toHaveBeenCalled();
+    expect(deps.call).toHaveBeenCalledTimes(1);
+    expect(progress).toEqual([0, 100]);
+    expect(attempts).toEqual(['upload-1']);
+  });
+
+  it('informa cada intento abierto para poder nombrarlo en un reintento posterior', async () => {
+    let sessions = 0;
+    const attempts: string[] = [];
+    const deps: UploadDeps = {
+      call: vi.fn(async (name: string) => {
+        if (name === 'photo-upload-session') {
+          sessions += 1;
+          return session(sessions);
+        }
+        return { ok: true };
+      }) as unknown as UploadDeps['call'],
+      uploadChunks: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('La carga se interrumpió (503).'))
+        .mockResolvedValueOnce(
+          undefined,
+        ) as unknown as UploadDeps['uploadChunks'],
+    };
+    await uploadPhoto('tok', target, () => undefined, {
+      deps,
+      onAttempt: (id) => attempts.push(id),
+    });
+    expect(attempts).toEqual(['upload-1', 'upload-2']);
+  });
+
   it('informa el error después de agotar los intentos', async () => {
     const deps: UploadDeps = {
       call: vi.fn(async () => session(1)) as unknown as UploadDeps['call'],

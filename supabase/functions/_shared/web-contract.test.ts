@@ -242,6 +242,93 @@ describe('cliente web del pedido público ↔ funciones reales', () => {
     ).toEqual(['uploaded', 'uploaded', 'uploaded']);
   });
 
+  it('dos tamaños: el cliente web declara cuántas fotos mandó por tamaño y el servidor no confirma un tamaño incompleto', async () => {
+    installNetwork();
+    const catalog = await fetchCatalog();
+    const entries: PhotoEntry[] = [
+      { id: 'a', serviceId: IDS.svc10x15, file: photo('f1.jpg'), copies: 1 },
+      { id: 'b', serviceId: IDS.svc10x15, file: photo('f2.jpg'), copies: 1 },
+      { id: 'c', serviceId: IDS.svc13x18, file: photo('f3.jpg'), copies: 1 },
+      { id: 'd', serviceId: IDS.svc13x18, file: photo('f4.jpg'), copies: 1 },
+    ];
+    const lines = deriveLines(
+      catalog.services,
+      [IDS.svc10x15, IDS.svc13x18],
+      entries,
+    );
+    const started = await startOrder(
+      startBody(
+        'client-key-aaaaaaaaaaaa',
+        {
+          name: 'María García',
+          phone: '342 555 1234',
+          email: '',
+          notes: '',
+          whatsappOptIn: true,
+        },
+        lines,
+      ),
+    );
+    const destinations = new Map(
+      started.destinations.map((x) => [x.serviceId, x.destinationId]),
+    );
+    expect(destinations.size).toBe(2);
+    // Sólo llegan las fotos de 10x15 y una de 13x18.
+    const arrived = entries.slice(0, 3);
+    const attempts = new Map<string, string>();
+    for (const entry of arrived)
+      await uploadPhoto(
+        started.uploadToken,
+        {
+          id: entry.id,
+          file: entry.file,
+          copies: entry.copies,
+          destinationId: destinations.get(entry.serviceId)!,
+        },
+        () => undefined,
+        { onAttempt: (id) => attempts.set(entry.id, id) },
+      );
+    const expectedFiles = Object.fromEntries(
+      started.destinations.map((d) => [
+        d.destinationId,
+        entries.filter((e) => e.serviceId === d.serviceId).length,
+      ]),
+    );
+    await expect(
+      submitOrder(started.uploadToken, { expectedFiles }),
+    ).rejects.toMatchObject({
+      code: 'order_incomplete',
+      message: expect.stringMatching(/13x18.*llegaron 1 de 2/),
+    });
+
+    // Reintento de la ronda: las que ya llegaron se reconocen sin duplicarse; la que falta se sube.
+    for (const entry of entries)
+      await uploadPhoto(
+        started.uploadToken,
+        {
+          id: entry.id,
+          file: entry.file,
+          copies: entry.copies,
+          destinationId: destinations.get(entry.serviceId)!,
+          previousUploadId: attempts.get(entry.id),
+        },
+        () => undefined,
+        { onAttempt: (id) => attempts.set(entry.id, id) },
+      );
+    const done = await submitOrder(started.uploadToken, { expectedFiles });
+    expect(done.items).toEqual([
+      { name: '10x15 · Brillo · Público', quantity: 2, totalCents: 100000 },
+      { name: '13x18 · Brillo · Público', quantity: 2, totalCents: 160000 },
+    ]);
+    expect(
+      (
+        await w.db.query<any>(
+          `select status, count(*)::int n from public.photo_job_files group by status`,
+        )
+      ).rows,
+    ).toEqual([{ status: 'uploaded', n: 4 }]);
+  });
+
   it('los errores del servidor llegan con su código y un mensaje legible', async () => {
     installNetwork();
     const lines = deriveLines(

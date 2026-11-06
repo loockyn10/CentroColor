@@ -48,6 +48,7 @@ class Query implements PromiseLike<Result> {
   private count = false;
   private payload: Record<string, unknown> = {};
   private conflict: string | null = null;
+  private ignoreDuplicates = false;
   private filters: Filter[] = [];
   private orders: string[] = [];
   private max: number | null = null;
@@ -81,10 +82,14 @@ class Query implements PromiseLike<Result> {
     this.payload = patch;
     return this;
   }
-  upsert(row: Record<string, unknown>, options: { onConflict?: string } = {}) {
+  upsert(
+    row: Record<string, unknown>,
+    options: { onConflict?: string; ignoreDuplicates?: boolean } = {},
+  ) {
     this.operation = 'upsert';
     this.payload = row;
     this.conflict = options.onConflict ?? null;
+    this.ignoreDuplicates = Boolean(options.ignoreDuplicates);
     return this;
   }
   private where(
@@ -217,7 +222,9 @@ class Query implements PromiseLike<Result> {
         const updates = keys
           .filter((k) => !target.includes(k))
           .map((k) => `${k} = excluded.${k}`);
-        sql += ` on conflict (${target.join(', ')}) do update set ${updates.join(', ')}`;
+        sql += this.ignoreDuplicates
+          ? ` on conflict (${target.join(', ')}) do nothing`
+          : ` on conflict (${target.join(', ')}) do update set ${updates.join(', ')}`;
       }
       return { sql: sql + returning, values };
     }

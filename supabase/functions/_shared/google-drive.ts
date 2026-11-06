@@ -79,6 +79,8 @@ export interface DriveGateway {
     origin?: string | null,
   ): Promise<string>;
   getFile(token: string, id: string): Promise<DriveFileMeta>;
+  /** Moves a file or folder that this system created to the Drive trash (recoverable). */
+  trashFile(token: string, id: string): Promise<void>;
   putManifest(
     token: string,
     parent: string,
@@ -281,16 +283,35 @@ export function createDriveGateway(deps: DriveGatewayDeps): DriveGateway {
       `${driveBase}/files?q=${encodeURIComponent(q)}&fields=files(id)&pageSize=1`,
       token,
     );
-    const id: string =
-      found.files?.[0]?.id ??
+    const existing: string | undefined = found.files?.[0]?.id;
+    const id =
+      existing ??
       (
         await createFolder(token, name, parentId, {
           centrocolor_key: key,
           centrocolor_job_id: jobId,
         })
       ).id;
-    await store.saveFolderId(businessId, jobId, key, id);
-    return id;
+    // Concurrent uploads of one order (the browser sends several at once) all reach this point
+    // for the same folder: Drive happily creates duplicates and a plain "save" would let the
+    // last writer win, scattering the order over parallel folder trees. The first mapping
+    // stands; whoever lost throws away the empty folder it just created and uses the winner's.
+    const winner = await store.claimFolderId(businessId, jobId, key, id);
+    if (winner !== id && !existing)
+      await trashOwnFolder(token, id).catch(() => {
+        logger('warn', 'drive_duplicate_folder_not_trashed', { key });
+      });
+    return winner;
+  }
+
+  /** Trashed (recoverable), never deleted. Only for items this system created itself. */
+  async function trashOwnFolder(token: string, id: string) {
+    await request(
+      'files.trash',
+      `${driveBase}/files/${encodeURIComponent(id)}`,
+      token,
+      { method: 'PATCH', body: JSON.stringify({ trashed: true }) },
+    );
   }
 
   async function ensureFolders(
@@ -440,6 +461,9 @@ export function createDriveGateway(deps: DriveGatewayDeps): DriveGateway {
           );
         throw cause;
       }
+    },
+    async trashFile(token, id) {
+      await trashOwnFolder(token, id);
     },
     async putManifest(token, parent, jobId, text) {
       const q = `'${escapeDriveQuery(parent)}' in parents and trashed=false and name='PEDIDO.txt'`;

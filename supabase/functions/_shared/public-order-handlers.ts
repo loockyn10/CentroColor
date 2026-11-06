@@ -9,10 +9,14 @@ import type { DriveGateway } from './google-drive.ts';
 import { ApiError, body, json } from './http.ts';
 import { normalizeWhatsAppNumber } from './phone.ts';
 import {
+  findOrderGaps,
+  incompleteOrderError,
   orderRuleToApiError,
   parseStartPayload,
+  parseSubmitPayload,
   priceOrder,
   type PublicOrderStartPayload,
+  type PublicOrderSubmitPayload,
   type PublicOrderTokenPayload,
 } from './public-order-plan.ts';
 import { OrderRuleError, type PublicOrderStore } from './public-order-store.ts';
@@ -244,7 +248,9 @@ export function handlePublicOrderSubmit(
     deps,
     'public_photo_order_submit',
     async (requestId, logger) => {
-      const { token } = await body<Partial<PublicOrderTokenPayload>>(request);
+      const payload = await body<Partial<PublicOrderSubmitPayload>>(request);
+      const { token } = payload;
+      const submit = parseSubmitPayload(payload);
       const now = (deps.now ?? Date.now)();
       const { link } = await validateUploadToken(deps.intake, token, {
         allowSubmitted: true,
@@ -271,6 +277,47 @@ export function handlePublicOrderSubmit(
           'uploaded',
         );
         if (!files.length) throw orderRuleToApiError('no_files');
+        // Never confirm an order as complete when a size lost photos: the database would
+        // otherwise drop the empty size and bill only what arrived.
+        if (!submit.acceptPartial) {
+          const context = await deps.intake.getJobContext(
+            link.business_id,
+            link.photo_job_id,
+          );
+          const { signingSecret } = intakeConfig(deps.getEnv);
+          const items = (context?.items ?? []).filter((x) => x.is_active);
+          const uploaded = new Map<string, number>();
+          for (const file of files)
+            if (file.photo_job_item_id)
+              uploaded.set(
+                file.photo_job_item_id,
+                (uploaded.get(file.photo_job_item_id) ?? 0) + 1,
+              );
+          let expected: Map<string, number> | null = null;
+          if (submit.expectedFiles) {
+            expected = new Map();
+            for (const item of items)
+              expected.set(
+                item.id,
+                submit.expectedFiles[
+                  await destinationId(signingSecret, link.id, item.id)
+                ] ?? 0,
+              );
+          }
+          const gaps = findOrderGaps(
+            items.map((x) => ({ id: x.id, name: x.service_name_snapshot })),
+            uploaded,
+            expected,
+          );
+          if (gaps.length) {
+            logger('warn', 'public_photo_order_incomplete', {
+              requestId,
+              photoJobId: link.photo_job_id,
+              gaps: gaps.length,
+            });
+            throw incompleteOrderError(gaps);
+          }
+        }
         // PEDIDO.txt first (Drive), database last: a failure in between is retried safely.
         const folders = await deps.drive.ensureFolders(
           link.business_id,

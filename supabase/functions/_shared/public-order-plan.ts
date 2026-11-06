@@ -15,6 +15,16 @@ export type PublicOrderStartPayload = {
   website?: string;
 };
 export type PublicOrderTokenPayload = { token: string };
+export type PublicOrderSubmitPayload = PublicOrderTokenPayload & {
+  /**
+   * How many photos the browser sent to each destination (the opaque ids returned by start).
+   * The server compares them with what is really stored: a size that lost photos is never
+   * confirmed as complete.
+   */
+  expectedFiles?: Record<string, number>;
+  /** The customer saw the failed photos and chose to send the order without them. */
+  acceptPartial?: boolean;
+};
 
 export const LIMITS = {
   maxServices: 10,
@@ -262,4 +272,68 @@ export function orderRuleToApiError(code: string) {
     default:
       return invalid('La solicitud no es válida.');
   }
+}
+
+export type ParsedSubmit = {
+  expectedFiles: Record<string, number> | null;
+  acceptPartial: boolean;
+};
+
+export function parseSubmitPayload(
+  input: Partial<PublicOrderSubmitPayload>,
+): ParsedSubmit {
+  const acceptPartial = input.acceptPartial;
+  if (acceptPartial !== undefined && typeof acceptPartial !== 'boolean')
+    throw invalid('La solicitud no es válida.');
+  const expected = input.expectedFiles;
+  if (expected === undefined || expected === null)
+    return { expectedFiles: null, acceptPartial: acceptPartial === true };
+  if (
+    typeof expected !== 'object' ||
+    Array.isArray(expected) ||
+    Object.keys(expected).length > LIMITS.maxServices * 2
+  )
+    throw invalid('La solicitud no es válida.');
+  const clean: Record<string, number> = {};
+  for (const [key, count] of Object.entries(expected)) {
+    if (!Number.isInteger(count) || count < 0 || count > 1000)
+      throw invalid('La solicitud no es válida.');
+    clean[key] = count;
+  }
+  return { expectedFiles: clean, acceptPartial: acceptPartial === true };
+}
+
+export type OrderGap = { name: string; uploaded: number; expected: number };
+
+/**
+ * Sizes whose photos did not all arrive. Without the browser's counts (an older page) a size
+ * with no photo at all is the only gap that can be proven; with them, any shortfall is.
+ */
+export function findOrderGaps(
+  items: { id: string; name: string }[],
+  uploadedByItem: Map<string, number>,
+  expectedByItem: Map<string, number> | null,
+): OrderGap[] {
+  const gaps: OrderGap[] = [];
+  for (const item of items) {
+    const uploaded = uploadedByItem.get(item.id) ?? 0;
+    const expected = expectedByItem ? (expectedByItem.get(item.id) ?? 0) : 1;
+    if (uploaded < expected) gaps.push({ name: item.name, uploaded, expected });
+  }
+  return gaps;
+}
+
+export function incompleteOrderError(gaps: OrderGap[]) {
+  const detail = gaps
+    .map((gap) =>
+      gap.expected > 1
+        ? `${gap.name} (llegaron ${gap.uploaded} de ${gap.expected})`
+        : gap.name,
+    )
+    .join(', ');
+  return new ApiError(
+    `Faltan fotos de: ${detail}. Reintentá enviarlas antes de confirmar.`,
+    409,
+    'order_incomplete',
+  );
 }

@@ -24,6 +24,8 @@ export function createFakeGoogle() {
       'ok' | 'invalid_grant' | 'invalid_client' | 'network' | 'server_error',
     driveFailure: null as null | { status: number; reason?: string },
     nextId: 1,
+    /** Network latency of every Drive call: widens the window of check-then-create races. */
+    latencyMs: 0,
   };
   const reply = (body: unknown, status = 200, headers: HeadersInit = {}) =>
     new Response(JSON.stringify(body), {
@@ -53,6 +55,8 @@ export function createFakeGoogle() {
       return reply({ access_token: 'drive-access-token', expires_in: 3599 });
     }
 
+    if (state.latencyMs > 0)
+      await new Promise((resolve) => setTimeout(resolve, state.latencyMs));
     if (state.driveFailure)
       return reply(
         {
@@ -161,6 +165,13 @@ export function createFakeGoogle() {
             size: record.text ? String(record.text.length) : undefined,
           })
         : reply({ error: { code: 404, message: 'File not found' } }, 404);
+    }
+    if (method === 'PATCH' && match) {
+      const record = files.find((x) => x.id === decodeURIComponent(match[1]!));
+      if (!record) return reply({ error: { code: 404 } }, 404);
+      const patch = JSON.parse(text ?? '{}');
+      if (typeof patch.trashed === 'boolean') record.trashed = patch.trashed;
+      return reply({ id: record.id });
     }
     const upload = /^\/upload\/drive\/v3\/files\/([^/]+)$/.exec(path);
     if (method === 'PATCH' && upload) {

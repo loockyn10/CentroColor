@@ -83,6 +83,8 @@ export function PrintOrderPortal() {
   const [sheet, setSheet] = useState(false);
   const [copied, setCopied] = useState<'alias' | 'amount' | null>(null);
   const session = useRef<{ started: StartedOrder } | null>(null);
+  // Last upload attempt of each photo: a retry names it so the server never stores it twice.
+  const attempts = useRef(new Map<string, string>());
   const remembered = useMemo(() => loadRememberedOrder(), []);
 
   const loadCatalog = () =>
@@ -170,9 +172,13 @@ export function PrintOrderPortal() {
             file: entry.file,
             copies: entry.copies,
             destinationId: destinations.get(entry.serviceId)!,
+            previousUploadId: attempts.current.get(entry.id),
           },
           (percent) =>
             patchProgress(entry.id, { status: 'uploading', percent }),
+          {
+            onAttempt: (uploadId) => attempts.current.set(entry.id, uploadId),
+          },
         );
         patchProgress(entry.id, { status: 'done', percent: 100 });
       } catch (error) {
@@ -187,8 +193,18 @@ export function PrintOrderPortal() {
     return failures.length;
   }
 
-  async function finish() {
-    const done = await submitOrder(session.current!.started.uploadToken);
+  async function finish(sent: PhotoEntry[], acceptPartial = false) {
+    const started = session.current!.started;
+    // What the browser believes it sent to each size: the server compares it with what arrived.
+    const expectedFiles: Record<string, number> = {};
+    for (const destination of started.destinations)
+      expectedFiles[destination.destinationId] = sent.filter(
+        (x) => x.serviceId === destination.serviceId,
+      ).length;
+    const done = await submitOrder(started.uploadToken, {
+      expectedFiles,
+      ...(acceptPartial ? { acceptPartial: true } : {}),
+    });
     rememberOrder({
       orderCode: done.orderCode,
       trackingToken: done.trackingToken,
@@ -199,6 +215,26 @@ export function PrintOrderPortal() {
     setPhase('done');
     window.history.replaceState(null, '', '/imprimir/recibido');
     window.scrollTo?.({ top: 0 });
+  }
+
+  /**
+   * Confirms the order. If the server finds a size that lost photos, every photo is offered
+   * again once: those that did arrive are acknowledged without uploading twice (the retry names
+   * its previous attempt), the lost ones are sent now. Returns false when some photo still
+   * fails, so the customer decides on the "partial" screen.
+   */
+  async function confirmSent(sent: PhotoEntry[]) {
+    try {
+      await finish(sent);
+    } catch (error) {
+      const code = error instanceof PublicOrderError ? error.code : null;
+      if (code !== 'order_incomplete') throw error;
+      if (await sendPhotos(sent)) {
+        setPhase('partial');
+        return;
+      }
+      await finish(sent);
+    }
   }
 
   async function confirm() {
@@ -235,7 +271,7 @@ export function PrintOrderPortal() {
       session.current = { started };
       const failed = await sendPhotos(entries);
       if (failed) setPhase('partial');
-      else await finish();
+      else await confirmSent(entries);
     } catch (error) {
       await handleFailure(error);
     }
@@ -266,7 +302,7 @@ export function PrintOrderPortal() {
     try {
       const stillFailed = await sendPhotos(failed);
       if (stillFailed) setPhase('partial');
-      else await finish();
+      else await confirmSent(entries);
     } catch (error) {
       await handleFailure(error);
     }
@@ -284,7 +320,8 @@ export function PrintOrderPortal() {
     setEntries(kept);
     setPhase('sending');
     try {
-      await finish();
+      // The customer explicitly chose to send the order without the photos that failed.
+      await finish(kept, true);
     } catch (error) {
       await handleFailure(error);
     }

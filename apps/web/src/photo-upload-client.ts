@@ -21,6 +21,11 @@ export type UploadSession = {
   uploadUrl: string;
   chunkSize: number;
 };
+/** A retry whose previous attempt had in fact completed: there is nothing left to send. */
+export type UploadSessionAlreadyDone = {
+  uploadId: string;
+  alreadyUploaded: true;
+};
 
 /**
  * Request bodies, one builder per Edge Function. Their keys are the contract with

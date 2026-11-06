@@ -7,6 +7,7 @@ import {
   submitBody,
   uploadChunks,
   type UploadSession,
+  type UploadSessionAlreadyDone,
 } from '../photo-upload-client';
 import type { CatalogService, OrderLine } from './model';
 
@@ -77,8 +78,14 @@ async function request<T>(name: string, body: unknown): Promise<T> {
 export const fetchCatalog = () => request<Catalog>('public-photo-catalog', {});
 export const startOrder = (body: unknown) =>
   request<StartedOrder>('public-photo-order-start', body);
-export const submitOrder = (token: string) =>
-  request<SubmittedOrder>('public-photo-order-submit', { token });
+export type SubmitOptions = {
+  /** Photos sent per destination: the server refuses to confirm a size that lost some. */
+  expectedFiles?: Record<string, number>;
+  /** The customer chose to send the order without the photos that failed. */
+  acceptPartial?: boolean;
+};
+export const submitOrder = (token: string, options: SubmitOptions = {}) =>
+  request<SubmittedOrder>('public-photo-order-submit', { token, ...options });
 export const trackOrder = (token: string) =>
   request<TrackedOrder>('public-photo-order-track', { token });
 
@@ -95,6 +102,8 @@ export type UploadTarget = {
   file: File;
   copies: number;
   destinationId: string;
+  /** The attempt of an earlier round for this same photo, so a retry never duplicates it. */
+  previousUploadId?: string;
 };
 
 /**
@@ -106,16 +115,21 @@ export async function uploadPhoto(
   token: string,
   target: UploadTarget,
   onProgress: (percent: number) => void,
-  options: { attempts?: number; deps?: UploadDeps } = {},
+  options: {
+    attempts?: number;
+    deps?: UploadDeps;
+    /** Called as soon as the server opens an attempt, so the caller can remember it for retries. */
+    onAttempt?: (uploadId: string) => void;
+  } = {},
 ) {
   const deps = options.deps ?? realDeps;
   const attempts = options.attempts ?? 3;
-  let previousUploadId: string | undefined;
+  let previousUploadId: string | undefined = target.previousUploadId;
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       onProgress(0);
-      const session = await deps.call<UploadSession>(
+      const session = await deps.call<UploadSession | UploadSessionAlreadyDone>(
         'photo-upload-session',
         sessionBody(
           token,
@@ -126,6 +140,11 @@ export async function uploadPhoto(
         ),
       );
       previousUploadId = session.uploadId;
+      options.onAttempt?.(session.uploadId);
+      if ('alreadyUploaded' in session) {
+        onProgress(100);
+        return;
+      }
       await deps.uploadChunks(
         target.file,
         session.uploadUrl,

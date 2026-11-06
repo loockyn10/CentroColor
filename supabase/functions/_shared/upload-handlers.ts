@@ -176,6 +176,46 @@ function validOrigin(request: Request, fallback: string) {
     : new URL(fallback).origin;
 }
 
+/**
+ * Retires an upload attempt that is being replaced. Returns `uploaded` when it had in fact
+ * completed (the replacement is then unnecessary). Otherwise it is marked failed and the
+ * partial copy it may have left in Drive is trashed (best effort), so a retry never leaves two
+ * copies of the same photo behind.
+ */
+async function supersedeAttempt(
+  deps: PublicDeps,
+  businessId: string,
+  previous: FileRow,
+): Promise<'uploaded' | 'retired'> {
+  if (previous.status === 'uploaded') return 'uploaded';
+  if (previous.status !== 'failed') {
+    const changed = await deps.store.transitionFile(
+      businessId,
+      previous.photo_job_id,
+      previous.id,
+      ['pending', 'uploading'],
+      'failed',
+    );
+    if (!changed) {
+      const current = await deps.store.getFile(
+        businessId,
+        previous.photo_job_id,
+        previous.id,
+      );
+      if (current?.status === 'uploaded') return 'uploaded';
+    }
+  }
+  try {
+    const { token } = await deps.drive.access(businessId);
+    const remote = await deps.drive.getFile(token, previous.drive_file_id);
+    if (!remote.trashed)
+      await deps.drive.trashFile(token, previous.drive_file_id);
+  } catch {
+    /* the file never reached Drive (or Drive is busy): nothing to clean up */
+  }
+  return 'retired';
+}
+
 export function handleUploadSession(request: Request, deps: PublicDeps) {
   return run(
     request,
@@ -280,6 +320,29 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
       // Copies only apply to lab prints; editing/other keep a single unit per file.
       const copies = item.workflow_route === 'lab' ? requestedCopies : 1;
 
+      // A retry names the attempt it replaces. If that attempt actually reached storage (the
+      // browser only lost the answer), it is the photo: never upload and count it twice.
+      const previousId =
+        input.previousUploadId && UUID.test(input.previousUploadId)
+          ? input.previousUploadId
+          : null;
+      if (previousId) {
+        const previous = await deps.store.getFile(
+          link.business_id,
+          job.id,
+          previousId,
+        );
+        if (previous?.photo_job_item_id === item.id) {
+          const settled = await supersedeAttempt(
+            deps,
+            link.business_id,
+            previous,
+          );
+          if (settled === 'uploaded')
+            return json({ uploadId: previous.id, alreadyUploaded: true });
+        }
+      }
+
       const active = await deps.store.countFiles(link.business_id, job.id, [
         'pending',
         'uploading',
@@ -302,15 +365,6 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
           429,
           'rate_limited',
         );
-      if (input.previousUploadId && UUID.test(input.previousUploadId))
-        await deps.store.transitionFile(
-          link.business_id,
-          job.id,
-          input.previousUploadId,
-          ['pending', 'uploading'],
-          'failed',
-        );
-
       const folders = await deps.drive.ensureFolders(
         link.business_id,
         job.id,

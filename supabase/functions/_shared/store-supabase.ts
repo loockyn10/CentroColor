@@ -103,9 +103,10 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
       );
       return (data?.drive_folder_id as string | undefined) ?? null;
     },
-    async saveFolderId(businessId, jobId, key, driveFolderId) {
+    async claimFolderId(businessId, jobId, key, driveFolderId) {
+      // `ON CONFLICT DO NOTHING`: the first writer wins, later ones read the winner back.
       await run(
-        'photo_job_drive_folders.upsert',
+        'photo_job_drive_folders.claim',
         db.from('photo_job_drive_folders').upsert(
           {
             business_id: businessId,
@@ -113,9 +114,23 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
             folder_key: key,
             drive_folder_id: driveFolderId,
           },
-          { onConflict: 'business_id,photo_job_id,folder_key' },
+          {
+            onConflict: 'business_id,photo_job_id,folder_key',
+            ignoreDuplicates: true,
+          },
         ),
       );
+      const { data } = await run(
+        'photo_job_drive_folders.get_winner',
+        db
+          .from('photo_job_drive_folders')
+          .select('drive_folder_id')
+          .eq('business_id', businessId)
+          .eq('photo_job_id', jobId)
+          .eq('folder_key', key)
+          .maybeSingle(),
+      );
+      return (data?.drive_folder_id as string | undefined) ?? driveFolderId;
     },
     async setJobFolders(businessId, jobId, rootFolderId, editedFolderId) {
       await run(
