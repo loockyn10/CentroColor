@@ -22,6 +22,7 @@ import {
   type PublicOrderTokenPayload,
 } from './public-order-plan.ts';
 import {
+  isAnonymousProfessionalRequest,
   OrderRuleError,
   type PublicOrderRow,
   type PublicOrderStore,
@@ -53,15 +54,32 @@ export const RATE_LIMITS = {
   perHourPerPhone: 8,
   /** Professionals place few, large orders; this only stops a runaway client. */
   perHourPerAccount: 60,
+  /**
+   * Anonymous professional requests (/profesionales without an account). Real photographers send a
+   * few large orders, so these are tighter than /imprimir per client and per phone: every draft
+   * can hold up to PROFESSIONAL_REQUEST_MAX_TOTAL_BYTES in the shop's Drive.
+   */
+  requestsPerHourGlobal: 60,
+  requestsPerHourPerClient: 6,
+  requestsPerDayPerClient: 20,
+  requestsPerHourPerPhone: 4,
 } as const;
+export const DAY_MS = 86_400_000;
 export const HOUR_MS = 3_600_000;
 export const UNAVAILABLE =
   'Los pedidos online no están disponibles por el momento.';
 
+/**
+ * "Impresión 10x15 · Brillo · Por presupuestar" → "Impresión 10x15 · Brillo". What follows the paper
+ * is the price list once the request is quoted, which is commercial information.
+ */
+export const requestItemName = (name: string) =>
+  /^(.*? · (?:Mate|Brillo))( · .*)?$/.exec(name)?.[1] ?? name;
+
 export const orderCode = (jobId: string) =>
   `CC-${jobId.slice(0, 8).toUpperCase()}`;
 
-async function openBusiness(deps: PublicOrderDeps) {
+export async function openBusiness(deps: PublicOrderDeps) {
   const settings = publicOrderSettings(deps.getEnv);
   const business = await deps.orders.resolveBusiness(settings.businessSlug);
   if (!business) throw new ApiError(UNAVAILABLE, 503, 'orders_unavailable');
@@ -541,8 +559,9 @@ export function handlePublicOrderSubmit(
         link.photo_job_id,
       );
       if (!order) throw new ApiError('Link inválido.', 404, 'link_invalid');
-      // A professional order is confirmed by its own endpoint, which also checks the account.
-      if (order.professional_account_id)
+      // A professional order (with or without an account) is confirmed by its own endpoint: the
+      // answer of this one carries amounts, which a professional request must never expose.
+      if (order.professional_account_id || order.portal === 'profesionales')
         throw new ApiError('Link inválido.', 404, 'link_invalid');
       const done = await confirmUploadedOrder(deps, {
         link,
@@ -582,6 +601,23 @@ export function handlePublicOrderTrack(
       link.photo_job_id,
     );
     if (!tracking) throw new ApiError('Link inválido.', 404, 'link_invalid');
+    // A request sent without an account is quoted by CentroColor: whoever holds this link never
+    // receives amounts (not even once it is quoted, nor the name of the list that was applied).
+    if (isAnonymousProfessionalRequest(order))
+      return json({
+        businessName: await deps.orders.getBusinessName(link.business_id),
+        orderCode: orderCode(link.photo_job_id),
+        createdAt: order.submitted_at ?? tracking.job_created_at,
+        status: tracking.job_status,
+        request: {
+          quote:
+            tracking.quote_status === 'pending_quote' ? 'pending' : 'quoted',
+        },
+        items: tracking.items.map((x) => ({
+          name: requestItemName(x.name),
+          quantity: x.quantity,
+        })),
+      });
     return json({
       businessName: await deps.orders.getBusinessName(link.business_id),
       orderCode: orderCode(link.photo_job_id),

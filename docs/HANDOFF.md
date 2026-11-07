@@ -1,5 +1,46 @@
 # Handoff
 
+## `/profesionales` público: precios privados y pedidos «por presupuestar» (08/11/2026)
+
+Detalle en `docs/CURRENT_STATE.md`; decisiones 111–115; guía de cuentas en `docs/PROFESSIONAL_PORTAL_SETUP.md`. **Nada aplicado ni desplegado**, sin SQL remoto, sin commit ni push (los cambios están en el árbol de trabajo). Las cuentas profesionales de la entrega anterior se conservan sin cambios de comportamiento.
+
+**Publicar (en este orden; se suma a la lista de `docs/DEPLOY_CHECKLIST.md`):**
+
+```powershell
+# 0. Sólo lectura: debe listar 20261108000000_professional_requests.sql (y 20261107000000 si todavía no se aplicó)
+pnpm exec supabase db push --dry-run
+
+# 1. Migración (con autorización). Aditiva: columnas nuevas con valores por defecto, nada se reescribe.
+pnpm exec supabase db push
+
+# 2A. Funciones NUEVAS (sin JWT: cada una autoriza por token capability y nunca maneja importes)
+pnpm exec supabase functions deploy professional-public-catalog --no-verify-jwt --use-api
+pnpm exec supabase functions deploy professional-request-start --no-verify-jwt --use-api
+pnpm exec supabase functions deploy professional-request-submit --no-verify-jwt --use-api
+
+# 2B. OBLIGATORIAS por cambio de comportamiento
+pnpm exec supabase functions deploy photo-upload-session --no-verify-jwt --use-api
+pnpm exec supabase functions deploy public-photo-order-submit --no-verify-jwt --use-api
+pnpm exec supabase functions deploy public-photo-order-track --no-verify-jwt --use-api
+
+# 2C. Recomendadas (mismo build; sin cambio de comportamiento: empaquetan store.ts/store-supabase.ts y la nueva consulta de `portal`)
+pnpm exec supabase functions deploy public-photo-order-start --no-verify-jwt --use-api
+pnpm exec supabase functions deploy photo-upload-finalize --no-verify-jwt --use-api
+pnpm exec supabase functions deploy photo-upload-context --no-verify-jwt --use-api
+pnpm exec supabase functions deploy photo-upload-submit --no-verify-jwt --use-api
+pnpm exec supabase functions deploy public-photo-catalog --no-verify-jwt --use-api
+pnpm exec supabase functions deploy photo-file-admin --use-api
+
+# 3. Verificar (sólo lectura)
+pnpm exec supabase functions list
+```
+
+Las funciones con JWT (`professional-catalog`, `professional-order-start`, `professional-order-submit`, `professional-admin`) **no cambian de comportamiento** y no requieren redeploy por este trabajo. Después: publicar la Web (Vercel, sin variables nuevas) y, para Desktop, el instalador nuevo (`pnpm build:desktop`; ejecuta la migración SQLite `0021` al abrirse). **Funciones primero:** una Web nueva contra funciones viejas falla de forma controlada en `/profesionales` (no encuentra las funciones nuevas); un seguimiento viejo mostraría importes de una solicitud, por eso `public-photo-order-track` va antes que la Web.
+
+**Prueba de humo real (pendiente):** (1) en una ventana sin sesión, `/profesionales`: ninguna cifra en pantalla ni en la pestaña Red (catálogo, inicio, confirmación, seguimiento); carpeta de 100+ fotos reales, «Copias para todas», dos formatos, cortar la conexión a mitad y reintentar. (2) En Drive: `<tamaño · papel · Por presupuestar>/001_3copias.jpg…` y `PEDIDO.txt`. (3) En el panel Web: Pedidos muestra «Por presupuestar» (también Inicio y la insignia de navegación); no deja marcar listo, cobrar ni editar el precio; «Presupuestar» con la lista del cliente (Profesional o convenio) fija el importe y habilita Cobros. (4) Con una cuenta de CentroColor abierta, `/profesionales` sigue sin mostrar precios; con una cuenta profesional, sí (su lista). (5) `/imprimir` completo, sin cambios. (6) Desktop: el pedido pendiente aparece sincronizado, sin importe y sin cobrar; tras presupuestar en la Web, llega con importe.
+
+**Punto de reanudación:** `supabase/migrations/20261108000000_professional_requests.sql`, `supabase/functions/_shared/professional-request-handlers.ts` (anónimo), `apps/web/src/professional/` (`portal.tsx` decide el modo; `order-portal.tsx` sirve ambos), `packages/features/src/photo-quote.tsx` (panel «Presupuestar») y `apps/web/src/photo-quote.ts`. Siguiente trabajo posible, sólo con pedido nuevo: re-presupuestar una solicitud, presupuestar desde Desktop, CAPTCHA (Turnstile) si hay abuso, limpieza programada de borradores abandonados (`cc_public_order_mark_abandoned`), y el sistema general de cuentas de clientes (que reutilizaría `professional_accounts`).
+
 ## Auditoría final de despliegue (07/11/2026)
 
 Lista consolidada y verificada contra el remoto (sólo lectura) en `docs/DEPLOY_CHECKLIST.md`: **una migración pendiente** (`20261107000000`), 4 funciones nuevas, 3 obligatorias y 6 más para un build coherente, configuración de Auth, variables y pruebas reales. Ambos sprints están commiteados y subidos (`91c1936`); la Web puede estar publicada antes que las funciones. WhatsApp sigue sin desplegarse.

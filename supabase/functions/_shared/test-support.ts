@@ -311,6 +311,17 @@ export function createFakeStore(state: StoreState): PhotoIntakeStore {
           x.created_at >= since,
       ).length;
     },
+    async sumFileBytes(businessId, jobId) {
+      track('photo_job_files.sum_bytes');
+      return state.files
+        .filter(
+          (x) =>
+            x.business_id === businessId &&
+            x.photo_job_id === jobId &&
+            ['pending', 'uploading', 'uploaded'].includes(x.status),
+        )
+        .reduce((sum, x) => sum + x.size_bytes, 0);
+    },
     async getFile(businessId, jobId, fileId) {
       track('photo_job_files.get');
       return (

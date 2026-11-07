@@ -103,8 +103,11 @@ export function ProfessionalSettingsPage({
         }
       >
         <p className="meta">
-          Los profesionales ingresan en <strong>/profesionales</strong> y pagan
-          según la lista de precios de su cliente. No acceden a este panel.
+          <strong>/profesionales</strong> es público: cualquier fotógrafo envía
+          sus fotos sin cuenta y sin ver precios; esos pedidos quedan «Por
+          presupuestar» en Pedidos. Con una cuenta, el profesional ve y paga
+          según la lista de precios de su cliente. Ninguna cuenta profesional
+          accede a este panel.
         </p>
         {message && !linking && (
           <InlineMessage tone="error">{message}</InlineMessage>

@@ -54,4 +54,4 @@ DESIGN-01/02 (solo diseño, datos simulados, no toca la app real): `pnpm --filte
 
 Sprint 14 (pedidos públicos `/imprimir`, seguimiento `/pedido/:token` y avisos por WhatsApp): puesta en marcha en `docs/PUBLIC_ORDERS_SETUP.md` y `docs/WHATSAPP_SETUP.md`. `pnpm test` ejecuta las migraciones reales en PGlite (PostgreSQL embebido), sin Docker. El token de WhatsApp se guarda sólo en Supabase Vault; nunca en `VITE_`, Vercel, SQLite ni el repositorio.
 
-Portal profesional (`/profesionales`: acceso por cuenta, lista de precios del cliente, carga de carpetas y pago posterior autorizado): puesta en marcha y alta de fotógrafos en `docs/PROFESSIONAL_PORTAL_SETUP.md`.
+Portal profesional (`/profesionales`: público y sin precios para cualquier fotógrafo —el pedido queda «Por presupuestar» y CentroColor lo presupuesta desde Pedidos—; con cuenta, lista de precios del cliente y pago posterior autorizado; carga de carpetas completas): puesta en marcha y alta de fotógrafos en `docs/PROFESSIONAL_PORTAL_SETUP.md`, publicación en `docs/HANDOFF.md`.

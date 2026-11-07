@@ -193,3 +193,9 @@
 .sum .pro-field .opt {
   color: #d8cfba;
 }
+
+.sum .pro-quote-note {
+  margin: 0;
+  font-weight: 600;
+  color: var(--paper-0);
+}

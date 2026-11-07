@@ -147,6 +147,8 @@ export type {
   PhotoJobBundle,
   PhotoJobListQuery,
   PhotoFileIntakeAdminRepository,
+  PhotoJobQuoteRepository,
+  QuotePriceListOption,
   GoogleDriveIntegrationView,
   UploadLinkView,
 } from './photo';

@@ -6,34 +6,76 @@ import { describeWebAuthError } from '../auth-errors';
 import { PublicShell, useDocumentMeta } from '../public-order/shell';
 import '../public-order/public-order.css';
 import { passwordProblem, parseAuthHash, PASSWORD_MIN_LENGTH } from './model';
+import { errorCode } from '../public-order/order-submission';
+import { fetchProfessionalCatalog, isSessionExpired } from './client';
 import { ProfessionalOrder } from './order-portal';
 import './professional.css';
 
-type Stage = 'loading' | 'login' | 'set-password' | 'ready' | 'error';
+type Stage =
+  'loading' | 'login' | 'set-password' | 'account' | 'request' | 'error';
 
 /**
- * /profesionales. Identification comes first: nothing about prices or orders is requested before
- * a signed-in session exists, and the server then decides whether that user is a professional.
- * The session is the same Supabase one the panel uses, but a professional has no membership, so
- * the panel shows them "sin acceso" and its tables return nothing.
+ * /profesionales is PUBLIC: anyone lands directly on the order form, with no session, invitation or
+ * account, and sees no price (the server never sends one to them). An optional professional login is
+ * kept for people with an account: only after the server confirms that the signed-in user IS an
+ * active professional does the page switch to their own price list. Any other session (a CentroColor
+ * administrator, a user without a professional account) gets the same price-free form: being signed
+ * in never grants professional access.
  */
 export function ProfessionalPortal() {
   useDocumentMeta('Portal profesional · CentroColor', true);
   const [stage, setStage] = useState<Stage>('loading');
   const [message, setMessage] = useState<string | null>(null);
 
+  /** Asks the server which kind of visitor the current session is. */
+  async function resolveStage(): Promise<'account' | 'request'> {
+    try {
+      await fetchProfessionalCatalog();
+      return 'account';
+    } catch (error) {
+      if (isSessionExpired(error)) {
+        try {
+          await getSupabaseClient().auth.signOut({ scope: 'local' });
+        } catch {
+          /* the local session is dropped either way */
+        }
+        return 'request';
+      }
+      const code = errorCode(error);
+      if (code === 'not_professional' || code === 'account_inactive')
+        return 'request';
+      throw error;
+    }
+  }
+
+  async function proceed(afterLogin: boolean) {
+    try {
+      const next = await resolveStage();
+      if (next === 'request' && afterLogin)
+        setMessage(
+          'Esa cuenta no tiene acceso profesional. Podés enviar tus fotografías igual, sin iniciar sesión.',
+        );
+      else setMessage(null);
+      setStage(next);
+    } catch (cause) {
+      setMessage(describeWebAuthError(cause, 'authentication'));
+      setStage('error');
+    }
+  }
+
   useEffect(() => {
     let live = true;
-    let client: SupabaseClient;
+    let client: SupabaseClient | null = null;
     try {
       client = getSupabaseClient();
-    } catch (cause) {
-      setMessage(describeWebAuthError(cause, 'configuration'));
-      setStage('error');
+    } catch {
+      // Without Supabase configured the public form cannot work either, but the page still opens.
+      setStage('request');
       return;
     }
     const subscription = client.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_OUT' && live) setStage('login');
+      if (event === 'SIGNED_OUT' && live)
+        setStage((current) => (current === 'account' ? 'request' : current));
     });
     void (async () => {
       try {
@@ -58,16 +100,15 @@ export function ProfessionalPortal() {
           if (error) {
             setMessage(describeWebAuthError(error, 'authentication'));
             setStage('login');
-          } else
-            setStage(
-              link.type === 'invite' || link.type === 'recovery'
-                ? 'set-password'
-                : 'ready',
-            );
+          } else if (link.type === 'invite' || link.type === 'recovery')
+            setStage('set-password');
+          else await proceed(false);
           return;
         }
         const { data } = await client.auth.getSession();
-        if (live) setStage(data.session ? 'ready' : 'login');
+        if (!live) return;
+        if (data.session) await proceed(false);
+        else setStage('request');
       } catch (cause) {
         if (live) {
           setMessage(describeWebAuthError(cause, 'authentication'));
@@ -88,11 +129,26 @@ export function ProfessionalPortal() {
       /* the local session is dropped either way */
     }
     setMessage(null);
-    setStage('login');
+    setStage('request');
   };
 
-  if (stage === 'ready')
-    return <ProfessionalOrder onSignOut={() => void signOut()} />;
+  if (stage === 'account')
+    return (
+      <ProfessionalOrder mode="account" onSignOut={() => void signOut()} />
+    );
+  if (stage === 'request')
+    return (
+      <ProfessionalOrder
+        key="request"
+        mode="request"
+        initialNotice={message}
+        onSignOut={() => void signOut()}
+        onSignIn={() => {
+          setMessage(null);
+          setStage('login');
+        }}
+      />
+    );
 
   return (
     <PublicShell
@@ -110,6 +166,12 @@ export function ProfessionalPortal() {
           <section className="po-card po-center">
             <h2>No pudimos abrir el portal</h2>
             <p>{message}</p>
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              Reintentar
+            </Button>
+            <Button variant="ghost" onClick={() => setStage('request')}>
+              Enviar fotografías sin iniciar sesión
+            </Button>
           </section>
         )}
         {stage === 'login' && (
@@ -117,12 +179,22 @@ export function ProfessionalPortal() {
             notice={message}
             onSignedIn={() => {
               setMessage(null);
-              setStage('ready');
+              setStage('loading');
+              void proceed(true);
+            }}
+            onSkip={() => {
+              setMessage(null);
+              setStage('request');
             }}
           />
         )}
         {stage === 'set-password' && (
-          <SetPassword onDone={() => setStage('ready')} />
+          <SetPassword
+            onDone={() => {
+              setStage('loading');
+              void proceed(true);
+            }}
+          />
         )}
       </div>
     </PublicShell>
@@ -139,9 +211,11 @@ const Card = ({ title, children }: { title: string; children: ReactNode }) => (
 function Login({
   notice,
   onSignedIn,
+  onSkip,
 }: {
   notice: string | null;
   onSignedIn: () => void;
+  onSkip: () => void;
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -191,7 +265,10 @@ function Login({
 
   return (
     <Card title="Ingresá a tu cuenta">
-      <p>Portal para fotógrafos profesionales y clientes con convenio.</p>
+      <p>
+        Con tu cuenta profesional o de convenio ves tus precios. Si todavía no
+        tenés una, no hace falta: podés enviar tus fotografías igual.
+      </p>
       <form
         className="pro-form"
         onSubmit={(event) => void signIn(event)}
@@ -240,10 +317,13 @@ function Login({
         >
           Olvidé mi contraseña
         </Button>
+        <Button variant="secondary" type="button" onClick={onSkip}>
+          Enviar fotografías sin iniciar sesión
+        </Button>
       </form>
       <p className="fine">
-        ¿Todavía no tenés acceso? Pedíselo a CentroColor: lo habilitamos con tu
-        e-mail.
+        ¿Querés una cuenta con tus precios? Pedíselo a CentroColor: la
+        habilitamos con tu e-mail.
       </p>
     </Card>
   );

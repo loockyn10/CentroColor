@@ -79,6 +79,16 @@ export const PUBLIC_ORDER_MAX_FILES = 200;
  */
 export const PROFESSIONAL_ORDER_MAX_FILE_BYTES = 300 * 1024 * 1024;
 export const PROFESSIONAL_ORDER_MAX_FILES = 1000;
+/**
+ * A professional REQUEST (/profesionales without an account) is anonymous like /imprimir but is
+ * expected to carry whole shoots, so it sits between the two tiers: more photos than the public
+ * order, the public per-file size, and a cap on the bytes of the whole order so that an
+ * unauthenticated visitor can never fill the shop's Drive with one draft.
+ */
+export const PROFESSIONAL_REQUEST_MAX_FILE_BYTES = 100 * 1024 * 1024;
+export const PROFESSIONAL_REQUEST_MAX_FILES = 500;
+export const PROFESSIONAL_REQUEST_MAX_TOTAL_BYTES = 5 * 1024 * 1024 * 1024;
+export const PROFESSIONAL_REQUEST_MAX_SESSIONS_PER_MINUTE = 240;
 /** A fast line uploads small exports quicker than the public limit allows. */
 export const PROFESSIONAL_MAX_SESSIONS_PER_MINUTE = 600;
 /** Sequential uploads of many small photos are legitimate; this only stops runaway clients. */

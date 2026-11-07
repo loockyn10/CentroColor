@@ -232,11 +232,36 @@ export function HomePage({
           account.sourceType === 'photo_job' && account.sourceId === jobId,
       )?.balanceCents ?? 0;
     const readyWithBalance = ready.filter((row) => balanceOf(row.job.id) > 0);
-    return { open, ready, late, urgent, accounts, balanceOf, readyWithBalance };
+    // Pedidos que llegaron sin importe (portal profesional sin cuenta): alguien tiene que presupuestarlos.
+    const toQuote = jobs.filter(
+      (row) =>
+        row.job.quoteStatus === 'pending_quote' &&
+        ['received', 'in_progress'].includes(row.job.status),
+    );
+    return {
+      open,
+      ready,
+      late,
+      urgent,
+      accounts,
+      balanceOf,
+      readyWithBalance,
+      toQuote,
+    };
   }, [data.jobs, data.accounts]);
 
   const attention = useMemo<Attention[]>(() => {
     const items: Attention[] = [];
+    view.toQuote.forEach((row) =>
+      items.push({
+        key: `quote-${row.job.id}`,
+        severity: 'high',
+        icon: 'receipt',
+        what: `Por presupuestar · ${row.customerName}`,
+        why: `${row.itemSummary || 'Solicitud profesional'} · todavía sin importe`,
+        action: { label: 'Presupuestar', run: () => openJob(row.job.id) },
+      }),
+    );
     view.late.forEach((row) =>
       items.push({
         key: `late-${row.job.id}`,

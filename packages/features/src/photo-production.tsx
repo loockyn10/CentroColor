@@ -152,6 +152,15 @@ export function PhotoProductionPage({
   };
 
   async function advance(job: ProductionJob, next: PhotoJobStatus) {
+    if (
+      job.bundle.job.quoteStatus === 'pending_quote' &&
+      (next === 'ready' || next === 'delivered')
+    ) {
+      flash.error(
+        'El pedido está pendiente de presupuestar: presupuestalo en Pedidos antes de marcarlo listo.',
+      );
+      return;
+    }
     setBusyJob(job.bundle.job.id);
     flash.clear();
     try {
@@ -260,6 +269,9 @@ export function PhotoProductionPage({
                       {plural(job.files.length, 'archivo', 'archivos')}
                       {lane === 'lab' ? ` · ${copies} copias` : ''}
                       {j.sourceChannel === 'public_web' ? ' · Pedido web' : ''}
+                      {j.quoteStatus === 'pending_quote'
+                        ? ' · Por presupuestar'
+                        : ''}
                     </span>
                   </div>
                   <div className="prod-when">

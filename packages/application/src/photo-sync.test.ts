@@ -23,6 +23,7 @@ describe('photo sync', () => {
       driveFolderId: 'drive-job',
       driveEditedFolderId: null,
       sourceChannel: 'manual',
+      quoteStatus: 'quoted',
       createdBy: 'u',
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '2026-01-01T00:00:00Z',

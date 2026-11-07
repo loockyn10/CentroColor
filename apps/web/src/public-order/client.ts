@@ -47,10 +47,16 @@ export type TrackedOrder = {
   orderCode: string;
   createdAt: string;
   status: 'received' | 'in_progress' | 'ready' | 'delivered' | 'cancelled';
-  items: { name: string; quantity: number; totalCents: number }[];
-  totalCents: number;
+  /** Amounts are absent on a professional request: the server never sends them to a visitor. */
+  items: { name: string; quantity: number; totalCents?: number }[];
+  totalCents?: number;
   /** Only professional orders: `deferred` = pays later, so no transfer is requested. */
   paymentTerms?: 'prepaid' | 'deferred';
+  /**
+   * Present only on a request sent from /profesionales without an account: CentroColor quotes it,
+   * so the page shows no prices. `quote` says whether the amount is already confirmed.
+   */
+  request?: { quote: 'pending' | 'quoted' };
 };
 
 /** An error whose message is safe to show, plus the server code when there is one. */
@@ -63,7 +69,7 @@ export class PublicOrderError extends Error {
   }
 }
 
-async function request<T>(name: string, body: unknown): Promise<T> {
+export async function request<T>(name: string, body: unknown): Promise<T> {
   try {
     return await call<T>(name, body);
   } catch (cause) {

@@ -12,6 +12,7 @@ import {
   type PhotoJobBundle,
   type PhotoJobNotification,
   type PhotoJobNotificationRepository,
+  type PhotoJobQuoteRepository,
   type PhotoJobWhatsAppStatus,
   type PhotoJobSummary,
   type PhotoRepository,
@@ -61,6 +62,7 @@ import { photoJobStatus, statusMeta } from './status';
 import { dueText, shortDateTime } from './format';
 import { useBusinessContext } from './auth';
 import { PaymentAccountPanel } from './payments';
+import { PendingQuotePanel } from './photo-quote';
 const money = (x: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(
     x / 100,
@@ -969,6 +971,8 @@ export function PhotoJobsPage({
   paymentRepository,
   fileIntakeRepository,
   notificationRepository,
+  quoteRepository,
+  customerRepository,
   onMutation,
   refreshToken,
   initialJobId,
@@ -978,6 +982,10 @@ export function PhotoJobsPage({
   fileIntakeRepository?: PhotoFileIntakeAdminRepository;
   /** Web only: WhatsApp notices are sent by the Cloud, so Desktop has no repository. */
   notificationRepository?: PhotoJobNotificationRepository;
+  /** Web only: quoting runs in the Cloud (owner/admin). Desktop shows the pending state only. */
+  quoteRepository?: PhotoJobQuoteRepository;
+  /** Lets the quote panel confirm or change the Customer a request was matched to. */
+  customerRepository?: CustomerRepository;
   onMutation?: () => void;
   refreshToken?: number;
   initialJobId?: string | null;
@@ -1181,6 +1189,15 @@ export function PhotoJobsPage({
     );
   }
   function status(next: PhotoJobStatus) {
+    if (
+      selected?.job.quoteStatus === 'pending_quote' &&
+      (next === 'ready' || next === 'delivered')
+    ) {
+      flash.error(
+        'El pedido está pendiente de presupuestar: presupuestalo antes de marcarlo listo o entregado.',
+      );
+      return;
+    }
     if (next === 'cancelled') setConfirmCancel(true);
     else void applyStatus(next);
   }
@@ -1215,6 +1232,7 @@ export function PhotoJobsPage({
   }
   const closed =
     selected && ['delivered', 'cancelled'].includes(selected.job.status);
+  const pendingQuote = selected?.job.quoteStatus === 'pending_quote';
   const activeItems = selected?.items.filter((x) => x.isActive) ?? [];
   const itemsTotal = activeItems.reduce((s, x) => s + x.totalCents, 0);
   return (
@@ -1418,6 +1436,20 @@ export function PhotoJobsPage({
               </section>
             )}
 
+            {pendingQuote && (
+              <PendingQuotePanel
+                bundle={selected}
+                quoteRepository={quoteRepository}
+                customerRepository={customerRepository}
+                onQuoted={(message) => {
+                  flash.success(message);
+                  void open(selected.job.id);
+                  load();
+                  onMutation?.();
+                }}
+              />
+            )}
+
             <section className="editor-block editor-block--service">
               <div className="section-head">
                 <h3>Servicios</h3>
@@ -1431,7 +1463,7 @@ export function PhotoJobsPage({
                         ? ` · ${x.widthMm / 10}×${x.heightMm! / 10} cm`
                         : ''}
                     </span>
-                    <b>{money(x.totalCents)}</b>
+                    <b>{pendingQuote ? '—' : money(x.totalCents)}</b>
                     {x.notes && <small>{x.notes}</small>}
                     {editMode && (
                       <div className="photo-detail-line-edit">
@@ -1448,24 +1480,26 @@ export function PhotoJobsPage({
                             }
                           />
                         </label>
-                        <label>
-                          Precio unitario
-                          <input
-                            inputMode="decimal"
-                            value={x.unitPriceCents / 100}
-                            onChange={(e) =>
-                              patchSelectedItem(x.id, {
-                                unitPriceCents: Math.max(
-                                  0,
-                                  Math.round(
-                                    Number(e.target.value.replace(',', '.')) *
-                                      100,
+                        {!pendingQuote && (
+                          <label>
+                            Precio unitario
+                            <input
+                              inputMode="decimal"
+                              value={x.unitPriceCents / 100}
+                              onChange={(e) =>
+                                patchSelectedItem(x.id, {
+                                  unitPriceCents: Math.max(
+                                    0,
+                                    Math.round(
+                                      Number(e.target.value.replace(',', '.')) *
+                                        100,
+                                    ),
                                   ),
-                                ),
-                              })
-                            }
-                          />
-                        </label>
+                                })
+                              }
+                            />
+                          </label>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1482,7 +1516,11 @@ export function PhotoJobsPage({
               </div>
               <p className="quote-total">
                 <span>Total</span>
-                <strong>{money(itemsTotal)}</strong>
+                <strong>
+                  {pendingQuote
+                    ? 'Pendiente de presupuestar'
+                    : money(itemsTotal)}
+                </strong>
               </p>
             </section>
 
@@ -1647,15 +1685,25 @@ export function PhotoJobsPage({
                 </small>
               ) : null)}
 
-            <PaymentAccountPanel
-              repository={paymentRepository}
-              sourceType="photo_job"
-              sourceId={selected.job.id}
-              onMutation={() => {
-                load();
-                onMutation?.();
-              }}
-            />
+            {pendingQuote ? (
+              <Card className="work-account">
+                <h3>Cuenta</h3>
+                <p className="meta">
+                  Todavía no tiene un importe: no se puede registrar ningún
+                  cobro hasta que CentroColor lo presupueste.
+                </p>
+              </Card>
+            ) : (
+              <PaymentAccountPanel
+                repository={paymentRepository}
+                sourceType="photo_job"
+                sourceId={selected.job.id}
+                onMutation={() => {
+                  load();
+                  onMutation?.();
+                }}
+              />
+            )}
 
             {selected.job.sourceAppointmentId && (
               <small className="meta">
@@ -1720,6 +1768,9 @@ export function JobStateLine({ job }: { job: PhotoJobSummary['job'] }) {
       )}
       {open && isPhotoJobOverdue(job) && (
         <StatusBadge tone="alert">Atrasado</StatusBadge>
+      )}
+      {open && job.quoteStatus === 'pending_quote' && (
+        <StatusBadge tone="info">Por presupuestar</StatusBadge>
       )}
       <StatusBadge tone={state.tone}>{state.label}</StatusBadge>
     </span>

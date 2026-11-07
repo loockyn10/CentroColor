@@ -53,6 +53,7 @@ import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repositor
 import { SupabaseTrashRepository } from './supabase-trash-repository';
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
 import { DriveSettingsPage } from './drive-settings';
+import { SupabasePhotoJobQuoteRepository } from './photo-quote';
 import { SupabaseProfessionalAdminRepository } from './professional-admin';
 import { ProfessionalSettingsPage } from './professional-settings';
 import { publicRoute } from './public-routes';
@@ -150,6 +151,9 @@ function App() {
   );
   const [notificationRepository] = useState(
     () => new SupabasePhotoJobNotificationRepository(),
+  );
+  const [quoteRepository] = useState(
+    () => new SupabasePhotoJobQuoteRepository(),
   );
   const [professionalRepository] = useState(
     () => new SupabaseProfessionalAdminRepository(),
@@ -385,6 +389,8 @@ function App() {
             paymentRepository={paymentRepository}
             fileIntakeRepository={fileIntakeRepository}
             notificationRepository={notificationRepository}
+            quoteRepository={quoteRepository}
+            customerRepository={customerRepository}
             initialJobId={openPhotoJobId}
           />
         ) : activeId === 'photo-production' ? (

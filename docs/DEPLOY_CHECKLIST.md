@@ -2,6 +2,12 @@
 
 Documento único para publicar ambos sprints juntos. Sustituye, para este despliegue, a las listas parciales de `HANDOFF.md` y de `PROFESSIONAL_PORTAL_SETUP.md` (que conservan el detalle de cada tema). No se ejecutó ninguna migración ni deploy: lo único consultado en el remoto fue de sólo lectura (`supabase functions list`, `migration list`, `secrets list`).
 
+## 0. Actualización 08/11/2026 — `/profesionales` público (se suma a esta lista)
+
+Nada de esto se ejecutó. **Migración nueva, después de `20261107000000`:** `20261108000000_professional_requests.sql` (el `--dry-run` debe listar las dos si la anterior sigue pendiente). **Desktop:** migración SQLite `0021_quote_status.sql` (versión 21 en `lib.rs`; se ejecuta al abrir el instalador nuevo).
+**Funciones nuevas, sin JWT** (`--no-verify-jwt`; `config.toml` ya lo declara): `professional-public-catalog`, `professional-request-start`, `professional-request-submit`. **Obligatorias por cambio de comportamiento** (ya estaban en la lista B, ahora con más motivo): `photo-upload-session` (tope propio de la solicitud anónima), `public-photo-order-submit` (rechaza solicitudes profesionales) y `public-photo-order-track` (no envía importes de una solicitud). Sin la migración las funciones nuevas fallan de forma controlada; con la migración y las funciones viejas, `/imprimir` y las cuentas siguen igual, pero una solicitud anónima vería importes en un seguimiento viejo: **desplegar `public-photo-order-track` antes de publicar la Web nueva**.
+Comandos exactos y orden en `docs/HANDOFF.md` (sección 08/11/2026).
+
 ## 1. Estado del repositorio y del remoto
 
 - **Git:** `master` = `origin/master` (`91c1936`, 07/11 07:59). El sprint de cascada/varios tamaños/nombres con copias (commits `0c214c5` y `425334f`) y el portal profesional (`91c1936`: migración `20261107000000`, las 4 funciones `professional-*` y `apps/web/src/professional/`) **ya están commiteados y subidos**; sólo esta auditoría (este documento y el pie de `HANDOFF`/`CURRENT_STATE`) está sin commit. **Atención:** si Vercel despliega desde `master`, la Web con `/profesionales` puede estar publicada **antes** que la migración y las funciones; hasta completar §4 ese portal responde con error (las funciones no existen) y `/imprimir` sigue funcionando.

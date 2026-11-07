@@ -46,11 +46,20 @@ export function useNavAttention({
             limit: 200,
           });
           const late = jobs.filter((row) => isPhotoJobOverdue(row.job)).length;
+          const toQuote = jobs.filter(
+            (row) => row.job.quoteStatus === 'pending_quote',
+          ).length;
           if (late)
             next['photo-jobs'] = {
               count: late,
               tone: 'alert',
               label: 'atrasados',
+            };
+          else if (toQuote)
+            next['photo-jobs'] = {
+              count: toQuote,
+              tone: 'attention',
+              label: 'por presupuestar',
             };
         }
       } catch {

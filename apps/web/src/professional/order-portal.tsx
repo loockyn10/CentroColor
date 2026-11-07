@@ -45,29 +45,41 @@ import { PublicShell, useDocumentMeta } from '../public-order/shell';
 import '../public-order/public-order.css';
 import {
   fetchProfessionalCatalog,
+  fetchProfessionalPublicCatalog,
   isSessionExpired,
   serverMessage,
   startProfessionalOrder,
+  startProfessionalRequest,
   submitProfessionalOrder,
+  submitProfessionalRequest,
   type PaymentTerms,
-  type ProfessionalCatalog,
+  type PortalCatalog,
   type ProfessionalStartedOrder,
   type ProfessionalSubmittedOrder,
+  type RequestStarted,
+  type RequestSubmitted,
 } from './client';
 import {
+  ACCOUNT_LIMITS,
   applyCopiesToAll,
   classifyPickedFiles,
   describePick,
   loadProfessionalClientKey,
   loadProfessionalPhone,
+  loadRequestClientKey,
+  loadRequestContact,
   missingForProfessionalConfirm,
+  missingForRequestConfirm,
   pickedFolderName,
   planAdditions,
-  PRO_MAX_FILES_PER_ORDER,
   PRO_UPLOAD_CONCURRENCY,
   rememberProfessionalPhone,
+  rememberRequestContact,
+  REQUEST_LIMITS,
   resetProfessionalClientKey,
+  resetRequestClientKey,
   startProfessionalBody,
+  startRequestBody,
   summarizeProgress,
 } from './model';
 import { Thumbnail, VirtualList } from './virtual-list';
@@ -120,40 +132,72 @@ function useProgressStore() {
   };
 }
 
-export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
+/**
+ * The professional order page, in two modes with the same screens:
+ *  - `account`: a signed-in professional. The server decides their price list; prices are shown.
+ *  - `request`: any visitor, no session. The server sends no price at all (there is nothing to
+ *    hide with CSS) and the order is quoted afterwards by CentroColor.
+ */
+export function ProfessionalOrder({
+  onSignOut,
+  mode = 'account',
+  onSignIn,
+  initialNotice = null,
+}: {
+  onSignOut: () => void;
+  mode?: 'account' | 'request';
+  onSignIn?: () => void;
+  /** A message to show first (for example why a signed-in account got the price-free form). */
+  initialNotice?: string | null;
+}) {
   useDocumentMeta('Portal profesional · CentroColor', true);
-  const [catalog, setCatalog] = useState<ProfessionalCatalog | null>(null);
+  const priced = mode === 'account';
+  const limits = priced ? ACCOUNT_LIMITS : REQUEST_LIMITS;
+  const [catalog, setCatalog] = useState<PortalCatalog | null>(null);
   const [fatal, setFatal] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [entries, setEntries] = useState<PhotoEntry[]>([]);
   const [picker, setPicker] = useState<Picker>({ mode: 'add' });
-  const [phone, setPhone] = useState(loadProfessionalPhone);
+  const remembered0 = useMemo(loadRequestContact, []);
+  const [phone, setPhone] = useState(() =>
+    priced ? loadProfessionalPhone() : remembered0.phone,
+  );
+  const [name, setName] = useState(remembered0.name);
+  const [email, setEmail] = useState(remembered0.email);
   const [notes, setNotes] = useState('');
   const [phase, setPhase] = useState<Phase>('edit');
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(initialNotice);
   const [pickNotes, setPickNotes] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ProfessionalSubmittedOrder | null>(null);
+  const [requestResult, setRequestResult] = useState<RequestSubmitted | null>(
+    null,
+  );
   const [showMissing, setShowMissing] = useState(false);
   const [onlyFailed, setOnlyFailed] = useState(false);
   const [sheet, setSheet] = useState(false);
   const progress = useProgressStore();
-  const session = useRef<{ started: ProfessionalStartedOrder } | null>(null);
+  const session = useRef<{
+    started: ProfessionalStartedOrder | RequestStarted;
+  } | null>(null);
   // Last upload attempt of each photo: a retry names it so the server never stores it twice.
   const attempts = useRef(new Map<string, string>());
   const remembered = useMemo(() => loadRememberedOrder(), []);
   const folderInput = useMemo(supportsFolderInput, []);
 
+  const fetchCatalog: () => Promise<PortalCatalog> = priced
+    ? fetchProfessionalCatalog
+    : fetchProfessionalPublicCatalog;
   const loadCatalog = () =>
-    fetchProfessionalCatalog()
+    fetchCatalog()
       .then((value) => {
         setCatalog(value);
         setFatal(null);
-        if (!phone && value.account.phone) setPhone(value.account.phone);
+        if (!phone && value.account?.phone) setPhone(value.account.phone);
         return value;
       })
       .catch((error) => {
         const code = errorCode(error);
-        if (isSessionExpired(error)) onSignOut();
+        if (priced && isSessionExpired(error)) onSignOut();
         else setFatal(code ?? 'load_failed');
         setNotice(serverMessage(error));
         return null;
@@ -177,8 +221,10 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
     return groups;
   }, [entries]);
   const total = orderTotal(lines);
-  const missing = missingForProfessionalConfirm(lines, selected, phone);
-  const terms: PaymentTerms = catalog?.account.paymentTerms ?? 'prepaid';
+  const missing = priced
+    ? missingForProfessionalConfirm(lines, selected, phone)
+    : missingForRequestConfirm(lines, selected, { name, phone, email });
+  const terms: PaymentTerms = catalog?.account?.paymentTerms ?? 'prepaid';
   const stats = summarizeProgress(entries, progress.map);
 
   // Closing the tab while photos are in flight loses the whole shoot's upload.
@@ -219,14 +265,15 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
   function addPicked(serviceId: string, list: FileList | null) {
     if (!list || !list.length) return;
     const files = Array.from(list);
-    const picked = classifyPickedFiles(files);
+    const picked = classifyPickedFiles(files, limits.bytes);
     const added = planAdditions(entries, serviceId, picked.accepted, {
       total: entries.length,
+      max: limits.files,
     });
     setEntries((current) => [...current, ...added.entries]);
     setPickNotes((current) => ({
       ...current,
-      [serviceId]: describePick(pickedFolderName(files), picked, added),
+      [serviceId]: describePick(pickedFolderName(files), picked, added, limits),
     }));
     setNotice(null);
   }
@@ -258,23 +305,35 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
 
   async function finish(sent: PhotoEntry[], acceptPartial = false) {
     const started = session.current!.started;
-    const done = await submitProfessionalOrder(
-      started.uploadToken,
-      buildSubmitOptions({
-        started,
-        selected,
-        sent,
-        attempts: attempts.current,
-        acceptPartial,
-      }),
-    );
-    rememberOrder({
-      orderCode: done.orderCode,
-      trackingToken: done.trackingToken,
-      at: new Date().toISOString(),
+    const options = buildSubmitOptions({
+      started,
+      selected,
+      sent,
+      attempts: attempts.current,
+      acceptPartial,
     });
-    resetProfessionalClientKey();
-    setResult(done);
+    if (priced) {
+      const done = await submitProfessionalOrder(started.uploadToken, options);
+      rememberOrder({
+        orderCode: done.orderCode,
+        trackingToken: done.trackingToken,
+        at: new Date().toISOString(),
+      });
+      resetProfessionalClientKey();
+      setResult(done);
+    } else {
+      const done = await submitProfessionalRequest(
+        started.uploadToken,
+        options,
+      );
+      rememberOrder({
+        orderCode: done.orderCode,
+        trackingToken: done.trackingToken,
+        at: new Date().toISOString(),
+      });
+      resetRequestClientKey();
+      setRequestResult(done);
+    }
     setPhase('done');
     window.scrollTo?.({ top: 0 });
   }
@@ -321,16 +380,26 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
     setPhase('sending');
     progress.reset(entries.map((x) => x.id));
     try {
-      const started = await startProfessionalOrder(
-        startProfessionalBody(
-          loadProfessionalClientKey(newClientKey),
-          phone,
-          notes,
-          lines,
-        ),
-      );
+      const started = priced
+        ? await startProfessionalOrder(
+            startProfessionalBody(
+              loadProfessionalClientKey(newClientKey),
+              phone,
+              notes,
+              lines,
+            ),
+          )
+        : await startProfessionalRequest(
+            startRequestBody(
+              loadRequestClientKey(newClientKey),
+              { name, phone, email },
+              notes,
+              lines,
+            ),
+          );
       session.current = { started };
-      rememberProfessionalPhone(phone);
+      if (priced) rememberProfessionalPhone(phone);
+      else rememberRequestContact({ name, phone, email });
       const failed = await sendPhotos(entries);
       if (failed) setPhase('partial');
       else await confirmSent(entries);
@@ -341,7 +410,7 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
 
   async function handleFailure(error: unknown) {
     const code = errorCode(error);
-    if (isSessionExpired(error)) {
+    if (priced && isSessionExpired(error)) {
       onSignOut();
       return;
     }
@@ -419,16 +488,21 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
     setPicker({ mode: 'add' });
     setNotes('');
     setResult(null);
+    setRequestResult(null);
     setPhase('edit');
     setNotice(null);
     window.scrollTo?.({ top: 0 });
   }
 
-  const signOut = (
+  const signOut = priced ? (
     <Button size="sm" icon="logout" onClick={onSignOut}>
       Salir
     </Button>
-  );
+  ) : onSignIn ? (
+    <Button size="sm" icon="user" onClick={onSignIn}>
+      Ingresar con mi cuenta
+    </Button>
+  ) : null;
 
   /* ───────────────────────────── screens ───────────────────────────── */
 
@@ -447,7 +521,9 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
                 ? 'Esta cuenta no tiene acceso profesional'
                 : fatal === 'account_inactive'
                   ? 'Tu cuenta profesional no está activa'
-                  : 'No pudimos cargar tu lista de precios'}
+                  : priced
+                    ? 'No pudimos cargar tu lista de precios'
+                    : 'No pudimos cargar el formulario'}
             </h2>
             <p>{notice}</p>
             {fatal === 'load_failed' && (
@@ -473,6 +549,7 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
       </PublicShell>
     );
   const { account } = catalog;
+  const noList = priced && !account?.priceListUsable;
   const shellProps = {
     businessName: catalog.businessName,
     homeHref: '/profesionales',
@@ -480,26 +557,73 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
     orderLink: false,
     actions: signOut,
   };
-  if (
-    !catalog.available ||
-    !account.priceListUsable ||
-    !catalog.services.length
-  )
+  if (!catalog.available || noList || !catalog.services.length)
     return (
       <PublicShell {...shellProps}>
         <div className="pt-page">
           <section className="po-card po-center">
             <h2>
-              {account.priceListUsable
+              {!noList
                 ? 'Los pedidos online no están disponibles por ahora'
                 : 'Tu cuenta todavía no tiene lista de precios'}
             </h2>
             <p>
-              {account.priceListUsable
+              {!noList
                 ? 'Escribinos o pasá por el local y te atendemos enseguida.'
                 : 'Escribinos para que la configuremos y puedas hacer pedidos desde acá.'}
             </p>
           </section>
+        </div>
+      </PublicShell>
+    );
+
+  if (phase === 'done' && requestResult)
+    return (
+      <PublicShell {...shellProps} orderLink={false}>
+        <div className="pt-page" aria-live="polite">
+          <div className="rcv-title">
+            <span className="stamp" aria-hidden="true">
+              <Icon name="check" />
+            </span>
+            <div>
+              <h1>
+                ¡Recibimos tus <span className="marker">fotografías</span>!
+              </h1>
+              <p className="frame-tag code">{requestResult.orderCode}</p>
+            </div>
+          </div>
+          <section className="po-card">
+            <ul className="order-lines">
+              {requestResult.items.map((item) => (
+                <li key={item.name}>
+                  <span className="sz">{item.name}</span>
+                  <span className="meta">
+                    {plural(item.quantity, 'copia', 'copias')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <div className="callout" role="note">
+            <Icon name="receipt" />
+            <div>
+              <strong>
+                CentroColor revisará tu pedido y te confirmará el importe.
+              </strong>
+              <p>Podés seguir el estado con el link de abajo.</p>
+            </div>
+          </div>
+          <div className="row-actions">
+            <a
+              className="btn btn--primary btn--lg"
+              href={`/pedido/${requestResult.trackingToken}`}
+            >
+              <Icon name="receipt" /> Ver estado del pedido
+            </a>
+            <Button size="lg" icon="plus" onClick={startOver}>
+              Hacer otro pedido
+            </Button>
+          </div>
         </div>
       </PublicShell>
     );
@@ -700,12 +824,17 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
   const copyCount = lines.reduce((sum, line) => sum + line.copies, 0);
   const summary = (
     <Summary
+      priced={priced}
       lines={lines}
       total={total}
       missing={showMissing ? missing : []}
       terms={terms}
+      name={name}
+      email={email}
       phone={phone}
       notes={notes}
+      onName={setName}
+      onEmail={setEmail}
       onPhone={setPhone}
       onNotes={setNotes}
       onConfirm={() => void confirm()}
@@ -718,15 +847,28 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
       hero={
         <div className="pt-hero pro-hero">
           <div>
-            <h1>
-              Hola, <span className="marker">{account.customerName}</span>
-            </h1>
-            <p className="lede">
-              Lista <strong>{account.priceListName}</strong> ·{' '}
-              {terms === 'deferred'
-                ? 'pago posterior autorizado'
-                : 'pago por transferencia antes de imprimir'}
-            </p>
+            {account ? (
+              <>
+                <h1>
+                  Hola, <span className="marker">{account.customerName}</span>
+                </h1>
+                <p className="lede">
+                  Lista <strong>{account.priceListName}</strong> ·{' '}
+                  {terms === 'deferred'
+                    ? 'pago posterior autorizado'
+                    : 'pago por transferencia antes de imprimir'}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1>
+                  Portal para <span className="marker">fotógrafos</span>
+                </h1>
+                <p className="lede">
+                  Enviá tus fotografías y prepararemos tu presupuesto.
+                </p>
+              </>
+            )}
           </div>
         </div>
       }
@@ -764,7 +906,9 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
                 entries={byService.get(line.service.id) ?? []}
                 folderInput={folderInput}
                 note={pickNotes[line.service.id]}
-                room={PRO_MAX_FILES_PER_ORDER - entries.length}
+                priced={priced}
+                limits={limits}
+                room={limits.files - entries.length}
                 onPick={(files) => addPicked(line.service.id, files)}
                 onApplyAll={(copies) => applyAll(line.service.id, copies)}
                 onCopies={(id, copies) => patchEntry(id, { copies })}
@@ -844,10 +988,18 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
             type="button"
             className="sum-open"
             onClick={() => setSheet(true)}
-            aria-label={`Ver resumen del pedido. Total ${formatMoney(total)}`}
+            aria-label={
+              priced
+                ? `Ver resumen del pedido. Total ${formatMoney(total)}`
+                : 'Ver resumen del pedido'
+            }
           >
-            <span className="lbl">TOTAL</span>
-            <span className="amt num">{formatMoney(total)}</span>
+            <span className="lbl">{priced ? 'TOTAL' : 'TU PEDIDO'}</span>
+            <span className="amt num">
+              {priced
+                ? formatMoney(total)
+                : plural(photoCount, 'foto', 'fotos')}
+            </span>
             <span className="cnt">
               {plural(copyCount, 'copia', 'copias')} ·{' '}
               {plural(photoCount, 'foto', 'fotos')}
@@ -855,7 +1007,7 @@ export function ProfessionalOrder({ onSignOut }: { onSignOut: () => void }) {
             </span>
           </button>
           <Button variant="primary" size="lg" onClick={() => void confirm()}>
-            Confirmar
+            {priced ? 'Confirmar' : 'Enviar'}
           </Button>
         </div>
       )}
@@ -881,6 +1033,8 @@ function Block({
   folderInput,
   note,
   room,
+  priced,
+  limits,
   onPick,
   onApplyAll,
   onCopies,
@@ -895,6 +1049,8 @@ function Block({
   folderInput: boolean;
   note?: string;
   room: number;
+  priced: boolean;
+  limits: { files: number; bytes: number };
   onPick: (files: FileList | null) => void;
   onApplyAll: (copies: number) => void;
   onCopies: (id: string, copies: number) => void;
@@ -924,17 +1080,19 @@ function Block({
         <div className="meta">
           {plural(line.files, 'foto', 'fotos')} ·{' '}
           {plural(line.copies, 'copia', 'copias')}
-          {line.pricingAvailable !== false && line.copies > 0 && (
+          {priced && line.pricingAvailable !== false && line.copies > 0 && (
             <small className="unit">
               Precio por copia:{' '}
               <b className="num">{formatMoney(line.unitPriceCents)}</b>
             </small>
           )}
         </div>
-        <div className="sub num" aria-label="Subtotal">
-          <small>Subtotal</small> {formatMoney(line.totalCents)}
-        </div>
-        {line.pricingAvailable === false && line.copies > 0 && (
+        {priced && (
+          <div className="sub num" aria-label="Subtotal">
+            <small>Subtotal</small> {formatMoney(line.totalCents)}
+          </div>
+        )}
+        {priced && line.pricingAvailable === false && line.copies > 0 && (
           <p role="alert">No hay tarifa para esta cantidad de copias.</p>
         )}
         <div className="grp-tools">
@@ -995,7 +1153,8 @@ function Block({
             {folderInput
               ? 'Elegí la carpeta exportada desde Lightroom (se suman todas las fotos que tenga) o arrastrá tus archivos acá.'
               : 'Tu navegador no permite elegir carpetas: seleccioná todas las fotos juntas (Ctrl/Cmd + A) o arrastralas acá.'}{' '}
-            JPG, PNG, HEIC o TIFF.
+            JPG, PNG, HEIC o TIFF, hasta {limits.bytes / 1024 / 1024} MB cada
+            una.
           </p>
           <input
             ref={files}
@@ -1088,22 +1247,32 @@ function Block({
 }
 
 function Summary({
+  priced,
   lines,
   total,
   missing,
   terms,
+  name,
+  email,
   phone,
   notes,
+  onName,
+  onEmail,
   onPhone,
   onNotes,
   onConfirm,
 }: {
+  priced: boolean;
   lines: OrderLine[];
   total: number;
   missing: string[];
   terms: PaymentTerms;
+  name: string;
+  email: string;
   phone: string;
   notes: string;
+  onName: (value: string) => void;
+  onEmail: (value: string) => void;
   onPhone: (value: string) => void;
   onNotes: (value: string) => void;
   onConfirm: () => void;
@@ -1117,29 +1286,52 @@ function Summary({
             {lines.map((line) => (
               <li className="sum-line" key={line.service.id}>
                 <span className="sz">{prettySize(line.service.name)}</span>
-                <span className="pr num">{formatMoney(line.totalCents)}</span>
+                {priced && (
+                  <span className="pr num">{formatMoney(line.totalCents)}</span>
+                )}
                 <span className="cp">
                   {plural(line.copies, 'copia', 'copias')} ·{' '}
                   {plural(line.files, 'foto', 'fotos')}
                 </span>
-                {line.pricingAvailable !== false && line.copies > 0 && (
-                  <span className="up">
-                    Precio por copia:{' '}
-                    <b className="num">{formatMoney(line.unitPriceCents)}</b>
-                  </span>
-                )}
+                {priced &&
+                  line.pricingAvailable !== false &&
+                  line.copies > 0 && (
+                    <span className="up">
+                      Precio por copia:{' '}
+                      <b className="num">{formatMoney(line.unitPriceCents)}</b>
+                    </span>
+                  )}
               </li>
             ))}
           </ul>
         )}
-        <div className="sum-total">
-          <span className="lbl">TOTAL</span>
-          <span className="amt num" aria-live="polite">
-            {formatMoney(total)}
-          </span>
-        </div>
+        {priced ? (
+          <div className="sum-total">
+            <span className="lbl">TOTAL</span>
+            <span className="amt num" aria-live="polite">
+              {formatMoney(total)}
+            </span>
+          </div>
+        ) : (
+          <p className="pro-quote-note">
+            Enviá tus fotografías y prepararemos tu presupuesto.
+          </p>
+        )}
+        {!priced && (
+          <label className="field pro-field">
+            <span>Tu nombre</span>
+            <input
+              className="input"
+              type="text"
+              autoComplete="name"
+              value={name}
+              maxLength={80}
+              onChange={(e) => onName(e.target.value)}
+            />
+          </label>
+        )}
         <label className="field pro-field">
-          <span>WhatsApp para avisarte</span>
+          <span>{priced ? 'WhatsApp para avisarte' : 'Teléfono'}</span>
           <input
             className="input"
             type="tel"
@@ -1151,6 +1343,21 @@ function Summary({
             onChange={(e) => onPhone(e.target.value)}
           />
         </label>
+        {!priced && (
+          <label className="field pro-field">
+            <span>
+              Correo electrónico <span className="opt">Opcional</span>
+            </span>
+            <input
+              className="input"
+              type="email"
+              autoComplete="email"
+              value={email}
+              maxLength={120}
+              onChange={(e) => onEmail(e.target.value)}
+            />
+          </label>
+        )}
         <label className="field pro-field">
           <span>
             Notas <span className="opt">Opcional</span>
@@ -1176,14 +1383,16 @@ function Summary({
           onClick={onConfirm}
           icon="check"
         >
-          Confirmar pedido
+          {priced ? 'Confirmar pedido' : 'Enviar fotografías'}
         </Button>
         <p className="fine">
           <Icon name="info" />
           <span>
-            {terms === 'deferred'
-              ? 'El pedido queda a tu cuenta, según tu acuerdo con CentroColor.'
-              : 'Se imprime una vez acreditada la transferencia.'}
+            {!priced
+              ? 'CentroColor revisará tu pedido y te confirmará el importe.'
+              : terms === 'deferred'
+                ? 'El pedido queda a tu cuenta, según tu acuerdo con CentroColor.'
+                : 'Se imprime una vez acreditada la transferencia.'}
           </span>
         </p>
       </div>

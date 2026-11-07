@@ -37,6 +37,16 @@ export const photoJobSourceChannels = [
 ] as const;
 export type PhotoJobSourceChannel = (typeof photoJobSourceChannels)[number];
 
+/**
+ * `pending_quote`: the job has no amount yet (a request sent from /profesionales without an
+ * account). Its items hold a placeholder zero that must never be read as "free" or "paid"; the
+ * amount is set once, on the server, when CentroColor quotes it.
+ */
+export const photoJobQuoteStatuses = ['quoted', 'pending_quote'] as const;
+export type PhotoJobQuoteStatus = (typeof photoJobQuoteStatuses)[number];
+export const isPhotoJobPendingQuote = (job: Pick<PhotoJob, 'quoteStatus'>) =>
+  job.quoteStatus === 'pending_quote';
+
 export const photoJobStatuses = [
   'received',
   'in_progress',
@@ -105,6 +115,8 @@ export interface PhotoJob {
   driveEditedFolderId: string | null;
   /** Where the job came from. Set by the server; clients never change it. */
   sourceChannel: PhotoJobSourceChannel;
+  /** Set by the server; clients never change it (see PhotoJobQuoteStatus). */
+  quoteStatus: PhotoJobQuoteStatus;
   createdBy: string;
   createdAt: string;
   updatedAt: string;

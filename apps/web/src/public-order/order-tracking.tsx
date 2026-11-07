@@ -95,6 +95,14 @@ export function OrderTracking({ token }: { token: string }) {
 
   const index = trackingStepIndex(order.status);
   const ready = order.status === 'ready';
+  // A request sent without an account is quoted by CentroColor: no prices, no transfer, and no
+  // promise of an automatic WhatsApp (no consent was asked on that form).
+  const request = order.request;
+  const note = request
+    ? ready || order.status === 'delivered' || order.status === 'cancelled'
+      ? trackingNote(order.status)
+      : 'CentroColor está revisando tu pedido.'
+    : trackingNote(order.status);
   return (
     <PublicShell businessName={order.businessName}>
       <div className="pt-page" aria-live="polite">
@@ -110,7 +118,7 @@ export function OrderTracking({ token }: { token: string }) {
                 <Icon name="check" />
               </span>
               <h2>{trackingHeadline(order.status)}</h2>
-              <p>{trackingNote(order.status)}</p>
+              <p>{note}</p>
             </div>
           </section>
         )}
@@ -144,7 +152,7 @@ export function OrderTracking({ token }: { token: string }) {
           </section>
         )}
 
-        {!ready && <p className="state-note">{trackingNote(order.status)}</p>}
+        {!ready && <p className="state-note">{note}</p>}
         {error && !error.invalid && (
           <p className="po-error">
             No pudimos actualizar el estado. Mostramos el último dato conocido.
@@ -164,36 +172,62 @@ export function OrderTracking({ token }: { token: string }) {
                 <span className="meta">
                   {item.quantity} {item.quantity === 1 ? 'copia' : 'copias'}
                 </span>
-                <b className="num">{formatMoney(item.totalCents)}</b>
+                {!request && (
+                  <b className="num">{formatMoney(item.totalCents ?? 0)}</b>
+                )}
               </li>
             ))}
           </ul>
-          <p className="order-total">
-            <span>TOTAL</span>
-            <b className="num">{formatMoney(order.totalCents)}</b>
-          </p>
+          {!request && (
+            <p className="order-total">
+              <span>TOTAL</span>
+              <b className="num">{formatMoney(order.totalCents ?? 0)}</b>
+            </p>
+          )}
         </section>
 
-        {order.status === 'received' && order.paymentTerms !== 'deferred' && (
+        {request && (
           <div className="callout" role="note">
-            <Icon name="wallet" />
+            <Icon name="receipt" />
             <div>
               <strong>
-                Transferí {formatMoney(order.totalCents)} a {BANK_ALIAS}
+                {request.quote === 'pending'
+                  ? 'Estamos preparando tu presupuesto'
+                  : 'Tu presupuesto ya está confirmado'}
               </strong>
-              <p>{PRINT_AFTER_PAYMENT}</p>
+              <p>
+                {request.quote === 'pending'
+                  ? 'CentroColor revisará tu pedido y te confirmará el importe.'
+                  : 'CentroColor te informará el importe y cómo continuar.'}
+              </p>
             </div>
           </div>
         )}
 
-        <div className="callout callout--wa">
-          <Icon name="chat" />
-          <div>
-            <strong>
-              Te avisaremos por WhatsApp cuando tu pedido esté listo.
-            </strong>
+        {!request &&
+          order.status === 'received' &&
+          order.paymentTerms !== 'deferred' && (
+            <div className="callout" role="note">
+              <Icon name="wallet" />
+              <div>
+                <strong>
+                  Transferí {formatMoney(order.totalCents ?? 0)} a {BANK_ALIAS}
+                </strong>
+                <p>{PRINT_AFTER_PAYMENT}</p>
+              </div>
+            </div>
+          )}
+
+        {!request && (
+          <div className="callout callout--wa">
+            <Icon name="chat" />
+            <div>
+              <strong>
+                Te avisaremos por WhatsApp cuando tu pedido esté listo.
+              </strong>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="row-actions">
           <Button

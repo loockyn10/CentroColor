@@ -110,6 +110,7 @@ const decode = (t: PhotoSyncType, r: any): any => {
           driveFolderId: r.drive_folder_id,
           driveEditedFolderId: r.drive_edited_folder_id,
           sourceChannel: r.source_channel ?? 'manual',
+          quoteStatus: r.quote_status ?? 'quoted',
           createdBy: r.created_by,
         }
       : {

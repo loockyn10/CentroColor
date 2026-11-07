@@ -4,11 +4,12 @@
 // of the public portal (`uploadPhoto`), since the token is minted for one professional order.
 import { getSupabaseClient } from '../cloud-config';
 import { invokeEdgeFunction } from '../edge-functions';
-import type {
-  Catalog,
-  StartedOrder,
-  SubmitOptions,
-  SubmittedOrder,
+import {
+  request,
+  type Catalog,
+  type StartedOrder,
+  type SubmitOptions,
+  type SubmittedOrder,
 } from '../public-order/client';
 
 export type PaymentTerms = 'prepaid' | 'deferred';
@@ -24,6 +25,8 @@ export type ProfessionalAccount = {
 };
 
 export type ProfessionalCatalog = Catalog & { account: ProfessionalAccount };
+/** The catalog the page works with: `account` is null for a visitor without an account. */
+export type PortalCatalog = Catalog & { account: ProfessionalAccount | null };
 export type ProfessionalStartedOrder = StartedOrder & {
   paymentTerms: PaymentTerms;
 };
@@ -60,6 +63,63 @@ export const submitProfessionalOrder = (
     { token, ...options },
     'No pudimos confirmar el pedido',
   );
+
+/* ───────────────────── without an account (anonymous, price-free) ───────────────────── */
+
+export type RequestStarted = {
+  orderCode: string;
+  uploadToken: string;
+  customerFirstName: string;
+  destinations: {
+    serviceId: string;
+    destinationId: string;
+    name: string;
+    quantity: number;
+  }[];
+  expiresAt: string;
+};
+
+export type RequestSubmitted = {
+  orderCode: string;
+  status: 'received';
+  alreadySubmitted: boolean;
+  quote: 'pending';
+  items: { name: string; quantity: number }[];
+  trackingToken: string;
+};
+
+/**
+ * Sizes and papers a visitor may ask for. The server sends no price, tier or list: whatever the
+ * page needs to show is in this answer, and nothing else exists to be revealed. `unitPriceCents` is
+ * only the placeholder the shared order model requires; no screen of the request flow reads it.
+ */
+export async function fetchProfessionalPublicCatalog(): Promise<PortalCatalog> {
+  const catalog = await request<{
+    businessName: string;
+    available: boolean;
+    services: Omit<Catalog['services'][number], 'unitPriceCents' | 'tiers'>[];
+  }>('professional-public-catalog', {});
+  return {
+    ...catalog,
+    services: catalog.services.map((service) => ({
+      ...service,
+      unitPriceCents: 0,
+    })),
+    account: null,
+  };
+}
+
+export const startProfessionalRequest = (body: Record<string, unknown>) =>
+  request<RequestStarted>('professional-request-start', body);
+
+export const submitProfessionalRequest = (
+  token: string,
+  options: SubmitOptions = {},
+) =>
+  request<RequestSubmitted>('professional-request-submit', {
+    token,
+    ...options,
+  });
 
 /** The server's own wording, without the "No pudimos…:" prefix the generic invoker adds. */
 export function serverMessage(error: unknown) {

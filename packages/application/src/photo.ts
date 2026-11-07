@@ -69,6 +69,28 @@ export interface PhotoRepository {
   ): Promise<PhotoJob>;
 }
 
+export interface QuotePriceListOption {
+  id: string;
+  name: string;
+  kind: 'public' | 'professional' | 'custom';
+}
+
+/**
+ * Quotes a job that arrived without an amount (`quoteStatus: 'pending_quote'`, e.g. a request from
+ * /profesionales without an account). The amount is computed and stored by the Cloud, with the
+ * caller's owner/admin authorization: the client only names the price list (and, if the request was
+ * matched to the wrong person, the Customer). There is no way to pass a price.
+ */
+export interface PhotoJobQuoteRepository {
+  listPriceLists(businessId: string): Promise<QuotePriceListOption[]>;
+  quoteJob(input: {
+    businessId: string;
+    jobId: string;
+    priceListId: string;
+    customerId: string | null;
+  }): Promise<{ totalCents: number; priceListName: string }>;
+}
+
 export interface GoogleDriveIntegrationView {
   status: 'connected' | 'disconnected' | 'error' | 'reconnect_required';
   googleAccountEmail: string | null;
@@ -159,6 +181,7 @@ export function buildPhotoJob(
     driveFolderId: null,
     driveEditedFolderId: null,
     sourceChannel: 'manual',
+    quoteStatus: 'quoted',
     createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,

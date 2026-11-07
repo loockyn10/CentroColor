@@ -7,7 +7,9 @@ import {
   type PublicOrderRow,
   type PublicOrderStore,
   type PublicServiceRow,
+  type RequestServiceRow,
   type StartedOrder,
+  type StartedRequest,
   type TrackingRow,
 } from './public-order-store.ts';
 import { run, type ServiceDb } from './store-supabase.ts';
@@ -47,6 +49,18 @@ export async function rpc(
   }
   return data;
 }
+
+const toRequestService = (x: any): RequestServiceRow => ({
+  id: x.id,
+  name: x.name,
+  description: x.description ?? null,
+  width_mm: x.width_mm ?? null,
+  height_mm: x.height_mm ?? null,
+  sort_order: x.sort_order,
+  variant_id: x.variant_id,
+  photo_service_id: x.photo_service_id,
+  paper: x.paper,
+});
 
 const withTiers = (data: unknown) =>
   ((data ?? []) as any[])
@@ -125,7 +139,7 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
         db
           .from('public_photo_orders')
           .select(
-            'id,business_id,photo_job_id,status,submitted_at,created_at,professional_account_id,payment_terms',
+            'id,business_id,photo_job_id,status,submitted_at,created_at,professional_account_id,payment_terms,portal',
           )
           .eq('business_id', businessId)
           .eq('photo_job_id', jobId)
@@ -138,7 +152,7 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
         'photo_jobs.get_tracking',
         db
           .from('photo_jobs')
-          .select('status,created_at')
+          .select('status,created_at,quote_status')
           .eq('business_id', businessId)
           .eq('id', jobId)
           .maybeSingle(),
@@ -157,6 +171,7 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
       return {
         job_status: job.status,
         job_created_at: job.created_at,
+        quote_status: job.quote_status ?? 'quoted',
         items: ((items ?? []) as any[]).map((x) => ({
           name: x.service_name_snapshot as string,
           quantity: Number(x.quantity),
@@ -201,6 +216,43 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
         p_link_expires_at: args.link_expires_at,
       });
       return data as StartedOrder & { payment_terms?: 'prepaid' | 'deferred' };
+    },
+    async listRequestServices(businessId) {
+      const data = await rpc(db, 'cc_professional_public_catalog', {
+        p_business_id: businessId,
+      });
+      return ((data ?? []) as any[]).map(toRequestService);
+    },
+    async countRequestsSince(businessId, sinceIso, filter = {}) {
+      let query = db
+        .from('public_photo_orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('business_id', businessId)
+        .eq('portal', 'profesionales')
+        .is('professional_account_id', null)
+        .gte('created_at', sinceIso);
+      if (filter.ipHash) query = query.eq('client_ip_hash', filter.ipHash);
+      if (filter.phoneE164) query = query.eq('whatsapp_e164', filter.phoneE164);
+      if (filter.excludeClientKey)
+        query = query.neq('client_key', filter.excludeClientKey);
+      const { count } = await run('public_photo_orders.count_requests', query);
+      return count ?? 0;
+    },
+    async startRequest(args) {
+      const data = await rpc(db, 'cc_professional_request_start', {
+        p_business_id: args.business_id,
+        p_client_key: args.client_key,
+        p_customer_name: args.customer_name,
+        p_phone_e164: args.phone_e164,
+        p_phone_display: args.phone_display,
+        p_email: args.email,
+        p_notes: args.notes,
+        p_ip_hash: args.ip_hash,
+        p_items: args.items,
+        p_token_hash: args.token_hash,
+        p_link_expires_at: args.link_expires_at,
+      });
+      return data as StartedRequest;
     },
   };
 }

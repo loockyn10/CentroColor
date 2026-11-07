@@ -191,6 +191,7 @@ describe('trabajos fotográficos', () => {
       driveFolderId: null,
       driveEditedFolderId: null,
       sourceChannel: 'manual' as const,
+      quoteStatus: 'quoted' as const,
       createdBy: 'u',
       createdAt: '2026-01-01T00:00:00Z',
       updatedAt: '',

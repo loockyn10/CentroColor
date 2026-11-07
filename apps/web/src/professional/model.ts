@@ -14,6 +14,18 @@ import type { UploadProgress } from '../public-order/order-submission';
 /** The server accepts up to a thousand photos and 300 MB per photo from a professional account. */
 export const PRO_MAX_FILES_PER_ORDER = 1000;
 export const PRO_MAX_FILE_BYTES = 300 * 1024 * 1024;
+/** A request without an account (anonymous) has tighter limits: see PROFESSIONAL_REQUEST_* on the server. */
+export const REQUEST_MAX_FILES_PER_ORDER = 500;
+export const REQUEST_MAX_FILE_BYTES = 100 * 1024 * 1024;
+export type PickLimits = { files: number; bytes: number };
+export const ACCOUNT_LIMITS: PickLimits = {
+  files: PRO_MAX_FILES_PER_ORDER,
+  bytes: PRO_MAX_FILE_BYTES,
+};
+export const REQUEST_LIMITS: PickLimits = {
+  files: REQUEST_MAX_FILES_PER_ORDER,
+  bytes: REQUEST_MAX_FILE_BYTES,
+};
 /** Photos in flight at once: enough to fill the line, few enough to keep a laptop responsive. */
 export const PRO_UPLOAD_CONCURRENCY = 4;
 
@@ -43,7 +55,10 @@ export type PickedFiles = {
  * Sorts what a folder or a multiple selection contains. Lightroom folders hold more than photos
  * (`.lrcat`, `.xmp`, `Thumbs.db`): those are counted and skipped, never an error.
  */
-export function classifyPickedFiles(files: File[]): PickedFiles {
+export function classifyPickedFiles(
+  files: File[],
+  maxBytes = PRO_MAX_FILE_BYTES,
+): PickedFiles {
   const result: PickedFiles = {
     accepted: [],
     ignored: 0,
@@ -57,7 +72,7 @@ export function classifyPickedFiles(files: File[]): PickedFiles {
     )
       result.ignored += 1;
     else if (file.size <= 0) result.empty.push(file.name);
-    else if (file.size > PRO_MAX_FILE_BYTES) result.tooLarge.push(file.name);
+    else if (file.size > maxBytes) result.tooLarge.push(file.name);
     else result.accepted.push(file);
   }
   result.accepted.sort((a, b) => natural.compare(pathOf(a), pathOf(b)));
@@ -85,9 +100,10 @@ export function planAdditions(
   existing: PhotoEntry[],
   serviceId: string,
   files: File[],
-  options: { total?: number; newId?: () => string } = {},
+  options: { total?: number; newId?: () => string; max?: number } = {},
 ): Additions {
   const total = options.total ?? existing.length;
+  const max = options.max ?? PRO_MAX_FILES_PER_ORDER;
   const newId = options.newId ?? (() => crypto.randomUUID());
   const seen = new Set(
     existing
@@ -103,7 +119,7 @@ export function planAdditions(
       duplicates += 1;
       continue;
     }
-    if (total + entries.length >= PRO_MAX_FILES_PER_ORDER) {
+    if (total + entries.length >= max) {
       overflow += 1;
       continue;
     }
@@ -133,6 +149,7 @@ export function describePick(
   folder: string | null,
   picked: PickedFiles,
   added: Additions,
+  limits: PickLimits = ACCOUNT_LIMITS,
 ) {
   const parts = [
     folder
@@ -153,11 +170,11 @@ export function describePick(
     );
   if (picked.tooLarge.length)
     parts.push(
-      `${plural(picked.tooLarge.length, 'foto supera', 'fotos superan')} los ${PRO_MAX_FILE_BYTES / 1024 / 1024} MB.`,
+      `${plural(picked.tooLarge.length, 'foto supera', 'fotos superan')} los ${limits.bytes / 1024 / 1024} MB.`,
     );
   if (added.overflow)
     parts.push(
-      `Podés enviar hasta ${PRO_MAX_FILES_PER_ORDER} fotos por pedido: ${plural(added.overflow, 'quedó afuera', 'quedaron afuera')}.`,
+      `Podés enviar hasta ${limits.files} fotos por pedido: ${plural(added.overflow, 'quedó afuera', 'quedaron afuera')}.`,
     );
   return parts.join(' ');
 }
@@ -249,6 +266,57 @@ export function startProfessionalBody(
 
 const digits = (value: string) => value.replace(/\D/g, '');
 
+export type RequestContact = { name: string; phone: string; email: string };
+
+/**
+ * Wire body of professional-request-start (contract: ProfessionalRequestStartPayload). It carries
+ * no price, no total and no list: a visitor has none, and the server would not read them anyway.
+ */
+export function startRequestBody(
+  clientKey: string,
+  contact: RequestContact,
+  notes: string,
+  lines: OrderLine[],
+) {
+  return {
+    clientKey,
+    customer: {
+      name: contact.name.trim(),
+      phone: contact.phone.trim(),
+      email: contact.email.trim() || undefined,
+      notes: notes.trim() || undefined,
+    },
+    items: lines.map((line) => ({
+      serviceId: line.service.id,
+      variantId: line.service.variantId!,
+      quantity: line.copies,
+    })),
+  };
+}
+
+/** What is still missing before a request can be sent (first thing first). */
+export function missingForRequestConfirm(
+  lines: OrderLine[],
+  selected: string[],
+  contact: RequestContact,
+) {
+  const missing: string[] = [];
+  if (!selected.length) missing.push('elegí al menos un formato');
+  for (const line of lines)
+    if (line.files === 0) missing.push(`agregá fotos de ${line.service.name}`);
+    else if (!line.service.variantId)
+      missing.push(`${line.service.name} no está disponible`);
+  if (contact.name.trim().length < 2) missing.push('tu nombre');
+  const phoneDigits = digits(contact.phone).length;
+  if (phoneDigits < 8 || phoneDigits > 15) missing.push('tu teléfono');
+  if (
+    contact.email.trim() &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email.trim())
+  )
+    missing.push('un e-mail válido (o dejalo vacío)');
+  return missing;
+}
+
 /** What is still missing before the order can be sent (first thing first). */
 export function missingForProfessionalConfirm(
   lines: OrderLine[],
@@ -307,6 +375,9 @@ export function passwordProblem(password: string, repeat: string) {
 
 const CLIENT_KEY_KEY = 'cc.pro.clientKey';
 const PHONE_KEY = 'cc.pro.phone';
+// A request without an account has its own key and contact: it can never reuse an account draft.
+const REQUEST_KEY_KEY = 'cc.pro.request.clientKey';
+const REQUEST_CONTACT_KEY = 'cc.pro.request.contact';
 
 function safe<T>(work: () => T, fallback: T) {
   try {
@@ -325,6 +396,35 @@ export const loadProfessionalClientKey = (newKey: () => string) =>
     localStorage.setItem(CLIENT_KEY_KEY, created);
     return created;
   }, newKey());
+export const loadRequestClientKey = (newKey: () => string) =>
+  safe(() => {
+    const existing = localStorage.getItem(REQUEST_KEY_KEY);
+    if (existing && /^[A-Za-z0-9_-]{16,64}$/.test(existing)) return existing;
+    const created = newKey();
+    localStorage.setItem(REQUEST_KEY_KEY, created);
+    return created;
+  }, newKey());
+export const resetRequestClientKey = () =>
+  safe(() => localStorage.removeItem(REQUEST_KEY_KEY), undefined);
+export const loadRequestContact = (): RequestContact =>
+  safe(
+    () => {
+      const value = JSON.parse(
+        localStorage.getItem(REQUEST_CONTACT_KEY) ?? '{}',
+      ) as Partial<RequestContact>;
+      return {
+        name: typeof value.name === 'string' ? value.name : '',
+        phone: typeof value.phone === 'string' ? value.phone : '',
+        email: typeof value.email === 'string' ? value.email : '',
+      };
+    },
+    { name: '', phone: '', email: '' },
+  );
+export const rememberRequestContact = (contact: RequestContact) =>
+  safe(
+    () => localStorage.setItem(REQUEST_CONTACT_KEY, JSON.stringify(contact)),
+    undefined,
+  );
 export const resetProfessionalClientKey = () =>
   safe(() => localStorage.removeItem(CLIENT_KEY_KEY), undefined);
 export const loadProfessionalPhone = () =>

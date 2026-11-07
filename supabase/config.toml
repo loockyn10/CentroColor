@@ -441,6 +441,17 @@ verify_jwt = false
 [functions.public-photo-order-track]
 verify_jwt = false
 
+# /profesionales without an account: anonymous like the public portal, and price-free by design
+# (the professional-catalog/-order-* functions keep verifying the user's JWT).
+[functions.professional-public-catalog]
+verify_jwt = false
+
+[functions.professional-request-start]
+verify_jwt = false
+
+[functions.professional-request-submit]
+verify_jwt = false
+
 # WhatsApp: the dispatcher is woken by the database with a shared secret, Meta's webhook is
 # authenticated by its HMAC signature; admin and send validate the caller's JWT themselves.
 [functions.whatsapp-dispatch]

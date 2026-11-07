@@ -19,6 +19,10 @@ import {
   PROFESSIONAL_MAX_SESSIONS_PER_MINUTE,
   PROFESSIONAL_ORDER_MAX_FILES,
   PROFESSIONAL_ORDER_MAX_FILE_BYTES,
+  PROFESSIONAL_REQUEST_MAX_FILES,
+  PROFESSIONAL_REQUEST_MAX_FILE_BYTES,
+  PROFESSIONAL_REQUEST_MAX_SESSIONS_PER_MINUTE,
+  PROFESSIONAL_REQUEST_MAX_TOTAL_BYTES,
   PUBLIC_ORDER_MAX_FILES,
   PUBLIC_ORDER_MAX_FILE_BYTES,
   driveFileError,
@@ -299,7 +303,9 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
           );
         const maxBytes = job.is_professional
           ? PROFESSIONAL_ORDER_MAX_FILE_BYTES
-          : PUBLIC_ORDER_MAX_FILE_BYTES;
+          : job.is_professional_request
+            ? PROFESSIONAL_REQUEST_MAX_FILE_BYTES
+            : PUBLIC_ORDER_MAX_FILE_BYTES;
         if (input.sizeBytes > maxBytes)
           throw new ApiError(
             `La foto supera el tamaño máximo de ${maxBytes / 1024 / 1024} MB.`,
@@ -371,12 +377,26 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
         ? MAX_FILES_PER_JOB
         : job.is_professional
           ? PROFESSIONAL_ORDER_MAX_FILES
-          : PUBLIC_ORDER_MAX_FILES;
+          : job.is_professional_request
+            ? PROFESSIONAL_REQUEST_MAX_FILES
+            : PUBLIC_ORDER_MAX_FILES;
       if (active >= maxFiles)
         throw new ApiError(
           'Este pedido alcanzó el máximo de archivos.',
           409,
           'too_many_files',
+        );
+      // An anonymous request is also bounded in bytes, not only in photos.
+      if (
+        job.is_professional_request &&
+        (await deps.store.sumFileBytes(link.business_id, job.id)) +
+          input.sizeBytes >
+          PROFESSIONAL_REQUEST_MAX_TOTAL_BYTES
+      )
+        throw new ApiError(
+          'Este pedido alcanzó el tamaño total máximo. Enviá el resto en otro pedido.',
+          409,
+          'order_too_large',
         );
       const recent = await deps.store.countFilesCreatedSince(
         link.business_id,
@@ -387,7 +407,9 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
         recent >=
         (job.is_professional
           ? PROFESSIONAL_MAX_SESSIONS_PER_MINUTE
-          : MAX_SESSIONS_PER_MINUTE)
+          : job.is_professional_request
+            ? PROFESSIONAL_REQUEST_MAX_SESSIONS_PER_MINUTE
+            : MAX_SESSIONS_PER_MINUTE)
       )
         throw new ApiError(
           'Hay demasiadas cargas en poco tiempo. Esperá un minuto y reintentá.',

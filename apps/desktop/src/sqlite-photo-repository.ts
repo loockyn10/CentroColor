@@ -47,6 +47,7 @@ const job = (x: any): PhotoJob => ({
   driveFolderId: x.drive_folder_id,
   driveEditedFolderId: x.drive_edited_folder_id,
   sourceChannel: x.source_channel ?? 'manual',
+  quoteStatus: x.quote_status ?? 'quoted',
   createdBy: x.created_by,
   createdAt: x.created_at,
   updatedAt: x.updated_at,

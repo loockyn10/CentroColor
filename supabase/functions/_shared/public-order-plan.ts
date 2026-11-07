@@ -63,6 +63,23 @@ export const PROFESSIONAL_ORDER_LIMITS: OrderLimits = {
   maxFilesPerDestination: 1000,
 };
 
+/** What an anonymous professional request may hold (see PROFESSIONAL_REQUEST_* in upload-policy). */
+export const REQUEST_ORDER_LIMITS: OrderLimits = {
+  maxServices: 30,
+  maxQuantityPerService: 50_000,
+  maxUploads: 500,
+  maxFilesPerDestination: 500,
+};
+
+/** Request body of professional-request-start: nobody is identified, and nothing is priced. */
+export type ProfessionalRequestStartPayload = {
+  clientKey: string;
+  customer: { name: string; phone: string; email?: string; notes?: string };
+  items: { serviceId: string; quantity: number; variantId: string }[];
+  /** Honeypot: real users never fill it. */
+  website?: string;
+};
+
 /** Request body of professional-order-start: who is ordering comes from the verified JWT. */
 export type ProfessionalOrderStartPayload = {
   clientKey: string;
@@ -197,6 +214,58 @@ function parseItems(
       variantId: (item.variantId as string | undefined)?.toLowerCase(),
     };
   });
+}
+
+export type ParsedRequestStart = {
+  clientKey: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  notes: string | null;
+  items: { serviceId: string; quantity: number; variantId: string }[];
+};
+
+/**
+ * The anonymous request carries no price, total or expected amount: a field of that kind in the
+ * body is not even read, so the endpoint cannot be used to probe a price (there is no
+ * `price_changed` to compare against).
+ */
+export function parseRequestStartPayload(
+  input: Partial<ProfessionalRequestStartPayload>,
+): ParsedRequestStart {
+  if (typeof input.website === 'string' && input.website.trim())
+    throw invalid('La solicitud no es válida.');
+  if (typeof input.clientKey !== 'string' || !CLIENT_KEY.test(input.clientKey))
+    throw invalid('La solicitud no es válida.');
+  const customer = input.customer;
+  if (typeof customer !== 'object' || customer === null)
+    throw invalid('Completá tus datos.');
+  const name = cleanText(customer.name, 'Tu nombre', LIMITS.nameMax, {
+    required: true,
+    min: LIMITS.nameMin,
+  })!;
+  if (typeof customer.phone !== 'string')
+    throw invalid('Completá tu teléfono.', 'invalid_phone');
+  const email = cleanText(customer.email, 'El email', LIMITS.emailMax, {
+    required: false,
+  });
+  if (email && !EMAIL.test(email)) throw invalid('El email no es válido.');
+  const notes = cleanText(customer.notes, 'La nota', LIMITS.notesMax, {
+    required: false,
+  });
+  const items = parseItems(input.items, REQUEST_ORDER_LIMITS, true) as {
+    serviceId: string;
+    quantity: number;
+    variantId: string;
+  }[];
+  return {
+    clientKey: input.clientKey,
+    name,
+    phone: customer.phone,
+    email,
+    notes,
+    items,
+  };
 }
 
 export type ParsedProfessionalStart = {
