@@ -49,6 +49,8 @@ export type TrackedOrder = {
   status: 'received' | 'in_progress' | 'ready' | 'delivered' | 'cancelled';
   items: { name: string; quantity: number; totalCents: number }[];
   totalCents: number;
+  /** Only professional orders: `deferred` = pays later, so no transfer is requested. */
+  paymentTerms?: 'prepaid' | 'deferred';
 };
 
 /** An error whose message is safe to show, plus the server code when there is one. */
@@ -123,12 +125,16 @@ export async function uploadPhoto(
   options: {
     attempts?: number;
     deps?: UploadDeps;
+    /** Pause before retrying after the server asks to slow down; replaced in tests. */
+    sleep?: (ms: number) => Promise<void>;
     /** Called as soon as the server opens an attempt, so the caller can remember it for retries. */
     onAttempt?: (uploadId: string) => void;
   } = {},
 ) {
   const deps = options.deps ?? realDeps;
   const attempts = options.attempts ?? 3;
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
   let previousUploadId: string | undefined = target.previousUploadId;
   let lastError: unknown;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -171,6 +177,9 @@ export async function uploadPhoto(
         ['link_revoked', 'link_expired', 'link_submitted'].includes(code)
       )
         break;
+      // Too many sessions in a minute is not a failure of the photo: wait and try again.
+      if (code === 'rate_limited' && attempt < attempts)
+        await sleep(5000 * attempt);
     }
   }
   throw lastError instanceof Error

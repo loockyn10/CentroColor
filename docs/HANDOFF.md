@@ -1,5 +1,15 @@
 # Handoff
 
+## Portal profesional `/profesionales` (07/11/2026)
+
+Detalle en `docs/CURRENT_STATE.md`; guía de publicación y de alta de profesionales en `docs/PROFESSIONAL_PORTAL_SETUP.md`; decisiones 107–110. **Nada aplicado ni desplegado**, sin commit ni push.
+
+**Publicar (en este orden):** (1) `pnpm exec supabase db push --dry-run` (debe listar sólo `20261107000000_professional_portal.sql`) y, con autorización, `db push`; **sin migración SQLite**. (2) Desplegar con JWT `professional-catalog`, `professional-order-start`, `professional-order-submit` y `professional-admin`, y redesplegar `photo-upload-session` (**obligatoria**), `public-photo-order-submit` y `public-photo-order-track` (recomendadas); comandos exactos en la guía. (3) Agregar `https://<dominio>/profesionales` a Redirect URLs de Supabase Auth. (4) Publicar la Web. Funciones primero: una Web nueva contra funciones viejas sólo no encuentra `professional-*` (el portal profesional falla de forma controlada, `/imprimir` no se afecta).
+
+**Prueba de humo real (pendiente):** ver §5 de la guía (100+ fotos reales de Lightroom por carpeta, «Copias para todas», dos formatos, ambas condiciones de pago, Drive con `001_2copias.jpg`, panel con `ORIGEN: WEB`, reintento con la conexión cortada, aislamiento del panel).
+
+**Punto de reanudación:** `supabase/functions/_shared/professional-*.ts` (handlers), `supabase/migrations/20261107000000_professional_portal.sql`, `apps/web/src/professional/` (portal) y `apps/web/src/public-order/order-submission.ts` (subida compartida con `/imprimir`). Siguiente trabajo posible, sólo con pedido nuevo: historial de pedidos del profesional, estado de pago/acreditación visible en Cobros para pedidos `deferred`, pausa/cancelación de cargas.
+
 ## `/imprimir`: cascada de tamaño/papel y nombres con copias (06/11/2026)
 
 Detalle en `docs/CURRENT_STATE.md`; decisión 106. Sin SQL remoto, sin commit ni push, **sin migraciones**.

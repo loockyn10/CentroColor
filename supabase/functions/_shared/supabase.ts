@@ -41,6 +41,46 @@ async function resolveMembership(request: Request, businessId: string) {
 }
 
 /**
+ * Verifies the caller's JWT and returns its Auth user, nothing else: whether that user is a
+ * professional is decided afterwards, in the database (professional-handlers.ts).
+ */
+export async function authenticateUser(request: Request) {
+  const authorization = request.headers.get('Authorization');
+  if (!authorization)
+    throw new ApiError('Autorización requerida.', 401, 'unauthorized');
+  const client = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_ANON_KEY')!,
+    {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false },
+    },
+  );
+  const {
+    data: { user },
+    error,
+  } = await client.auth.getUser();
+  if (error || !user)
+    throw new ApiError('Autorización inválida.', 401, 'unauthorized');
+  return { userId: user.id };
+}
+
+/** Sends an invitation e-mail (the invitee sets their own password) and returns the new user id. */
+export async function inviteUserByEmail(email: string, redirectTo: string) {
+  const { data, error } = await serviceClient().auth.admin.inviteUserByEmail(
+    email,
+    { redirectTo },
+  );
+  if (error || !data.user)
+    throw new ApiError(
+      'No pudimos enviar la invitación. Probá de nuevo en un momento.',
+      502,
+      'invite_failed',
+    );
+  return data.user.id;
+}
+
+/**
  * Admin authentication, in this order and nothing else before it:
  * 1. JWT from the caller (authenticated/RLS client, never the service role);
  * 2. auth user resolved from that JWT;

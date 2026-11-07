@@ -16,6 +16,9 @@ import {
   MAX_FILES_PER_JOB,
   MAX_SESSIONS_PER_MINUTE,
   PUBLIC_ORDER_EXTENSIONS,
+  PROFESSIONAL_MAX_SESSIONS_PER_MINUTE,
+  PROFESSIONAL_ORDER_MAX_FILES,
+  PROFESSIONAL_ORDER_MAX_FILE_BYTES,
   PUBLIC_ORDER_MAX_FILES,
   PUBLIC_ORDER_MAX_FILE_BYTES,
   driveFileError,
@@ -294,9 +297,12 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
             400,
             'invalid_format',
           );
-        if (input.sizeBytes > PUBLIC_ORDER_MAX_FILE_BYTES)
+        const maxBytes = job.is_professional
+          ? PROFESSIONAL_ORDER_MAX_FILE_BYTES
+          : PUBLIC_ORDER_MAX_FILE_BYTES;
+        if (input.sizeBytes > maxBytes)
           throw new ApiError(
-            'La foto supera el tamaño máximo de 100 MB.',
+            `La foto supera el tamaño máximo de ${maxBytes / 1024 / 1024} MB.`,
             400,
             'invalid_size',
           );
@@ -361,7 +367,12 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
         'uploading',
         'uploaded',
       ]);
-      if (active >= (publicOrder ? PUBLIC_ORDER_MAX_FILES : MAX_FILES_PER_JOB))
+      const maxFiles = !publicOrder
+        ? MAX_FILES_PER_JOB
+        : job.is_professional
+          ? PROFESSIONAL_ORDER_MAX_FILES
+          : PUBLIC_ORDER_MAX_FILES;
+      if (active >= maxFiles)
         throw new ApiError(
           'Este pedido alcanzó el máximo de archivos.',
           409,
@@ -372,7 +383,12 @@ export function handleUploadSession(request: Request, deps: PublicDeps) {
         job.id,
         new Date(now - 60_000).toISOString(),
       );
-      if (recent >= MAX_SESSIONS_PER_MINUTE)
+      if (
+        recent >=
+        (job.is_professional
+          ? PROFESSIONAL_MAX_SESSIONS_PER_MINUTE
+          : MAX_SESSIONS_PER_MINUTE)
+      )
         throw new ApiError(
           'Hay demasiadas cargas en poco tiempo. Esperá un minuto y reintentá.',
           429,

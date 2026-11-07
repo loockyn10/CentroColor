@@ -10,10 +10,8 @@ import { Button, Icon, Sheet } from '@centrocolor/ui';
 import {
   fetchCatalog,
   PublicOrderError,
-  runPool,
   startOrder,
   submitOrder,
-  uploadPhoto,
   type Catalog,
   type StartedOrder,
   type SubmittedOrder,
@@ -32,12 +30,10 @@ import {
   orderTotal,
   uploadOutcome,
   paymentNote,
-  BANK_ALIAS,
   PRINT_AFTER_PAYMENT,
   rememberOrder,
   resetClientKey,
   startBody,
-  type CatalogService,
   type CustomerForm,
   type OrderLine,
   type PhotoEntry,
@@ -47,38 +43,28 @@ import {
   canAddBlock,
   catalogSizes,
   changeBlock,
-  freePapers,
-  orderedUploadIds,
   prettySize,
   removeBlock,
-  type SizeOption,
 } from './order-blocks';
-import { CopiesStepper, Thumb } from './parts';
+import {
+  buildSubmitOptions,
+  isIncompleteOrder,
+  messageFor,
+  sendEntries,
+  type UploadProgress,
+} from './order-submission';
+import {
+  CopiesStepper,
+  plural,
+  ServicePicker,
+  Thumb,
+  TransferPanel,
+} from './parts';
 import { PublicShell, useDocumentMeta } from './shell';
 import './public-order.css';
 
 type Phase = 'edit' | 'sending' | 'partial' | 'done';
-type Progress = {
-  status: 'waiting' | 'uploading' | 'done' | 'failed';
-  percent: number;
-  error?: string;
-};
-
-const messageFor = (error: unknown) =>
-  error instanceof Error && error.message
-    ? error.message
-    : 'No se pudo completar la operación. Reintentá.';
-
-const plural = (n: number, one: string, many: string) =>
-  `${n} ${n === 1 ? one : many}`;
-
-const dimensions = (size: {
-  widthMm: number | null;
-  heightMm: number | null;
-}) =>
-  size.widthMm && size.heightMm
-    ? `${size.widthMm / 10} × ${size.heightMm / 10} cm`.replaceAll('.', ',')
-    : null;
+type Progress = UploadProgress;
 
 /** What the customer is doing with the size/paper picker: adding a block or changing one. */
 type Picker = { mode: 'add' } | { mode: 'change'; serviceId: string } | null;
@@ -104,7 +90,6 @@ export function PrintOrderPortal() {
   const [result, setResult] = useState<SubmittedOrder | null>(null);
   const [showMissing, setShowMissing] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const [copied, setCopied] = useState<'alias' | 'amount' | null>(null);
   const session = useRef<{ started: StartedOrder } | null>(null);
   // Last upload attempt of each photo: a retry names it so the server never stores it twice.
   const attempts = useRef(new Map<string, string>());
@@ -132,16 +117,6 @@ export function PrintOrderPortal() {
   );
   const total = orderTotal(lines);
   const missing = missingForConfirm(lines, selected, customer);
-
-  async function copy(text: string, key: 'alias' | 'amount') {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      /* el portapapeles puede no estar disponible: igual se confirma visualmente */
-    }
-    setCopied(key);
-    window.setTimeout(() => setCopied(null), 2200);
-  }
 
   /** The customer picked a size and paper: a new block, or the new place of an existing one. */
   function chooseService(serviceId: string) {
@@ -198,58 +173,29 @@ export function PrintOrderPortal() {
   const patchProgress = (id: string, value: Progress) =>
     setProgress((current) => ({ ...current, [id]: value }));
 
-  async function sendPhotos(targets: PhotoEntry[]) {
-    const started = session.current!.started;
-    const destinations = new Map(
-      started.destinations.map((x) => [x.serviceId, x.destinationId]),
-    );
-    const failures = await runPool(targets, 2, async (entry) => {
-      patchProgress(entry.id, { status: 'uploading', percent: 0 });
-      try {
-        await uploadPhoto(
-          started.uploadToken,
-          {
-            id: entry.id,
-            file: entry.file,
-            copies: entry.copies,
-            destinationId: destinations.get(entry.serviceId)!,
-            previousUploadId: attempts.current.get(entry.id),
-          },
-          (percent) =>
-            patchProgress(entry.id, { status: 'uploading', percent }),
-          {
-            onAttempt: (uploadId) => attempts.current.set(entry.id, uploadId),
-          },
-        );
-        patchProgress(entry.id, { status: 'done', percent: 100 });
-      } catch (error) {
-        patchProgress(entry.id, {
-          status: 'failed',
-          percent: 0,
-          error: messageFor(error),
-        });
-        throw error;
-      }
+  const sendPhotos = (targets: PhotoEntry[]) =>
+    sendEntries({
+      started: session.current!.started,
+      entries: targets,
+      attempts: attempts.current,
+      concurrency: 2,
+      onProgress: patchProgress,
     });
-    return failures.length;
-  }
 
   async function finish(sent: PhotoEntry[], acceptPartial = false) {
     const started = session.current!.started;
-    // What the browser believes it sent to each size: the server compares it with what arrived.
-    const expectedFiles: Record<string, number> = {};
-    for (const destination of started.destinations)
-      expectedFiles[destination.destinationId] = sent.filter(
-        (x) => x.serviceId === destination.serviceId,
-      ).length;
-    // The photos that make up the order, in the order shown: the server numbers the Drive files
-    // from it and retires anything else it still holds for this draft.
-    const uploadIds = orderedUploadIds(selected, sent, attempts.current);
-    const done = await submitOrder(started.uploadToken, {
-      expectedFiles,
-      ...(uploadIds ? { uploadIds } : {}),
-      ...(acceptPartial ? { acceptPartial: true } : {}),
-    });
+    // What the browser believes it sent to each size, the photos that make up the order in the
+    // order shown and whether the customer chose to drop the ones that failed.
+    const done = await submitOrder(
+      started.uploadToken,
+      buildSubmitOptions({
+        started,
+        selected,
+        sent,
+        attempts: attempts.current,
+        acceptPartial,
+      }),
+    );
     rememberOrder({
       orderCode: done.orderCode,
       trackingToken: done.trackingToken,
@@ -272,8 +218,7 @@ export function PrintOrderPortal() {
     try {
       await finish(sent);
     } catch (error) {
-      const code = error instanceof PublicOrderError ? error.code : null;
-      if (code !== 'order_incomplete') throw error;
+      if (!isIncompleteOrder(error)) throw error;
       if (await sendPhotos(sent)) {
         setPhase('partial');
         return;
@@ -442,55 +387,7 @@ export function PrintOrderPortal() {
               <b className="num">{formatMoney(result.totalCents)}</b>
             </p>
           </section>
-          <section className="xfer on-dark" aria-labelledby="h-xfer">
-            <div className="xfer-in">
-              <div>
-                <h2 id="h-xfer" className="lbl">
-                  Total a transferir
-                </h2>
-                <div className="amount num">
-                  {formatMoney(result.totalCents)}
-                </div>
-              </div>
-              <div>
-                <div className="lbl po-xfer-label">Transferí a este alias</div>
-                <div className="alias-row">
-                  <span className="alias" translate="no">
-                    {BANK_ALIAS}
-                  </span>
-                  <Button
-                    variant="primary"
-                    icon={copied === 'alias' ? 'check' : 'copy'}
-                    onClick={() => void copy(BANK_ALIAS, 'alias')}
-                  >
-                    {copied === 'alias' ? 'Copiado' : 'Copiar alias'}
-                  </Button>
-                </div>
-              </div>
-              <ol className="xfer-steps">
-                <li>
-                  <b>1</b>
-                  <span>
-                    Transferí <strong>{formatMoney(result.totalCents)}</strong>{' '}
-                    al alias de arriba.{' '}
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm on-dark po-copy-amount"
-                      onClick={() =>
-                        void copy(String(result.totalCents / 100), 'amount')
-                      }
-                    >
-                      {copied === 'amount' ? 'Monto copiado ✓' : 'Copiar monto'}
-                    </button>
-                  </span>
-                </li>
-                <li>
-                  <b>2</b>
-                  <span>Cuando se acredite, empezamos a imprimir.</span>
-                </li>
-              </ol>
-            </div>
-          </section>
+          <TransferPanel totalCents={result.totalCents} />
           <div className="callout" role="note">
             <Icon name="printer" />
             <div>
@@ -861,129 +758,6 @@ export function PrintOrderPortal() {
 }
 
 /* ───────────────────────────── pieces ───────────────────────────── */
-
-/** Price note of a catalog entry: where its first tier starts, when it is not at one copy. */
-const priceNote = (service: CatalogService) =>
-  service.tiers?.[0] && service.tiers[0].minQuantity > 1
-    ? ` desde ${service.tiers[0].minQuantity} copias`
-    : '';
-
-/**
- * Size → paper, one question at a time. Only what the catalog offers is shown; a size on a paper
- * already in the order is disabled, so the order never gets two identical blocks.
- */
-function ServicePicker({
-  sizes,
-  selected,
-  ownId,
-  onPick,
-  onCancel,
-}: {
-  sizes: SizeOption[];
-  selected: string[];
-  ownId?: string;
-  onPick: (serviceId: string) => void;
-  onCancel: (() => void) | null;
-}) {
-  const [sizeKey, setSizeKey] = useState<string | null>(null);
-  const size = sizes.find((x) => x.key === sizeKey) ?? null;
-
-  if (size)
-    return (
-      <div className="pick" role="group" aria-label={`Papel para ${size.name}`}>
-        <div className="pick-head">
-          <button
-            type="button"
-            className="pick-back"
-            onClick={() => setSizeKey(null)}
-          >
-            <Icon name="chevL" /> Cambiar tamaño
-          </button>
-          <h3>¿Qué papel preferís?</h3>
-          <p className="pick-chosen">{prettySize(size.name)}</p>
-        </div>
-        <div className="pick-grid pick-grid--papers">
-          {size.papers.map((paper) => {
-            const taken =
-              paper.service.id !== ownId && selected.includes(paper.service.id);
-            return (
-              <button
-                key={paper.service.id}
-                type="button"
-                className="pick-btn"
-                disabled={taken}
-                aria-pressed={paper.service.id === ownId}
-                onClick={() => onPick(paper.service.id)}
-              >
-                <strong>{paper.label}</strong>
-                <b className="num">
-                  {formatMoney(paper.service.unitPriceCents)}
-                </b>
-                <small>
-                  {taken
-                    ? 'Ya está en tu pedido'
-                    : `c/u${priceNote(paper.service)}`}
-                </small>
-              </button>
-            );
-          })}
-        </div>
-        {onCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            Cancelar
-          </Button>
-        )}
-      </div>
-    );
-
-  return (
-    <div className="pick" role="group" aria-label="Tamaño">
-      <div className="pick-head">
-        <h3>¿Qué tamaño querés imprimir?</h3>
-      </div>
-      <div className="pick-grid">
-        {sizes.map((option) => {
-          const free = freePapers(option, selected, ownId);
-          const cheapest = Math.min(
-            ...option.papers.map((x) => x.service.unitPriceCents),
-          );
-          const dims = dimensions(option);
-          return (
-            <button
-              key={option.key}
-              type="button"
-              className="pick-btn"
-              disabled={!free.length}
-              onClick={() =>
-                option.papers.length === 1
-                  ? onPick(option.papers[0]!.service.id)
-                  : setSizeKey(option.key)
-              }
-            >
-              <strong>{prettySize(option.name)}</strong>
-              {dims && <small>{dims}</small>}
-              <span className="pick-price">
-                {free.length ? (
-                  <>
-                    {option.papers.length > 1 && 'desde '}
-                    <b className="num">{formatMoney(cheapest)}</b> c/u
-                  </>
-                ) : (
-                  'Ya está en tu pedido'
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {onCancel && (
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancelar
-        </Button>
-      )}
-    </div>
-  );
-}
 
 function PhotoGroup({
   line,

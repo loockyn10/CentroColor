@@ -3,6 +3,7 @@ import { DatabaseError } from './diagnostics.ts';
 import {
   OrderRuleError,
   type ConfirmedOrder,
+  type ProfessionalContext,
   type PublicOrderRow,
   type PublicOrderStore,
   type PublicServiceRow,
@@ -30,7 +31,11 @@ const toService = (x: any): PublicServiceRow => ({
 });
 
 /** Runs a SQL function; `cc_error:<code>` exceptions are business rules, the rest are database faults. */
-async function rpc(db: ServiceDb, name: string, args: Record<string, unknown>) {
+export async function rpc(
+  db: ServiceDb,
+  name: string,
+  args: Record<string, unknown>,
+) {
   const { data, error } = (await db.rpc(name, args)) as {
     data: any;
     error: { message?: string } | null;
@@ -43,15 +48,16 @@ async function rpc(db: ServiceDb, name: string, args: Record<string, unknown>) {
   return data;
 }
 
+const withTiers = (data: unknown) =>
+  ((data ?? []) as any[])
+    .filter((x) => Array.isArray(x.tiers) && x.tiers.length > 0)
+    .map(toService);
+
 export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
-  const listCatalog = async (businessId: string) => {
-    const data = await rpc(db, 'cc_public_lab_catalog', {
-      p_business_id: businessId,
-    });
-    return ((data ?? []) as any[])
-      .filter((x) => Array.isArray(x.tiers) && x.tiers.length > 0)
-      .map(toService);
-  };
+  const listCatalog = async (businessId: string) =>
+    withTiers(
+      await rpc(db, 'cc_public_lab_catalog', { p_business_id: businessId }),
+    );
   return {
     async resolveBusiness(slug) {
       const { data } = await run(
@@ -118,7 +124,9 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
         'public_photo_orders.get_by_job',
         db
           .from('public_photo_orders')
-          .select('id,business_id,photo_job_id,status,submitted_at,created_at')
+          .select(
+            'id,business_id,photo_job_id,status,submitted_at,created_at,professional_account_id,payment_terms',
+          )
           .eq('business_id', businessId)
           .eq('photo_job_id', jobId)
           .maybeSingle(),
@@ -155,6 +163,44 @@ export function createPublicOrderStore(db: ServiceDb): PublicOrderStore {
           total_cents: Number(x.total_cents),
         })),
       } satisfies TrackingRow;
+    },
+    async getProfessionalContext(userId) {
+      const data = await rpc(db, 'cc_professional_context', {
+        p_user_id: userId,
+      });
+      return (data as ProfessionalContext | null) ?? null;
+    },
+    async listProfessionalServices(businessId, priceListId) {
+      return withTiers(
+        await rpc(db, 'cc_professional_lab_catalog', {
+          p_business_id: businessId,
+          p_price_list_id: priceListId,
+        }),
+      );
+    },
+    async countProfessionalOrdersSince(accountId, sinceIso) {
+      const { count } = await run(
+        'public_photo_orders.count_professional',
+        db
+          .from('public_photo_orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('professional_account_id', accountId)
+          .gte('created_at', sinceIso),
+      );
+      return count ?? 0;
+    },
+    async startProfessionalOrder(args) {
+      const data = await rpc(db, 'cc_professional_order_start', {
+        p_account_id: args.account_id,
+        p_client_key: args.client_key,
+        p_whatsapp_e164: args.whatsapp_e164,
+        p_notes: args.notes,
+        p_ip_hash: args.ip_hash,
+        p_items: args.items,
+        p_token_hash: args.token_hash,
+        p_link_expires_at: args.link_expires_at,
+      });
+      return data as StartedOrder & { payment_terms?: 'prepaid' | 'deferred' };
     },
   };
 }

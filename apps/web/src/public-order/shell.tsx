@@ -29,12 +29,20 @@ export function PublicShell({
   businessName,
   hero,
   orderLink = true,
+  homeHref = '/imprimir',
+  subtitle = 'Laboratorio fotográfico',
+  actions,
 }: {
   children: ReactNode;
   businessName?: string;
   hero?: ReactNode;
   /** «Mi pedido» (sólo si este navegador ya hizo un pedido). Se oculta en el link de subida. */
   orderLink?: boolean;
+  /** Where the brand leads: `/imprimir`, or `/profesionales` for the professional portal. */
+  homeHref?: string;
+  subtitle?: string;
+  /** Extra header actions (e.g. «Salir» in the professional portal). */
+  actions?: ReactNode;
 }) {
   const name = businessName || 'CentroColor';
   const last =
@@ -48,21 +56,27 @@ export function PublicShell({
         <header className="pt-head">
           <a
             className="pt-brand"
-            href="/imprimir"
+            href={homeHref}
             aria-label={`${name}, inicio`}
           >
             <Logo size={60} decorative />
             <span>
               <strong>{name}</strong>
-              <small>Laboratorio fotográfico</small>
+              <small>{subtitle}</small>
             </span>
           </a>
-          {last && (
+          {(last || actions) && (
             <nav className="pt-nav" aria-label="Accesos">
-              <a className="btn btn--sm" href={`/pedido/${last.trackingToken}`}>
-                <Icon name="receipt" />
-                <span>Mi pedido</span>
-              </a>
+              {last && (
+                <a
+                  className="btn btn--sm"
+                  href={`/pedido/${last.trackingToken}`}
+                >
+                  <Icon name="receipt" />
+                  <span>Mi pedido</span>
+                </a>
+              )}
+              {actions}
             </nav>
           )}
         </header>

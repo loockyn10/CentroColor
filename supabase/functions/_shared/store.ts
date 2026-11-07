@@ -40,6 +40,8 @@ export type JobItemRow = {
 
 export type JobContextRow = JobRow & {
   source_channel: 'manual' | 'public_web' | 'future_gmail';
+  /** A web order placed from a professional account (larger limits than the public portal). */
+  is_professional?: boolean;
   /** Public self-service order not confirmed yet: invisible to every client role. */
   is_draft: boolean;
   created_at: string;

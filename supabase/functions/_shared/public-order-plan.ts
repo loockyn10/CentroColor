@@ -41,6 +41,38 @@ export const LIMITS = {
   notesMax: 500,
 } as const;
 
+/** What one order may hold. Professionals send whole Lightroom exports, so theirs are larger. */
+export type OrderLimits = {
+  maxServices: number;
+  maxQuantityPerService: number;
+  /** Uploads listed in one confirmation. */
+  maxUploads: number;
+  /** Photos announced for one destination in `expectedFiles`. */
+  maxFilesPerDestination: number;
+};
+export const PUBLIC_ORDER_LIMITS: OrderLimits = {
+  maxServices: LIMITS.maxServices,
+  maxQuantityPerService: LIMITS.maxQuantityPerService,
+  maxUploads: 500,
+  maxFilesPerDestination: 1000,
+};
+export const PROFESSIONAL_ORDER_LIMITS: OrderLimits = {
+  maxServices: 30,
+  maxQuantityPerService: 50_000,
+  maxUploads: 1000,
+  maxFilesPerDestination: 1000,
+};
+
+/** Request body of professional-order-start: who is ordering comes from the verified JWT. */
+export type ProfessionalOrderStartPayload = {
+  clientKey: string;
+  /** WhatsApp number for the "ready" notice; the portal pre-fills the customer's own. */
+  phone: string;
+  notes?: string;
+  items: { serviceId: string; quantity: number; variantId: string }[];
+  expectedTotalCents?: number;
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CLIENT_KEY = /^[A-Za-z0-9_-]{16,64}$/;
 // Same shape the customers table accepts.
@@ -109,38 +141,7 @@ export function parseStartPayload(
   });
   if (typeof input.whatsappOptIn !== 'boolean')
     throw invalid('La solicitud no es válida.');
-  if (
-    !Array.isArray(input.items) ||
-    input.items.length === 0 ||
-    input.items.length > LIMITS.maxServices
-  )
-    throw invalid('Elegí al menos un tamaño.', 'invalid_items');
-  const seen = new Set<string>();
-  const items = input.items.map((item) => {
-    if (
-      typeof item !== 'object' ||
-      item === null ||
-      typeof item.serviceId !== 'string' ||
-      !UUID.test(item.serviceId) ||
-      !Number.isInteger(item.quantity) ||
-      item.quantity < 1 ||
-      item.quantity > LIMITS.maxQuantityPerService
-    )
-      throw invalid('Revisá las cantidades.', 'invalid_items');
-    if (
-      item.variantId !== undefined &&
-      (typeof item.variantId !== 'string' || !UUID.test(item.variantId))
-    )
-      throw invalid('Revisá el tipo de papel.', 'invalid_items');
-    const id = item.serviceId.toLowerCase();
-    if (seen.has(id)) throw invalid('Revisá las cantidades.', 'invalid_items');
-    seen.add(id);
-    return {
-      serviceId: id,
-      quantity: item.quantity,
-      variantId: item.variantId?.toLowerCase(),
-    };
-  });
+  const items = parseItems(input.items, PUBLIC_ORDER_LIMITS, false);
   if (
     input.expectedTotalCents !== undefined &&
     (!Number.isSafeInteger(input.expectedTotalCents) ||
@@ -154,6 +155,83 @@ export function parseStartPayload(
     email,
     notes,
     whatsappOptIn: input.whatsappOptIn,
+    items,
+    expectedTotalCents: input.expectedTotalCents ?? null,
+  };
+}
+
+function parseItems(
+  raw: unknown,
+  limits: OrderLimits,
+  requireVariant: boolean,
+): { serviceId: string; quantity: number; variantId?: string }[] {
+  if (
+    !Array.isArray(raw) ||
+    raw.length === 0 ||
+    raw.length > limits.maxServices
+  )
+    throw invalid('Elegí al menos un tamaño.', 'invalid_items');
+  const seen = new Set<string>();
+  return raw.map((item) => {
+    if (
+      typeof item !== 'object' ||
+      item === null ||
+      typeof item.serviceId !== 'string' ||
+      !UUID.test(item.serviceId) ||
+      !Number.isInteger(item.quantity) ||
+      item.quantity < 1 ||
+      item.quantity > limits.maxQuantityPerService
+    )
+      throw invalid('Revisá las cantidades.', 'invalid_items');
+    if (
+      (requireVariant || item.variantId !== undefined) &&
+      (typeof item.variantId !== 'string' || !UUID.test(item.variantId))
+    )
+      throw invalid('Revisá el tipo de papel.', 'invalid_items');
+    const id = item.serviceId.toLowerCase();
+    if (seen.has(id)) throw invalid('Revisá las cantidades.', 'invalid_items');
+    seen.add(id);
+    return {
+      serviceId: id,
+      quantity: item.quantity as number,
+      variantId: (item.variantId as string | undefined)?.toLowerCase(),
+    };
+  });
+}
+
+export type ParsedProfessionalStart = {
+  clientKey: string;
+  phone: string;
+  notes: string | null;
+  items: { serviceId: string; quantity: number; variantId: string }[];
+  expectedTotalCents: number | null;
+};
+
+export function parseProfessionalStartPayload(
+  input: Partial<ProfessionalOrderStartPayload>,
+): ParsedProfessionalStart {
+  if (typeof input.clientKey !== 'string' || !CLIENT_KEY.test(input.clientKey))
+    throw invalid('La solicitud no es válida.');
+  if (typeof input.phone !== 'string')
+    throw invalid('Completá tu número de WhatsApp.', 'invalid_phone');
+  const notes = cleanText(input.notes, 'La nota', LIMITS.notesMax, {
+    required: false,
+  });
+  const items = parseItems(input.items, PROFESSIONAL_ORDER_LIMITS, true) as {
+    serviceId: string;
+    quantity: number;
+    variantId: string;
+  }[];
+  if (
+    input.expectedTotalCents !== undefined &&
+    (!Number.isSafeInteger(input.expectedTotalCents) ||
+      input.expectedTotalCents < 0)
+  )
+    throw invalid('La solicitud no es válida.');
+  return {
+    clientKey: input.clientKey,
+    phone: input.phone,
+    notes,
     items,
     expectedTotalCents: input.expectedTotalCents ?? null,
   };
@@ -268,6 +346,20 @@ export function orderRuleToApiError(code: string) {
         429,
         'rate_limited',
       );
+    case 'account_inactive':
+      return new ApiError(
+        'Tu cuenta profesional no está activa. Escribinos para revisarla.',
+        403,
+        'account_inactive',
+      );
+    case 'no_professional_list':
+      return new ApiError(
+        'Tu cuenta todavía no tiene una lista de precios asignada. Escribinos para configurarla.',
+        403,
+        'no_professional_list',
+      );
+    case 'invalid_quantity':
+      return invalid('Revisá las cantidades.', 'invalid_items');
     case 'no_branch':
     case 'no_owner':
       return new ApiError(
@@ -286,10 +378,9 @@ export type ParsedSubmit = {
   uploadIds: string[] | null;
 };
 
-const MAX_UPLOAD_IDS = 500;
-
 export function parseSubmitPayload(
   input: Partial<PublicOrderSubmitPayload>,
+  limits: OrderLimits = PUBLIC_ORDER_LIMITS,
 ): ParsedSubmit {
   const acceptPartial = input.acceptPartial;
   if (acceptPartial !== undefined && typeof acceptPartial !== 'boolean')
@@ -298,7 +389,7 @@ export function parseSubmitPayload(
   if (input.uploadIds !== undefined && input.uploadIds !== null) {
     if (
       !Array.isArray(input.uploadIds) ||
-      input.uploadIds.length > MAX_UPLOAD_IDS ||
+      input.uploadIds.length > limits.maxUploads ||
       input.uploadIds.some((id) => typeof id !== 'string' || !UUID.test(id))
     )
       throw invalid('La solicitud no es válida.');
@@ -314,12 +405,16 @@ export function parseSubmitPayload(
   if (
     typeof expected !== 'object' ||
     Array.isArray(expected) ||
-    Object.keys(expected).length > LIMITS.maxServices * 2
+    Object.keys(expected).length > limits.maxServices * 2
   )
     throw invalid('La solicitud no es válida.');
   const clean: Record<string, number> = {};
   for (const [key, count] of Object.entries(expected)) {
-    if (!Number.isInteger(count) || count < 0 || count > 1000)
+    if (
+      !Number.isInteger(count) ||
+      count < 0 ||
+      count > limits.maxFilesPerDestination
+    )
       throw invalid('La solicitud no es válida.');
     clean[key] = count;
   }

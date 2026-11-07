@@ -174,7 +174,7 @@ export function OrderTracking({ token }: { token: string }) {
           </p>
         </section>
 
-        {order.status === 'received' && (
+        {order.status === 'received' && order.paymentTerms !== 'deferred' && (
           <div className="callout" role="note">
             <Icon name="wallet" />
             <div>

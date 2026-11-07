@@ -14,13 +14,19 @@ import {
   orderRuleToApiError,
   parseStartPayload,
   parseSubmitPayload,
+  type ParsedSubmit,
   planFinalNames,
   priceOrder,
   type PublicOrderStartPayload,
   type PublicOrderSubmitPayload,
   type PublicOrderTokenPayload,
 } from './public-order-plan.ts';
-import { OrderRuleError, type PublicOrderStore } from './public-order-store.ts';
+import {
+  OrderRuleError,
+  type PublicOrderRow,
+  type PublicOrderStore,
+  type PublicServiceRow,
+} from './public-order-store.ts';
 import type { FileRow, PhotoIntakeStore } from './store.ts';
 import {
   destinationId,
@@ -45,11 +51,15 @@ export const RATE_LIMITS = {
   perHourGlobal: 300,
   perHourPerClient: 20,
   perHourPerPhone: 8,
+  /** Professionals place few, large orders; this only stops a runaway client. */
+  perHourPerAccount: 60,
 } as const;
-const HOUR_MS = 3_600_000;
-const UNAVAILABLE = 'Los pedidos online no están disponibles por el momento.';
+export const HOUR_MS = 3_600_000;
+export const UNAVAILABLE =
+  'Los pedidos online no están disponibles por el momento.';
 
-const orderCode = (jobId: string) => `CC-${jobId.slice(0, 8).toUpperCase()}`;
+export const orderCode = (jobId: string) =>
+  `CC-${jobId.slice(0, 8).toUpperCase()}`;
 
 async function openBusiness(deps: PublicOrderDeps) {
   const settings = publicOrderSettings(deps.getEnv);
@@ -59,13 +69,13 @@ async function openBusiness(deps: PublicOrderDeps) {
   return { business, settings, available: drive?.status === 'connected' };
 }
 
-function clientAddress(request: Request) {
+export function clientAddress(request: Request) {
   const direct = request.headers.get('cf-connecting-ip')?.trim();
   if (direct) return direct;
   return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
 }
 
-async function guardRule<T>(work: () => Promise<T>) {
+export async function guardRule<T>(work: () => Promise<T>) {
   try {
     return await work();
   } catch (cause) {
@@ -162,6 +172,32 @@ async function nameFilesForPrinting(
   return plan;
 }
 
+/** One catalog row as the browser receives it (shared by the public and professional lists). */
+export const catalogServiceBody = (x: PublicServiceRow) => ({
+  id: x.id,
+  name: x.name,
+  // Size and paper arrive separately so the page can offer them one after the other. The
+  // paper label is the one the SQL appends to `name` (the size is what precedes it).
+  ...(x.photo_service_id && x.paper
+    ? {
+        photoServiceId: x.photo_service_id,
+        paper: x.paper,
+        paperLabel: x.paper === 'matte' ? 'Mate' : 'Brillo',
+        sizeName: x.name.replace(/ · (Mate|Brillo)$/, ''),
+      }
+    : {}),
+  description: x.description,
+  widthMm: x.width_mm,
+  heightMm: x.height_mm,
+  unitPriceCents: x.unit_price_cents,
+  variantId: x.variant_id,
+  tiers: x.tiers?.map((tier) => ({
+    minQuantity: tier.min_quantity,
+    maxQuantity: tier.max_quantity,
+    unitPriceCents: tier.unit_price_cents,
+  })),
+});
+
 /** The price list. Anonymous and read-only; it comes from the administrative catalog. */
 export function handlePublicCatalog(request: Request, deps: PublicOrderDeps) {
   return run(request, deps, 'public_photo_catalog', async () => {
@@ -172,30 +208,7 @@ export function handlePublicCatalog(request: Request, deps: PublicOrderDeps) {
     return json({
       businessName: business.name,
       available,
-      services: services.map((x) => ({
-        id: x.id,
-        name: x.name,
-        // Size and paper arrive separately so the page can offer them one after the other. The
-        // paper label is the one the SQL appends to `name` (the size is what precedes it).
-        ...(x.photo_service_id && x.paper
-          ? {
-              photoServiceId: x.photo_service_id,
-              paper: x.paper,
-              paperLabel: x.paper === 'matte' ? 'Mate' : 'Brillo',
-              sizeName: x.name.replace(/ · (Mate|Brillo)$/, ''),
-            }
-          : {}),
-        description: x.description,
-        widthMm: x.width_mm,
-        heightMm: x.height_mm,
-        unitPriceCents: x.unit_price_cents,
-        variantId: x.variant_id,
-        tiers: x.tiers?.map((tier) => ({
-          minQuantity: tier.min_quantity,
-          maxQuantity: tier.max_quantity,
-          unitPriceCents: tier.unit_price_cents,
-        })),
-      })),
+      services: services.map(catalogServiceBody),
     });
   });
 }
@@ -334,6 +347,174 @@ export function handlePublicOrderStart(
   );
 }
 
+type LinkRow = Awaited<ReturnType<typeof validateUploadToken>>['link'];
+
+/**
+ * Everything that happens once the browser says its photos are in: the checks that nothing was
+ * lost, the final file names, PEDIDO.txt and the database confirmation. Shared by the public
+ * and the professional portals, which differ only in who may call it and how it is introduced.
+ */
+export async function confirmUploadedOrder(
+  deps: PublicOrderDeps,
+  args: {
+    link: LinkRow;
+    order: PublicOrderRow;
+    submit: ParsedSubmit;
+    now: number;
+    requestId: string;
+    logger: Logger;
+    /** First line of PEDIDO.txt. */
+    headline: string;
+  },
+) {
+  const { link, order, submit, now, requestId, logger } = args;
+  const { trackingDays } = publicOrderSettings(deps.getEnv);
+
+  if (order.status !== 'submitted') {
+    if (
+      (await deps.intake.countFiles(link.business_id, link.photo_job_id, [
+        'pending',
+        'uploading',
+      ])) > 0
+    )
+      throw orderRuleToApiError('uploads_pending');
+    let files = await deps.intake.listFiles(
+      link.business_id,
+      link.photo_job_id,
+      'uploaded',
+    );
+    // Photos the customer removed (or moved to another size) after sending them must not be
+    // printed nor billed: only what the browser lists is part of the order.
+    if (submit.uploadIds)
+      files = await retireStaleUploads(
+        deps,
+        link.business_id,
+        link.photo_job_id,
+        files,
+        submit.uploadIds,
+      );
+    if (!files.length) throw orderRuleToApiError('no_files');
+    // Never confirm an order as complete when a size lost photos: the database would
+    // otherwise drop the empty size and bill only what arrived.
+    if (!submit.acceptPartial) {
+      const context = await deps.intake.getJobContext(
+        link.business_id,
+        link.photo_job_id,
+      );
+      const { signingSecret } = intakeConfig(deps.getEnv);
+      const items = (context?.items ?? []).filter((x) => x.is_active);
+      const uploaded = new Map<string, number>();
+      for (const file of files)
+        if (file.photo_job_item_id)
+          uploaded.set(
+            file.photo_job_item_id,
+            (uploaded.get(file.photo_job_item_id) ?? 0) + 1,
+          );
+      let expected: Map<string, number> | null = null;
+      if (submit.expectedFiles) {
+        expected = new Map();
+        for (const item of items)
+          expected.set(
+            item.id,
+            submit.expectedFiles[
+              await destinationId(signingSecret, link.id, item.id)
+            ] ?? 0,
+          );
+      }
+      const gaps = findOrderGaps(
+        items.map((x) => ({ id: x.id, name: x.service_name_snapshot })),
+        uploaded,
+        expected,
+      );
+      if (gaps.length) {
+        logger('warn', 'public_photo_order_incomplete', {
+          requestId,
+          photoJobId: link.photo_job_id,
+          gaps: gaps.length,
+        });
+        throw incompleteOrderError(gaps);
+      }
+    }
+    // PEDIDO.txt first (Drive), database last: a failure in between is retried safely.
+    const folders = await deps.drive.ensureFolders(
+      link.business_id,
+      link.photo_job_id,
+    );
+    const copies = new Map<string, number>();
+    for (const file of files)
+      if (file.photo_job_item_id)
+        copies.set(
+          file.photo_job_item_id,
+          (copies.get(file.photo_job_item_id) ?? 0) + file.copies,
+        );
+    const reconciled = {
+      ...folders.job,
+      items: folders.job.items.map((item) => ({
+        ...item,
+        quantity: copies.get(item.id) ?? item.quantity,
+      })),
+    };
+    // The laboratory reads the quantity in the file name: it is set here, from the copies the
+    // order is priced with, never from anything the browser calls the file.
+    const finalNames = await nameFilesForPrinting(
+      deps,
+      folders.token,
+      files,
+      submit.uploadIds,
+    );
+    const { text } = buildManifest(
+      reconciled,
+      files.map((file) => ({
+        ...file,
+        final_name: finalNames.get(file.id),
+      })),
+    );
+    await deps.drive.putManifest(
+      folders.token,
+      folders.root,
+      folders.job.id,
+      `${args.headline}\r\n${text}`,
+    );
+  }
+
+  const trackingToken = randomToken(32);
+  const trackingHash = await sha256(trackingToken);
+  const confirmed = await guardRule(() =>
+    deps.orders.confirmOrder({
+      business_id: link.business_id,
+      job_id: link.photo_job_id,
+      upload_link_id: link.id,
+      tracking_token_hash: trackingHash,
+      tracking_expires_at: new Date(
+        now + trackingDays * 86_400_000,
+      ).toISOString(),
+    }),
+  );
+  logger('info', 'public_photo_order_submitted', {
+    requestId,
+    photoJobId: link.photo_job_id,
+    alreadySubmitted: confirmed.already_submitted,
+    totalCents: confirmed.total_cents,
+  });
+  return { confirmed, trackingToken };
+}
+
+export const submittedOrderBody = (
+  link: LinkRow,
+  done: Awaited<ReturnType<typeof confirmUploadedOrder>>,
+) => ({
+  orderCode: orderCode(link.photo_job_id),
+  status: 'received' as const,
+  alreadySubmitted: done.confirmed.already_submitted,
+  items: done.confirmed.items.map((x) => ({
+    name: x.name,
+    quantity: x.quantity,
+    totalCents: x.total_cents,
+  })),
+  totalCents: done.confirmed.total_cents,
+  trackingToken: done.trackingToken,
+});
+
 /**
  * Confirms the order after every file is in Drive. Idempotent: confirming twice returns the
  * same order and a fresh read-only tracking token; it never duplicates a job or an item.
@@ -360,146 +541,19 @@ export function handlePublicOrderSubmit(
         link.photo_job_id,
       );
       if (!order) throw new ApiError('Link inválido.', 404, 'link_invalid');
-      const { trackingDays } = publicOrderSettings(deps.getEnv);
-
-      if (order.status !== 'submitted') {
-        if (
-          (await deps.intake.countFiles(link.business_id, link.photo_job_id, [
-            'pending',
-            'uploading',
-          ])) > 0
-        )
-          throw orderRuleToApiError('uploads_pending');
-        let files = await deps.intake.listFiles(
-          link.business_id,
-          link.photo_job_id,
-          'uploaded',
-        );
-        // Photos the customer removed (or moved to another size) after sending them must not be
-        // printed nor billed: only what the browser lists is part of the order.
-        if (submit.uploadIds)
-          files = await retireStaleUploads(
-            deps,
-            link.business_id,
-            link.photo_job_id,
-            files,
-            submit.uploadIds,
-          );
-        if (!files.length) throw orderRuleToApiError('no_files');
-        // Never confirm an order as complete when a size lost photos: the database would
-        // otherwise drop the empty size and bill only what arrived.
-        if (!submit.acceptPartial) {
-          const context = await deps.intake.getJobContext(
-            link.business_id,
-            link.photo_job_id,
-          );
-          const { signingSecret } = intakeConfig(deps.getEnv);
-          const items = (context?.items ?? []).filter((x) => x.is_active);
-          const uploaded = new Map<string, number>();
-          for (const file of files)
-            if (file.photo_job_item_id)
-              uploaded.set(
-                file.photo_job_item_id,
-                (uploaded.get(file.photo_job_item_id) ?? 0) + 1,
-              );
-          let expected: Map<string, number> | null = null;
-          if (submit.expectedFiles) {
-            expected = new Map();
-            for (const item of items)
-              expected.set(
-                item.id,
-                submit.expectedFiles[
-                  await destinationId(signingSecret, link.id, item.id)
-                ] ?? 0,
-              );
-          }
-          const gaps = findOrderGaps(
-            items.map((x) => ({ id: x.id, name: x.service_name_snapshot })),
-            uploaded,
-            expected,
-          );
-          if (gaps.length) {
-            logger('warn', 'public_photo_order_incomplete', {
-              requestId,
-              photoJobId: link.photo_job_id,
-              gaps: gaps.length,
-            });
-            throw incompleteOrderError(gaps);
-          }
-        }
-        // PEDIDO.txt first (Drive), database last: a failure in between is retried safely.
-        const folders = await deps.drive.ensureFolders(
-          link.business_id,
-          link.photo_job_id,
-        );
-        const copies = new Map<string, number>();
-        for (const file of files)
-          if (file.photo_job_item_id)
-            copies.set(
-              file.photo_job_item_id,
-              (copies.get(file.photo_job_item_id) ?? 0) + file.copies,
-            );
-        const reconciled = {
-          ...folders.job,
-          items: folders.job.items.map((item) => ({
-            ...item,
-            quantity: copies.get(item.id) ?? item.quantity,
-          })),
-        };
-        // The laboratory reads the quantity in the file name: it is set here, from the copies the
-        // order is priced with, never from anything the browser calls the file.
-        const finalNames = await nameFilesForPrinting(
-          deps,
-          folders.token,
-          files,
-          submit.uploadIds,
-        );
-        const { text } = buildManifest(
-          reconciled,
-          files.map((file) => ({
-            ...file,
-            final_name: finalNames.get(file.id),
-          })),
-        );
-        await deps.drive.putManifest(
-          folders.token,
-          folders.root,
-          folders.job.id,
-          `Pedido web (autoservicio)\r\n${text}`,
-        );
-      }
-
-      const trackingToken = randomToken(32);
-      const trackingHash = await sha256(trackingToken);
-      const confirmed = await guardRule(() =>
-        deps.orders.confirmOrder({
-          business_id: link.business_id,
-          job_id: link.photo_job_id,
-          upload_link_id: link.id,
-          tracking_token_hash: trackingHash,
-          tracking_expires_at: new Date(
-            now + trackingDays * 86_400_000,
-          ).toISOString(),
-        }),
-      );
-      logger('info', 'public_photo_order_submitted', {
+      // A professional order is confirmed by its own endpoint, which also checks the account.
+      if (order.professional_account_id)
+        throw new ApiError('Link inválido.', 404, 'link_invalid');
+      const done = await confirmUploadedOrder(deps, {
+        link,
+        order,
+        submit,
+        now,
         requestId,
-        photoJobId: link.photo_job_id,
-        alreadySubmitted: confirmed.already_submitted,
-        totalCents: confirmed.total_cents,
+        logger,
+        headline: 'Pedido web (autoservicio)',
       });
-      return json({
-        orderCode: orderCode(link.photo_job_id),
-        status: 'received',
-        alreadySubmitted: confirmed.already_submitted,
-        items: confirmed.items.map((x) => ({
-          name: x.name,
-          quantity: x.quantity,
-          totalCents: x.total_cents,
-        })),
-        totalCents: confirmed.total_cents,
-        trackingToken,
-      });
+      return json(submittedOrderBody(link, done));
     },
   );
 }
@@ -533,6 +587,8 @@ export function handlePublicOrderTrack(
       orderCode: orderCode(link.photo_job_id),
       createdAt: order.submitted_at ?? tracking.job_created_at,
       status: tracking.job_status,
+      // Only professional orders carry it: lets the page tell "pays later" from "transfer".
+      ...(order.payment_terms ? { paymentTerms: order.payment_terms } : {}),
       items: tracking.items.map((x) => ({
         name: x.name,
         quantity: x.quantity,

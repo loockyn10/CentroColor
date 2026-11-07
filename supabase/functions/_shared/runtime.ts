@@ -8,8 +8,13 @@ import { createPhotoIntakeStore } from './store-supabase.ts';
 import {
   authenticateAdmin,
   authenticateMember,
+  authenticateUser,
+  inviteUserByEmail,
   serviceClient,
 } from './supabase.ts';
+import { createProfessionalAdminStore } from './professional-admin-handler.ts';
+import type { ProfessionalAdminDeps } from './professional-admin-handler.ts';
+import type { ProfessionalDeps } from './professional-handlers.ts';
 import { createWhatsAppStore } from './whatsapp-store-supabase.ts';
 import type { AdminDeps } from './photo-file-admin-handler.ts';
 import type { PublicOrderDeps } from './public-order-handlers.ts';
@@ -47,6 +52,18 @@ export const publicOrderDeps = (): PublicOrderDeps => {
     getEnv,
   };
 };
+
+export const professionalDeps = (): ProfessionalDeps => ({
+  ...publicOrderDeps(),
+  authenticate: authenticateUser,
+});
+
+export const professionalAdminDeps = (): ProfessionalAdminDeps => ({
+  authenticate: authenticateAdmin,
+  store: () => createProfessionalAdminStore(serviceClient()),
+  inviteUser: inviteUserByEmail,
+  getEnv,
+});
 
 const whatsappServices = (): WhatsAppServices => ({
   store: createWhatsAppStore(serviceClient()),

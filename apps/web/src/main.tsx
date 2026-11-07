@@ -53,6 +53,8 @@ import { SupabaseWorkPaymentRepository } from './supabase-work-payment-repositor
 import { SupabaseTrashRepository } from './supabase-trash-repository';
 import { SupabasePhotoFileIntakeAdminRepository } from './photo-file-intake';
 import { DriveSettingsPage } from './drive-settings';
+import { SupabaseProfessionalAdminRepository } from './professional-admin';
+import { ProfessionalSettingsPage } from './professional-settings';
 import { publicRoute } from './public-routes';
 import { WhatsAppSettingsPage } from './whatsapp-settings';
 import {
@@ -148,6 +150,9 @@ function App() {
   );
   const [notificationRepository] = useState(
     () => new SupabasePhotoJobNotificationRepository(),
+  );
+  const [professionalRepository] = useState(
+    () => new SupabaseProfessionalAdminRepository(),
   );
 
   useEffect(() => {
@@ -449,6 +454,12 @@ function App() {
               <WhatsAppSettingsPage
                 context={context}
                 repository={whatsappRepository}
+              />
+              <ProfessionalSettingsPage
+                context={context}
+                repository={professionalRepository}
+                customerRepository={customerRepository}
+                serviceCatalogRepository={serviceCatalogRepository}
               />
             </div>
           </>

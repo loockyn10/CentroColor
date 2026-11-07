@@ -62,6 +62,34 @@ export type StartedOrder =
     }
   | { status: 'submitted'; order_id: string; job_id: string };
 
+/** The account behind a verified professional JWT and the price list the server authorizes. */
+export type ProfessionalContext = {
+  account_id: string;
+  business_id: string;
+  customer_id: string;
+  customer_name: string;
+  customer_phone: string | null;
+  allow_deferred_payment: boolean;
+  price_list_id: string | null;
+  price_list_name: string | null;
+  price_list_kind: 'public' | 'professional' | 'custom' | null;
+  /** False when the Customer has no list or only the public one: the portal must not price. */
+  price_list_usable: boolean;
+};
+
+export type PaymentTerms = 'prepaid' | 'deferred';
+
+export type StartProfessionalOrderArgs = {
+  account_id: string;
+  client_key: string;
+  whatsapp_e164: string;
+  notes: string | null;
+  ip_hash: string;
+  items: StartOrderArgs['items'];
+  token_hash: string;
+  link_expires_at: string;
+};
+
 export type ConfirmOrderArgs = {
   business_id: string;
   job_id: string;
@@ -84,6 +112,9 @@ export type PublicOrderRow = {
   status: 'draft' | 'submitted' | 'abandoned';
   submitted_at: string | null;
   created_at: string;
+  /** Set only on professional orders. */
+  professional_account_id?: string | null;
+  payment_terms?: PaymentTerms | null;
 };
 
 export type TrackingRow = {
@@ -121,4 +152,20 @@ export interface PublicOrderStore {
   ): Promise<PublicOrderRow | null>;
   getTracking(businessId: string, jobId: string): Promise<TrackingRow | null>;
   getBusinessName(businessId: string): Promise<string>;
+
+  /* ── professional portal ── */
+  /** The active account of a verified user, or null. Never throws for "not a professional". */
+  getProfessionalContext(userId: string): Promise<ProfessionalContext | null>;
+  /** Catalog with the tiers of the account's own list (never the public one). */
+  listProfessionalServices(
+    businessId: string,
+    priceListId: string,
+  ): Promise<PublicServiceRow[]>;
+  countProfessionalOrdersSince(
+    accountId: string,
+    sinceIso: string,
+  ): Promise<number>;
+  startProfessionalOrder(
+    args: StartProfessionalOrderArgs,
+  ): Promise<StartedOrder & { payment_terms?: PaymentTerms }>;
 }

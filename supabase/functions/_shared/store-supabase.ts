@@ -202,6 +202,19 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
         ),
       ]);
       const rows = (items.data ?? []) as any[];
+      let isProfessional = false;
+      if (job.source_channel === 'public_web') {
+        const { data: order } = await run(
+          'public_photo_orders.get_professional',
+          db
+            .from('public_photo_orders')
+            .select('professional_account_id')
+            .eq('business_id', businessId)
+            .eq('photo_job_id', jobId)
+            .maybeSingle(),
+        );
+        isProfessional = Boolean(order?.professional_account_id);
+      }
       const serviceIds = unique<string>(rows.map((x) => x.photo_service_id));
       const services = serviceIds.length
         ? ((
@@ -224,6 +237,7 @@ export function createPhotoIntakeStore(db: ServiceDb): PhotoIntakeStore {
         created_at: job.created_at,
         source_channel: job.source_channel,
         is_draft: job.is_draft,
+        is_professional: isProfessional,
         drive_folder_id: job.drive_folder_id ?? null,
         drive_edited_folder_id: job.drive_edited_folder_id ?? null,
         customer_name: String(customer.data?.full_name ?? ''),

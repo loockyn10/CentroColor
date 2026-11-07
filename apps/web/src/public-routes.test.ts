@@ -6,6 +6,7 @@ import { PrintOrderPortal } from './public-order/print-order-portal';
 import { OrderTracking } from './public-order/order-tracking';
 import { PrivacyPolicy } from './public-order/privacy';
 import { ReceivedRedirect } from './public-order/received-redirect';
+import { ProfessionalPortal } from './professional/portal';
 
 describe('rutas públicas: sin login y sin shell administrativo', () => {
   it('/imprimir, /imprimir/recibido, /pedido/:token y /enviar/:token se resuelven antes del acceso', () => {
@@ -15,6 +16,14 @@ describe('rutas públicas: sin login y sin shell administrativo', () => {
     expect(publicRoute('/pedido/abc123')?.type).toBe(OrderTracking);
     expect(publicRoute('/pedido/abc123')?.props.token).toBe('abc123');
     expect(publicRoute('/enviar/tok-1')?.type).toBe(PhotoUploadPortal);
+  });
+
+  it('/profesionales se resuelve antes del panel (tiene su propio acceso) y /imprimir no cambia', () => {
+    expect(publicRoute('/profesionales')?.type).toBe(ProfessionalPortal);
+    expect(publicRoute('/profesionales/')?.type).toBe(ProfessionalPortal);
+    expect(publicRoute('/profesionales/x')).toBeNull();
+    expect(publicRoute('/imprimir')?.type).toBe(PrintOrderPortal);
+    expect(publicRoute('/profesionales')?.type).not.toBe(PanelShell);
   });
 
   it('/privacidad es pública (la pide Google para el consentimiento OAuth)', () => {

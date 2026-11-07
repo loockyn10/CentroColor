@@ -73,6 +73,14 @@ export const PUBLIC_ORDER_EXTENSIONS = new Set([
 ]);
 export const PUBLIC_ORDER_MAX_FILE_BYTES = 100 * 1024 * 1024;
 export const PUBLIC_ORDER_MAX_FILES = 200;
+/**
+ * Professional accounts are authenticated and known customers who export whole shoots from
+ * Lightroom: larger files and up to a thousand photos per order, same formats.
+ */
+export const PROFESSIONAL_ORDER_MAX_FILE_BYTES = 300 * 1024 * 1024;
+export const PROFESSIONAL_ORDER_MAX_FILES = 1000;
+/** A fast line uploads small exports quicker than the public limit allows. */
+export const PROFESSIONAL_MAX_SESSIONS_PER_MINUTE = 600;
 /** Sequential uploads of many small photos are legitimate; this only stops runaway clients. */
 export const MAX_SESSIONS_PER_MINUTE = 120;
 export const MAX_COPIES = 9999;
