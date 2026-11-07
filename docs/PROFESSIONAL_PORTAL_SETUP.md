@@ -1,5 +1,7 @@
 # Portal profesional (`/profesionales`) — puesta en marcha
 
+> **Para publicar, usar la lista consolidada de `docs/DEPLOY_CHECKLIST.md`** (migraciones, todas las funciones de ambos sprints, Auth, variables, comandos y pruebas pendientes). Lo que sigue explica el portal; si difiere en las funciones a desplegar, manda el checklist (p. ej. `public-photo-order-track` es obligatoria, no recomendada).
+
 `/profesionales` es el mismo pedido de impresión que `/imprimir`, para fotógrafos y clientes con convenio: se ingresa con usuario, los precios son los de **su** lista (Profesional o un convenio), se pueden subir carpetas completas de una PC y el pago puede quedar pendiente **sólo si CentroColor lo autorizó**. No es otro sistema: comparte motor de precios, PhotoJob, subida a Drive, nombres de archivo con copias y Cobros con `/imprimir`.
 
 ## 1. Publicación (nada de esto se ejecutó desde el repo)
@@ -32,7 +34,7 @@ Funciones existentes que cambiaron:
 ```powershell
 # Obligatoria: límites del pedido profesional (1000 fotos, 300 MB, 600 sesiones/min).
 pnpm exec supabase functions deploy photo-upload-session --no-verify-jwt --use-api
-# Recomendadas: rechaza confirmar un pedido profesional sin su cuenta; el seguimiento deja de pedir transferencia a quien paga después.
+# Obligatorias para el portal profesional: rechaza confirmar un pedido profesional sin su cuenta; el seguimiento deja de pedir transferencia a quien paga después (la remota es v1 del 17/10).
 pnpm exec supabase functions deploy public-photo-order-submit --no-verify-jwt --use-api
 pnpm exec supabase functions deploy public-photo-order-track --no-verify-jwt --use-api
 ```

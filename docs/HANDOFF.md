@@ -1,5 +1,9 @@
 # Handoff
 
+## Auditoría final de despliegue (07/11/2026)
+
+Lista consolidada y verificada contra el remoto (sólo lectura) en `docs/DEPLOY_CHECKLIST.md`: **una migración pendiente** (`20261107000000`), 4 funciones nuevas, 3 obligatorias y 6 más para un build coherente, configuración de Auth, variables y pruebas reales. Ambos sprints están commiteados y subidos (`91c1936`); la Web puede estar publicada antes que las funciones. WhatsApp sigue sin desplegarse.
+
 ## Portal profesional `/profesionales` (07/11/2026)
 
 Detalle en `docs/CURRENT_STATE.md`; guía de publicación y de alta de profesionales en `docs/PROFESSIONAL_PORTAL_SETUP.md`; decisiones 107–110. **Nada aplicado ni desplegado**, sin commit ni push.
