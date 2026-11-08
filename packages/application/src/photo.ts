@@ -78,16 +78,20 @@ export interface QuotePriceListOption {
 /**
  * Quotes a job that arrived without an amount (`quoteStatus: 'pending_quote'`, e.g. a request from
  * /profesionales without an account). The amount is computed and stored by the Cloud, with the
- * caller's owner/admin authorization: the client only names the price list (and, if the request was
- * matched to the wrong person, the Customer). There is no way to pass a price.
+ * caller's owner/admin authorization: the client only names the price list and the Customer an
+ * administrator confirmed. There is no way to pass a price, and no default Customer: a request is
+ * never linked to an existing customer just because the phone matches.
  */
 export interface PhotoJobQuoteRepository {
   listPriceLists(businessId: string): Promise<QuotePriceListOption[]>;
+  /** Ids of existing customers with the phone typed in the request: a suggestion, never a link. */
+  listCustomerMatches(businessId: string, jobId: string): Promise<string[]>;
   quoteJob(input: {
     businessId: string;
     jobId: string;
     priceListId: string;
-    customerId: string | null;
+    /** The Customer confirmed by staff (the request's own unverified one is a valid choice). */
+    customerId: string;
   }): Promise<{ totalCents: number; priceListName: string }>;
 }
 

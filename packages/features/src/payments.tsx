@@ -178,6 +178,19 @@ export function PaymentAccountPanel({
         <p className="meta">{error ?? 'Cargando cuenta…'}</p>
       </Card>
     );
+  if (account.pendingQuote)
+    // The placeholder zero of a request without a quote is not a price: never "Pagado", never collectable.
+    return (
+      <Card className="work-account">
+        <div className="work-account-heading">
+          <h3>Cuenta</h3>
+          <StatusBadge tone="alert">Pendiente de presupuestar</StatusBadge>
+        </div>
+        <p className="meta">
+          Todavía no tiene un importe: presupuestalo para poder cobrarlo.
+        </p>
+      </Card>
+    );
   const cancelled = account.sourceStatus === 'cancelled';
   return (
     <Card className="work-account">

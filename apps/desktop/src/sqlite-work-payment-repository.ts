@@ -57,7 +57,7 @@ export class SQLiteWorkPaymentRepository implements WorkPaymentRepository {
         : sourceType === 'frame_job'
           ? `SELECT j.customer_id,j.status source_status,'Marquetería '||(q.width_mm/10.0)||'×'||(q.height_mm/10.0)||' cm' description,q.total_cents
            FROM frame_jobs j JOIN frame_quotes q ON q.business_id=j.business_id AND q.id=j.quote_id WHERE j.business_id=? AND j.id=?`
-          : `SELECT j.customer_id,j.status source_status,
+          : `SELECT j.customer_id,j.status source_status,j.quote_status,
             COALESCE((SELECT group_concat(service_name_snapshot,', ') FROM photo_job_items i WHERE i.business_id=j.business_id AND i.photo_job_id=j.id AND i.is_active=1),'Trabajo fotográfico') description,
             COALESCE((SELECT sum(total_cents) FROM photo_job_items i WHERE i.business_id=j.business_id AND i.photo_job_id=j.id AND i.is_active=1),0) total_cents
            FROM photo_jobs j WHERE j.business_id=? AND j.id=?`;
@@ -80,6 +80,10 @@ export class SQLiteWorkPaymentRepository implements WorkPaymentRepository {
       description: source.description,
       sourceStatus: source.source_status,
       payments,
+      // A job waiting for a quote has a placeholder zero, not a price.
+      ...(sourceType === 'photo_job' && source.quote_status === 'pending_quote'
+        ? { pendingQuote: true }
+        : {}),
       ...workAccountTotals(source.total_cents, counted),
       conflictPaymentIds: rows
         .filter((x) => x.outbox_status === 'conflict')
@@ -120,8 +124,11 @@ export class SQLiteWorkPaymentRepository implements WorkPaymentRepository {
         ids.map(([t, id]) => this.getAccount(businessId, t, id)),
       )
     ).filter(Boolean) as WorkAccount[];
+    // A request still waiting for a quote has no amount: it is neither a debt nor a settled source.
     const sources = all.filter(
-      (x) => x.balanceCents > 0 || x.sourceStatus === 'cancelled',
+      (x) =>
+        !x.pendingQuote &&
+        (x.balanceCents > 0 || x.sourceStatus === 'cancelled'),
     );
     const recentPayments = all
       .flatMap((x) => x.payments)
@@ -148,7 +155,7 @@ export class SQLiteWorkPaymentRepository implements WorkPaymentRepository {
         ids.map(([t, id]) => this.getAccount(businessId, t, id)),
       )
     ).filter(Boolean) as WorkAccount[];
-    return rows.filter((x) => x.balanceCents > 0);
+    return rows.filter((x) => !x.pendingQuote && x.balanceCents > 0);
   }
 
   async post(x: WorkPayment) {

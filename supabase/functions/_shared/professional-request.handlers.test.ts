@@ -149,18 +149,39 @@ const noMoney = (text: string) => {
     expect(text).not.toContain(word);
 };
 
-const quote = (
+/**
+ * Quotes as an administrator. The Customer is always explicit (the function has no default): when a
+ * test does not name one, it confirms the request's own (unverified) customer, which is what the
+ * panel's «Mantener como cliente nuevo» does. Pass `null` to send no customer at all.
+ */
+const quote = async (
   user: string,
   jobId: string,
   listId: string,
-  customerId: string | null = null,
-) =>
-  asRole(w.db, 'authenticated', user, () =>
+  customerId?: string | null,
+) => {
+  const chosen =
+    customerId === undefined
+      ? ((
+          await rows(`select customer_id from public.photo_jobs where id=$1`, [
+            jobId,
+          ])
+        )[0]?.customer_id ?? null)
+      : customerId;
+  return asRole(w.db, 'authenticated', user, () =>
     w.db.query<any>(`select public.quote_photo_job($1,$2,$3,$4) r`, [
       IDS.business,
       jobId,
       listId,
-      customerId,
+      chosen,
+    ]),
+  );
+};
+const matches = (user: string, jobId: string) =>
+  asRole(w.db, 'authenticated', user, () =>
+    w.db.query<any>(`select public.photo_job_customer_matches($1,$2) r`, [
+      IDS.business,
+      jobId,
     ]),
   );
 const jobOf = async () =>
@@ -168,12 +189,13 @@ const jobOf = async () =>
     .id as string;
 
 /** Sends one complete request (two sizes, mixed copies) and returns what the browser gets. */
-async function sendRequest() {
+async function sendRequest(overrides: Record<string, unknown> = {}) {
   const started = await start({
     items: [
       item(IDS.svc10x15, variants.glossy10, 9),
       item(variants.matte10, variants.matte10, 2),
     ],
+    ...overrides,
   });
   expect(started.status).toBe(200);
   const token = started.body.uploadToken as string;
@@ -310,7 +332,7 @@ describe('pedido anónimo: ningún importe en ninguna respuesta', () => {
     expect(
       items.every((x) => x.u === 0 && x.t === 0 && x.price_list_id === null),
     ).toBe(true);
-    // El cliente enviado por el navegador tampoco se usa: sólo el teléfono identifica (como /imprimir).
+    // El cliente enviado por el navegador tampoco se usa (y el teléfono no vincula a ningún cliente existente).
     const customers = await rows(`select customer_id from public.photo_jobs`);
     expect(customers.every((x) => x.customer_id !== C.diego)).toBe(true);
   });
@@ -464,9 +486,28 @@ describe('queda pendiente de presupuestar, nunca gratis ni pagado', () => {
     ).toBe('quoted');
   }, 60_000);
 
-  it('un pedido pendiente puede entrar en proceso, pero no se marca listo ni entregado hasta presupuestarlo', async () => {
+  it('un pedido pendiente NO entra en proceso, ni se marca listo ni entregado: primero se presupuesta', async () => {
     await sendRequest();
     const id = await jobOf();
+    const statusOf = async () =>
+      (await rows(`select status from public.photo_jobs where id=$1`, [id]))[0]
+        .status;
+    for (const user of [IDS.owner, IDS.staff]) {
+      const setStatus = (status: string) =>
+        asRole(w.db, 'authenticated', user, () =>
+          w.db.query(`update public.photo_jobs set status=$2 where id=$1`, [
+            id,
+            status,
+          ]),
+        );
+      for (const next of ['in_progress', 'ready', 'delivered'])
+        await expect(setStatus(next)).rejects.toThrow(
+          /pendiente de presupuestar/,
+        );
+    }
+    expect(await statusOf()).toBe('received');
+    // Presupuestado, continúa por el circuito normal: en proceso → listo.
+    await quote(IDS.owner, id, lists.professional);
     const setStatus = (status: string) =>
       asRole(w.db, 'authenticated', IDS.owner, () =>
         w.db.query(`update public.photo_jobs set status=$2 where id=$1`, [
@@ -475,22 +516,9 @@ describe('queda pendiente de presupuestar, nunca gratis ni pagado', () => {
         ]),
       );
     await setStatus('in_progress');
-    await expect(setStatus('ready')).rejects.toThrow(
-      /pendiente de presupuestar/,
-    );
-    await expect(setStatus('delivered')).rejects.toThrow(
-      /pendiente de presupuestar/,
-    );
-    expect(
-      (await rows(`select status from public.photo_jobs where id=$1`, [id]))[0]
-        .status,
-    ).toBe('in_progress');
-    await quote(IDS.owner, id, lists.professional);
+    expect(await statusOf()).toBe('in_progress');
     await setStatus('ready');
-    expect(
-      (await rows(`select status from public.photo_jobs where id=$1`, [id]))[0]
-        .status,
-    ).toBe('ready');
+    expect(await statusOf()).toBe('ready');
     // Y el aviso de «listo» sólo existe si hubo consentimiento: esta solicitud no lo pidió.
     expect(
       await rows(`select 1 from public.outbound_notifications`),
@@ -915,6 +943,292 @@ describe('administración: presupuestar desde CentroColor', () => {
     await expect(quote(IDS.owner, done, lists.professional)).rejects.toThrow(
       /cancelado/,
     );
+  }, 60_000);
+});
+
+// El teléfono lo escribe cualquiera: coincidir con un cliente existente no puede vincular el pedido a su
+// cuenta (ni darle su lista). Es una sugerencia para el personal, que debe confirmarla.
+describe('cliente: ninguna vinculación automática por teléfono', () => {
+  /** Quien escribe el teléfono de Diego (convenio) sin ser Diego. */
+  const DIEGO_PHONE = '342 555 0002';
+  const sendAsDiegoPhone = () =>
+    sendRequest({ customer: { name: 'Otra Persona', phone: DIEGO_PHONE } });
+  const customerCount = async () =>
+    (await rows(`select count(*)::int n from public.customers`))[0].n as number;
+
+  it('el pedido NO queda vinculado al cliente con ese teléfono: tiene su propio cliente sin verificar', async () => {
+    const before = await customerCount();
+    const diegoBefore = (
+      await rows(`select * from public.customers where id=$1`, [C.diego])
+    )[0];
+    await sendAsDiegoPhone();
+    const job = (
+      await rows(
+        `select j.customer_id, o.customer_id order_customer_id
+         from public.photo_jobs j join public.public_photo_orders o on o.photo_job_id=j.id`,
+      )
+    )[0];
+    expect(job.customer_id).not.toBe(C.diego);
+    expect(job.order_customer_id).toBe(job.customer_id);
+    // Se creó exactamente un cliente, marcado como no verificado, con lo que escribió el visitante.
+    expect(await customerCount()).toBe(before + 1);
+    const own = (
+      await rows(`select * from public.customers where id=$1`, [
+        job.customer_id,
+      ])
+    )[0];
+    expect(own).toMatchObject({
+      full_name: 'Otra Persona',
+      price_list_id: null,
+      is_active: true,
+    });
+    expect(own.notes).toMatch(/sin verificar/);
+    // El cliente existente no se tocó (ni nombre, ni lista, ni notas, ni versión).
+    expect(
+      (await rows(`select * from public.customers where id=$1`, [C.diego]))[0],
+    ).toEqual(diegoBefore);
+    // Ni un solo ítem recibió la lista del cliente coincidente.
+    expect(
+      await rows(
+        `select 1 from public.photo_job_items where price_list_id is not null or unit_price_cents<>0`,
+      ),
+    ).toHaveLength(0);
+  }, 60_000);
+
+  it('reintentar con la misma clave actualiza su cliente sin crear otro ni tocar al existente', async () => {
+    await start({ customer: { name: 'Otra Persona', phone: DIEGO_PHONE } });
+    const before = await customerCount();
+    await start({
+      customer: { name: 'Otra Persona Corregida', phone: DIEGO_PHONE },
+    });
+    expect(await customerCount()).toBe(before);
+    expect(
+      (
+        await rows(
+          `select c.full_name from public.customers c
+           join public.photo_jobs j on j.customer_id=c.id`,
+        )
+      )[0].full_name,
+    ).toBe('Otra Persona Corregida');
+    expect(
+      (
+        await rows(`select full_name from public.customers where id=$1`, [
+          C.diego,
+        ])
+      )[0].full_name,
+    ).toBe('Diego Fotógrafo');
+  });
+
+  it('el personal ve la coincidencia como sugerencia, sólo owner/admin, y no cambia nada', async () => {
+    await sendAsDiegoPhone();
+    const id = await jobOf();
+    const before = (await rows(`select customer_id from public.photo_jobs`))[0];
+    const suggestion = (await matches(IDS.owner, id)).rows[0].r;
+    expect(suggestion).toEqual([{ customer_id: C.diego }]);
+    // Sólo lo que coincide por teléfono: ni el propio cliente de la solicitud ni otros.
+    expect(suggestion.map((x: any) => x.customer_id)).not.toContain(
+      before.customer_id,
+    );
+    expect(suggestion.map((x: any) => x.customer_id)).not.toContain(C.studio);
+    expect((await rows(`select customer_id from public.photo_jobs`))[0]).toEqual(
+      before,
+    );
+    await expect(matches(IDS.staff, id)).rejects.toThrow(/Sólo owner\/admin/);
+    await expect(matches(U.studio, id)).rejects.toThrow(/Sólo owner\/admin/);
+    await expect(
+      asRole(w.db, 'anon', null, () =>
+        w.db.query(`select public.photo_job_customer_matches($1,$2)`, [
+          IDS.business,
+          id,
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+  }, 60_000);
+
+  it('sin coincidencia no hay sugerencias', async () => {
+    await sendRequest();
+    expect((await matches(IDS.owner, await jobOf())).rows[0].r).toEqual([]);
+  }, 60_000);
+
+  it('presupuestar exige confirmar un cliente: sin cliente no hay presupuesto y el pedido sigue pendiente', async () => {
+    await sendAsDiegoPhone();
+    const id = await jobOf();
+    await expect(quote(IDS.owner, id, lists.diego, null)).rejects.toThrow(
+      /Confirmá el cliente/,
+    );
+    expect(
+      (
+        await rows(`select quote_status from public.photo_jobs where id=$1`, [
+          id,
+        ])
+      )[0].quote_status,
+    ).toBe('pending_quote');
+    // La función no tiene valor por defecto: omitir el argumento ni siquiera existe.
+    await expect(
+      asRole(w.db, 'authenticated', IDS.owner, () =>
+        w.db.query(`select public.quote_photo_job($1,$2,$3)`, [
+          IDS.business,
+          id,
+          lists.diego,
+        ]),
+      ),
+    ).rejects.toThrow(/does not exist|no existe/i);
+  }, 60_000);
+
+  it('al confirmar el cliente coincidente se vincula y se retira el cliente sin verificar (queda inactivo)', async () => {
+    await sendAsDiegoPhone();
+    const id = await jobOf();
+    const own = (await rows(`select customer_id from public.photo_jobs`))[0]
+      .customer_id;
+    const result = (await quote(IDS.owner, id, lists.professional, C.diego))
+      .rows[0].r;
+    expect(result).toMatchObject({
+      customer_id: C.diego,
+      price_list_name: 'Profesional',
+    });
+    const job = (
+      await rows(
+        `select j.customer_id, j.notes, o.customer_id oc from public.photo_jobs j
+         join public.public_photo_orders o on o.photo_job_id=j.id`,
+      )
+    )[0];
+    expect(job.customer_id).toBe(C.diego);
+    expect(job.oc).toBe(C.diego);
+    expect(job.notes).toContain('Cliente confirmado: Diego Fotógrafo');
+    expect(
+      (
+        await rows(`select is_active from public.customers where id=$1`, [own])
+      )[0].is_active,
+    ).toBe(false);
+    // Diego sigue activo y sin cambios.
+    expect(
+      (
+        await rows(`select is_active, full_name from public.customers where id=$1`, [
+          C.diego,
+        ])
+      )[0],
+    ).toEqual({ is_active: true, full_name: 'Diego Fotógrafo' });
+  }, 60_000);
+
+  it('confirmar «cliente nuevo» conserva el cliente de la solicitud, activo', async () => {
+    await sendAsDiegoPhone();
+    const id = await jobOf();
+    const own = (await rows(`select customer_id from public.photo_jobs`))[0]
+      .customer_id;
+    await quote(IDS.owner, id, lists.professional, own);
+    expect(
+      (await rows(`select customer_id from public.photo_jobs`))[0].customer_id,
+    ).toBe(own);
+    expect(
+      (
+        await rows(`select is_active from public.customers where id=$1`, [own])
+      )[0].is_active,
+    ).toBe(true);
+  }, 60_000);
+
+  it('el cliente sin verificar no se retira si algo más lo usa (otro pedido)', async () => {
+    await sendAsDiegoPhone();
+    const id = await jobOf();
+    const own = (await rows(`select customer_id from public.photo_jobs`))[0]
+      .customer_id;
+    await w.db.query(
+      `insert into public.photo_jobs(id,business_id,branch_id,customer_id,status,priority,created_by)
+       values(gen_random_uuid(),$1,$2,$3,'received','normal',$4)`,
+      [IDS.business, IDS.branch, own, IDS.owner],
+    );
+    await quote(IDS.owner, id, lists.professional, C.diego);
+    expect(
+      (
+        await rows(`select is_active from public.customers where id=$1`, [own])
+      )[0].is_active,
+    ).toBe(true);
+  }, 60_000);
+
+  it('un cliente cancelado o inactivo no se puede confirmar', async () => {
+    await sendRequest();
+    const id = await jobOf();
+    await w.db.query(`update public.customers set is_active=false where id=$1`, [
+      C.retail,
+    ]);
+    await expect(
+      quote(IDS.owner, id, lists.professional, C.retail),
+    ).rejects.toThrow(/cliente elegido/);
+  }, 60_000);
+});
+
+describe('el $0 de relleno no contamina nada hasta presupuestar', () => {
+  it('no cobra, no anula, no figura como pagado ni como deuda, y se puede cancelar', async () => {
+    await sendRequest();
+    const id = await jobOf();
+    // Nunca hay un total contable: la fuente cobrable se niega a dar un total de relleno.
+    await expect(
+      rows(`select private.work_source_total($1,'photo_job',$2)`, [
+        IDS.business,
+        id,
+      ]),
+    ).rejects.toThrow(/pendiente de presupuestar/);
+    // Ningún pago ni devolución, de ningún medio.
+    const customerId = (await rows(`select customer_id from public.photo_jobs`))[0]
+      .customer_id;
+    for (const kind of ['payment', 'deposit', 'refund'])
+      await expect(
+        asRole(w.db, 'authenticated', IDS.owner, () =>
+          w.db.query(`select public.post_work_payment($1::jsonb)`, [
+            JSON.stringify({
+              id: crypto.randomUUID(),
+              business_id: IDS.business,
+              branch_id: IDS.branch,
+              customer_id: customerId,
+              source_type: 'photo_job',
+              photo_job_id: id,
+              payment_kind: kind,
+              payment_method: 'cash',
+              amount_cents: 1,
+              occurred_at: new Date().toISOString(),
+              created_by: IDS.owner,
+            }),
+          ]),
+        ),
+      ).rejects.toThrow(/pendiente de presupuestar/);
+    expect(await rows(`select 1 from public.work_payments`)).toHaveLength(0);
+    // Nada de lo que escribe el panel puede dejar importes ni listas.
+    expect(
+      await rows(
+        `select 1 from public.photo_job_items where price_list_id is not null or unit_price_cents<>0 or total_cents<>0`,
+      ),
+    ).toHaveLength(0);
+    // Cancelar sigue siendo posible (no es producción ni entrega).
+    await asRole(w.db, 'authenticated', IDS.owner, () =>
+      w.db.query(`update public.photo_jobs set status='cancelled' where id=$1`, [
+        id,
+      ]),
+    );
+    expect(
+      (await rows(`select status from public.photo_jobs where id=$1`, [id]))[0]
+        .status,
+    ).toBe('cancelled');
+  }, 60_000);
+
+  it('el pedido pendiente no encola avisos de WhatsApp ni acredita nada', async () => {
+    await sendRequest();
+    expect(
+      await rows(`select 1 from public.outbound_notifications`),
+    ).toHaveLength(0);
+    expect(await rows(`select 1 from public.work_payments`)).toHaveLength(0);
+  }, 60_000);
+
+  it('después de presupuestar el total es real y recién entonces se puede cobrar', async () => {
+    await sendRequest();
+    const id = await jobOf();
+    await quote(IDS.owner, id, lists.professional);
+    expect(
+      (
+        await rows(
+          `select private.work_source_total($1,'photo_job',$2)::int t`,
+          [IDS.business, id],
+        )
+      )[0].t,
+    ).toBe(9 * 30000 + 2 * 32000);
   }, 60_000);
 });
 

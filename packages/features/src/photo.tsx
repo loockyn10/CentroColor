@@ -28,6 +28,8 @@ import {
   photoWorkflowRoutes,
   effectivePriceListId,
   labUnitPrice,
+  isStatusBlockedByPendingQuote,
+  pendingQuoteStatusMessage,
   type Customer,
   type PriceList,
   type LabVariant,
@@ -1189,13 +1191,8 @@ export function PhotoJobsPage({
     );
   }
   function status(next: PhotoJobStatus) {
-    if (
-      selected?.job.quoteStatus === 'pending_quote' &&
-      (next === 'ready' || next === 'delivered')
-    ) {
-      flash.error(
-        'El pedido está pendiente de presupuestar: presupuestalo antes de marcarlo listo o entregado.',
-      );
+    if (selected && isStatusBlockedByPendingQuote(selected.job, next)) {
+      flash.error(pendingQuoteStatusMessage);
       return;
     }
     if (next === 'cancelled') setConfirmCancel(true);
@@ -1346,13 +1343,19 @@ export function PhotoJobsPage({
               </div>
               <div className="ficha-actions">
                 {selected.job.status === 'received' && (
-                  <Button onClick={() => void status('in_progress')}>
+                  <Button
+                    disabled={pendingQuote}
+                    title={pendingQuote ? pendingQuoteStatusMessage : undefined}
+                    onClick={() => void status('in_progress')}
+                  >
                     En proceso
                   </Button>
                 )}
                 {['received', 'in_progress'].includes(selected.job.status) && (
                   <Button
                     variant="primary"
+                    disabled={pendingQuote}
+                    title={pendingQuote ? pendingQuoteStatusMessage : undefined}
                     onClick={() => void status('ready')}
                   >
                     Marcar listo

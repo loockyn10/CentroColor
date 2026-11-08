@@ -380,6 +380,7 @@ pub fn run() {
         Migration { version: 19, description: "create_pricing_ux", sql: include_str!("../migrations/0019_pricing_ux.sql"), kind: MigrationKind::Up },
         Migration { version: 20, description: "create_catalog_trash", sql: include_str!("../migrations/0020_catalog_trash.sql"), kind: MigrationKind::Up },
         Migration { version: 21, description: "create_quote_status", sql: include_str!("../migrations/0021_quote_status.sql"), kind: MigrationKind::Up },
+        Migration { version: 22, description: "pending_quote_in_progress", sql: include_str!("../migrations/0022_pending_quote_in_progress.sql"), kind: MigrationKind::Up },
     ];
 
     tauri::Builder::default()

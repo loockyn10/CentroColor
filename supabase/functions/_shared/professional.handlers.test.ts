@@ -905,6 +905,7 @@ describe('una cuenta profesional no administra nada ni toca su lista', () => {
     expect(reachable).toEqual([
       'apply_stock_movement',
       'complete_pos_sale',
+      'photo_job_customer_matches',
       'post_work_payment',
       'quote_photo_job',
       'record_stock_change',
@@ -918,7 +919,7 @@ describe('una cuenta profesional no administra nada ni toca su lista', () => {
         )
       ).length,
     ).toBe(0);
-    // Esas seis exigen membership (quote_photo_job, además, owner/admin): con una cuenta profesional todas fallan.
+    // Esas siete exigen membership (quote_photo_job y photo_job_customer_matches, además, owner/admin): con una cuenta profesional todas fallan.
     const call = (sql: string) =>
       asPro(() => w.db.query(sql)).then(
         () => 'ok',
@@ -945,6 +946,9 @@ describe('una cuenta profesional no administra nada ni toca su lista', () => {
       ),
       await call(
         `select public.quote_photo_job('${IDS.business}','${C.studio}','${C.studio}',null)`,
+      ),
+      await call(
+        `select public.photo_job_customer_matches('${IDS.business}','${C.studio}')`,
       ),
     ];
     expect(results.every((message) => message !== 'ok')).toBe(true);

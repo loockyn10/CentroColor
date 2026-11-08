@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   comparePhotoProductionQueue,
   isPhotoJobOverdue,
+  isStatusBlockedByPendingQuote,
   isPhotoServiceSelectable,
   normalizePhotoJobItemDetails,
   normalizePhotoServiceDetails,
@@ -213,6 +214,17 @@ describe('trabajos fotográficos', () => {
         new Date('2026-01-02T00:00:00Z'),
       ),
     ).toBe(false);
+  });
+
+  it('un pedido pendiente de presupuestar no entra en producción: sólo se puede cancelar', () => {
+    const pending = { quoteStatus: 'pending_quote' as const };
+    const quoted = { quoteStatus: 'quoted' as const };
+    for (const next of ['in_progress', 'ready', 'delivered'] as const) {
+      expect(isStatusBlockedByPendingQuote(pending, next)).toBe(true);
+      expect(isStatusBlockedByPendingQuote(quoted, next)).toBe(false);
+    }
+    expect(isStatusBlockedByPendingQuote(pending, 'cancelled')).toBe(false);
+    expect(isStatusBlockedByPendingQuote(pending, 'received')).toBe(false);
   });
 
   it('valida copies y sanitiza nombres de carpetas', () => {

@@ -1,4 +1,4 @@
-// Migración SQLite 0021 (pedidos «pendientes de presupuestar») contra un SQLite real: se aplican
+// Migraciones SQLite 0021 y 0022 (pedidos «pendientes de presupuestar») contra un SQLite real: se aplican
 // TODAS las migraciones de Desktop, en orden, y se prueban los triggers que sostienen la regla
 // «un pedido sin importe no se cobra, no se termina y no se le pone un precio a mano».
 import { readdirSync, readFileSync } from 'node:fs';
@@ -113,21 +113,30 @@ describe('SQLite 0021: pedido pendiente de presupuestar', () => {
     expect(message(() => edit('remote'))).toBeNull();
   });
 
-  it('no se marca listo ni entregado desde Desktop mientras está pendiente', () => {
+  it('no pasa a «En proceso», listo ni entregado desde Desktop mientras está pendiente', () => {
     job(JOB, 'pending_quote');
     const setStatus = (status: string, origin = 'local') =>
       db
         .prepare(`UPDATE photo_jobs SET status=?,sync_origin=? WHERE id=?`)
         .run(status, origin, JOB);
-    expect(message(() => setStatus('ready'))).toMatch(
-      /pendiente de presupuestar/,
-    );
-    expect(message(() => setStatus('delivered'))).toMatch(
-      /pendiente de presupuestar/,
-    );
-    // En proceso sí: el laboratorio puede empezar mientras se presupuesta.
-    expect(message(() => setStatus('in_progress'))).toBeNull();
-    // Lo que llega de la nube (por ejemplo, un pedido ya cobrado y entregado) no se bloquea.
+    for (const next of ['in_progress', 'ready', 'delivered'])
+      expect(message(() => setStatus(next))).toMatch(
+        /pendiente de presupuestar/,
+      );
+    // Cancelar sí se puede: no es producción ni entrega.
+    expect(message(() => setStatus('cancelled'))).toBeNull();
+    // Lo que llega de la nube (por ejemplo, un pedido ya presupuestado y avanzado) no se bloquea.
     expect(message(() => setStatus('ready', 'remote'))).toBeNull();
+  });
+
+  it('un pedido ya presupuestado sí entra en proceso desde Desktop', () => {
+    job(JOB, 'quoted');
+    expect(
+      message(() =>
+        db
+          .prepare(`UPDATE photo_jobs SET status='in_progress',sync_origin='local' WHERE id=?`)
+          .run(JOB),
+      ),
+    ).toBeNull();
   });
 });

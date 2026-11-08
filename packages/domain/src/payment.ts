@@ -60,6 +60,11 @@ export interface WorkAccount extends WorkAccountTotals {
   sourceStatus: string;
   payments: WorkPayment[];
   conflictPaymentIds: string[];
+  /**
+   * The source has no amount yet (a PhotoJob waiting to be quoted): `totalCents` is a placeholder
+   * zero, not a price. Such an account is never "paid", never a debt and never collectable.
+   */
+  pendingQuote?: boolean;
 }
 
 export interface CustomerWorkAccount {

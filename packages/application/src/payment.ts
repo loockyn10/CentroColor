@@ -48,6 +48,18 @@ export async function postWorkPayment(
   options: { id?: string; now?: string } = {},
 ) {
   const now = options.now ?? new Date().toISOString();
+  if (input.sourceType === 'photo_job') {
+    // A request waiting for a quote has a placeholder zero, not an amount to charge.
+    const account = await repository.getAccount(
+      input.businessId,
+      input.sourceType,
+      input.sourceId,
+    );
+    if (account?.pendingQuote)
+      throw new Error(
+        'El pedido está pendiente de presupuestar: todavía no tiene un importe para cobrar.',
+      );
+  }
   const payment = normalizeWorkPayment({
     id: options.id ?? crypto.randomUUID(),
     businessId: input.businessId,

@@ -59,7 +59,8 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
     let customerId = '',
       sourceStatus = '',
       description = '',
-      totalCents = 0;
+      totalCents = 0,
+      pendingQuote = false;
     if (t === 'event') {
       const [source, services, reservations] = await Promise.all([
         c()
@@ -121,7 +122,7 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
       const [source, items] = await Promise.all([
         c()
           .from('photo_jobs')
-          .select('customer_id,status')
+          .select('customer_id,status,quote_status')
           .eq('business_id', b)
           .eq('id', id)
           .maybeSingle(),
@@ -137,6 +138,8 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
       if (items.error) throw items.error;
       customerId = source.data.customer_id;
       sourceStatus = source.data.status;
+      // The items of a job waiting for a quote hold a placeholder zero, not a price.
+      pendingQuote = source.data.quote_status === 'pending_quote';
       description =
         (items.data ?? [])
           .map((x: any) => x.service_name_snapshot)
@@ -162,6 +165,7 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
       description,
       payments,
       conflictPaymentIds: [],
+      ...(pendingQuote ? { pendingQuote: true } : {}),
       ...workAccountTotals(totalCents, payments),
     } satisfies WorkAccount;
   }
@@ -210,8 +214,11 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
     const all = (
       await Promise.all(ids.map(([t, id]) => this.getAccount(b, t, id)))
     ).filter(Boolean) as WorkAccount[];
+    // A request still waiting for a quote has no amount: it is neither a debt nor a settled source.
     const sources = all.filter(
-      (x) => x.balanceCents > 0 || x.sourceStatus === 'cancelled',
+      (x) =>
+        !x.pendingQuote &&
+        (x.balanceCents > 0 || x.sourceStatus === 'cancelled'),
     );
     return {
       customerId,
@@ -230,7 +237,7 @@ export class SupabaseWorkPaymentRepository implements WorkPaymentRepository {
     const rows = (
       await Promise.all(ids.map(([t, id]) => this.getAccount(b, t, id)))
     ).filter(Boolean) as WorkAccount[];
-    return rows.filter((x) => x.balanceCents > 0);
+    return rows.filter((x) => !x.pendingQuote && x.balanceCents > 0);
   }
   async post(x: WorkPayment) {
     const r = await c().rpc('post_work_payment', { p_payment: payload(x) });

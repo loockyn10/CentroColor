@@ -47,6 +47,25 @@ export type PhotoJobQuoteStatus = (typeof photoJobQuoteStatuses)[number];
 export const isPhotoJobPendingQuote = (job: Pick<PhotoJob, 'quoteStatus'>) =>
   job.quoteStatus === 'pending_quote';
 
+/**
+ * A job without an amount cannot enter production: it must be quoted first and only then continue
+ * (in process → ready → delivered). Cancelling stays possible. The database and the Desktop SQLite
+ * enforce the same rule; this is the single list the screens use to refuse early.
+ */
+export const pendingQuoteBlockedStatuses = [
+  'in_progress',
+  'ready',
+  'delivered',
+] as const;
+export const isStatusBlockedByPendingQuote = (
+  job: Pick<PhotoJob, 'quoteStatus'>,
+  next: PhotoJobStatus,
+) =>
+  isPhotoJobPendingQuote(job) &&
+  (pendingQuoteBlockedStatuses as readonly string[]).includes(next);
+export const pendingQuoteStatusMessage =
+  'El pedido está pendiente de presupuestar: presupuestalo antes de pasarlo a «En proceso», listo o entregado.';
+
 export const photoJobStatuses = [
   'received',
   'in_progress',

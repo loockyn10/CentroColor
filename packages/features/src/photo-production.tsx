@@ -8,6 +8,8 @@ import type {
 import {
   comparePhotoProductionQueue,
   isPhotoJobOverdue,
+  isStatusBlockedByPendingQuote,
+  pendingQuoteStatusMessage,
   type PhotoJobStatus,
 } from '@centrocolor/domain';
 import {
@@ -152,13 +154,8 @@ export function PhotoProductionPage({
   };
 
   async function advance(job: ProductionJob, next: PhotoJobStatus) {
-    if (
-      job.bundle.job.quoteStatus === 'pending_quote' &&
-      (next === 'ready' || next === 'delivered')
-    ) {
-      flash.error(
-        'El pedido está pendiente de presupuestar: presupuestalo en Pedidos antes de marcarlo listo.',
-      );
+    if (isStatusBlockedByPendingQuote(job.bundle.job, next)) {
+      flash.error(pendingQuoteStatusMessage);
       return;
     }
     setBusyJob(job.bundle.job.id);
@@ -256,6 +253,11 @@ export function PhotoProductionPage({
               const state = statusMeta(productionJobStatus, j.status);
               const pending = j.status === 'received';
               const open = ['received', 'in_progress'].includes(j.status);
+              // Without an amount a job cannot enter production: quote it in Pedidos first.
+              const awaitingQuote = j.quoteStatus === 'pending_quote';
+              const quoteHint = awaitingQuote
+                ? pendingQuoteStatusMessage
+                : undefined;
               return (
                 <div className="prod-row" data-flag={flag} key={job.key}>
                   <div className="prod-main">
@@ -295,7 +297,8 @@ export function PhotoProductionPage({
                           size="lg"
                           variant="primary"
                           block
-                          disabled={busy}
+                          disabled={busy || awaitingQuote}
+                          title={quoteHint}
                           onClick={() => void advance(job, 'in_progress')}
                         >
                           En proceso
@@ -308,7 +311,8 @@ export function PhotoProductionPage({
                           size="lg"
                           variant={pending ? 'secondary' : 'primary'}
                           block
-                          disabled={busy}
+                          disabled={busy || awaitingQuote}
+                          title={quoteHint}
                           onClick={() => void advance(job, 'ready')}
                         >
                           Listo

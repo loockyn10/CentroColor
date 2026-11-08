@@ -26,11 +26,25 @@ export class SupabasePhotoJobQuoteRepository implements PhotoJobQuoteRepository 
     }));
   }
 
+  async listCustomerMatches(
+    businessId: string,
+    jobId: string,
+  ): Promise<string[]> {
+    const { data, error } = await getSupabaseClient().rpc(
+      'photo_job_customer_matches',
+      { p_business_id: businessId, p_job_id: jobId },
+    );
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as { customer_id: string }[]).map(
+      (x) => x.customer_id,
+    );
+  }
+
   async quoteJob(input: {
     businessId: string;
     jobId: string;
     priceListId: string;
-    customerId: string | null;
+    customerId: string;
   }) {
     const { data, error } = await getSupabaseClient().rpc('quote_photo_job', {
       p_business_id: input.businessId,
